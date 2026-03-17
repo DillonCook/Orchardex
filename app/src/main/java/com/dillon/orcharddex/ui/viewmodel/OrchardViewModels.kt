@@ -141,17 +141,6 @@ class TreeFormViewModel(
     var state by mutableStateOf(TreeFormState(isLoading = treeId != null))
         private set
 
-    val orchardNames = repository.observeOrchardNames().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        emptyList()
-    )
-    val speciesNames = repository.observeSpeciesNames().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        CommonSpeciesSuggestions
-    )
-
     init {
         if (treeId != null) {
             viewModelScope.launch {
@@ -397,6 +386,11 @@ class HarvestFormViewModel(
 class DexViewModel(
     private val repository: OrchardRepository
 ) : ViewModel() {
+    val trees = repository.observeTrees().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
     val dex = repository.observeDex().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -613,6 +607,18 @@ class SettingsViewModel(
     fun updateDefaultReminder(mode: LeadTimeMode, customHours: Int) {
         viewModelScope.launch {
             settingsRepository.updateDefaultLeadTime(mode, customHours)
+        }
+    }
+
+    fun updateOrchardName(name: String) {
+        viewModelScope.launch {
+            settingsRepository.updateOrchardName(name)
+        }
+    }
+
+    fun completeOnboarding(orchardName: String) {
+        viewModelScope.launch {
+            settingsRepository.completeOnboarding(orchardName)
         }
     }
 

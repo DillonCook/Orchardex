@@ -2,13 +2,18 @@ package com.dillon.orcharddex.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,9 +21,12 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,13 +38,19 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import com.dillon.orcharddex.BuildConfig
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
+import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.preferences.AppThemeMode
+import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.SectionCard
@@ -44,6 +58,7 @@ import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.viewmodel.DexViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
+import java.io.File
 
 private enum class ReminderFilterTab(val label: String) {
     ALL("All"),
@@ -52,14 +67,28 @@ private enum class ReminderFilterTab(val label: String) {
     COMPLETED("Completed")
 }
 
+private enum class DexPlantSortOption(val label: String) {
+    UPDATED("Updated"),
+    PLANTED("Planted"),
+    SPECIES("Species"),
+    CULTIVAR("Cultivar")
+}
+
 @Composable
 fun DexScreen(
     viewModel: DexViewModel,
+    onAddTree: () -> Unit,
     onTreeClick: (String) -> Unit
 ) {
     val dex by viewModel.dex.collectAsStateWithLifecycle()
+    val plants by viewModel.trees.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
+    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
+    var filtersVisible by rememberSaveable { mutableStateOf(false) }
     var speciesFilter by rememberSaveable { mutableStateOf<String?>(null) }
+    var statusFilter by rememberSaveable { mutableStateOf<TreeStatus?>(null) }
+    var plantTypeFilter by rememberSaveable { mutableStateOf<PlantType?>(null) }
+    var sort by rememberSaveable { mutableStateOf(DexPlantSortOption.UPDATED) }
 
     if (viewModel.addDialogVisible) {
         AlertDialog(
@@ -102,83 +131,181 @@ fun DexScreen(
         )
     }
 
-    val speciesOptions = dex.ownedGroups.map { it.species }.distinct()
-    val filteredGroups = dex.ownedGroups
-        .filter { speciesFilter == null || it.species == speciesFilter }
-        .map { group ->
-            group.copy(
-                cultivars = group.cultivars.filter { cultivar ->
-                    search.isBlank() ||
-                        cultivar.cultivar.contains(search, ignoreCase = true) ||
-                        cultivar.species.contains(search, ignoreCase = true)
-                }
-            )
-        }.filter { it.cultivars.isNotEmpty() }
-
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            SectionCard("Collection progress") {
-                Text("Owned cultivars: ${dex.ownedCultivarCount}")
-                Text("Wishlist: ${dex.wishlistCount}")
-                Text("First fruit achieved: ${dex.firstFruitCount}")
-                OutlinedButton(onClick = viewModel::showAddDialog) {
-                    Text("Add wishlist cultivar")
-                }
-            }
-        }
-        item {
-            OutlinedTextField(
-                value = search,
-                onValueChange = { search = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Search cultivars") }
-            )
-        }
-        item {
-            ChoiceChipsRow(speciesOptions, speciesFilter, onSelected = { speciesFilter = it })
-        }
-        if (filteredGroups.isEmpty()) {
-            item {
-                EmptyStateCard(
-                    title = "No cultivars yet",
-                    message = "Add trees or wishlist entries to build your orchard Dex."
-                )
-            }
-        }
-        items(filteredGroups, key = { it.species }) { group ->
-            SectionCard(group.species) {
-                group.cultivars.forEach { cultivar ->
-                    Card(
+    if (addMenuVisible) {
+        AlertDialog(
+            onDismissRequest = { addMenuVisible = false },
+            title = { Text("Add to Dex") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            onAddTree()
+                        },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable(enabled = cultivar.linkedTreeId != null) {
-                                cultivar.linkedTreeId?.let(onTreeClick)
-                            }
+                            .testTag("add_tree")
                     ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(cultivar.cultivar, style = MaterialTheme.typography.titleMedium)
-                            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                FilterChip(selected = true, onClick = {}, label = { Text("Owned ${cultivar.activeTreeCount}") })
-                                if (cultivar.wishlist) {
-                                    FilterChip(selected = true, onClick = {}, label = { Text("Wishlist") })
-                                }
-                                if (cultivar.firstFruitAchieved) {
-                                    FilterChip(selected = true, onClick = {}, label = { Text("First fruit") })
-                                }
-                                if (cultivar.inactiveTreeCount > 0) {
-                                    FilterChip(selected = false, onClick = {}, label = { Text("Inactive ${cultivar.inactiveTreeCount}") })
-                                }
-                            }
+                        Text("Add plant")
+                    }
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            viewModel.showAddDialog()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Add wishlist")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { addMenuVisible = false }) { Text("Close") }
+            }
+        )
+    }
+
+    val speciesOptions = plants.map { it.tree.species }.distinct().sorted()
+    val filteredPlants = remember(
+        plants,
+        search,
+        speciesFilter,
+        statusFilter,
+        plantTypeFilter,
+        sort
+    ) {
+        plants.filter { item ->
+            val tree = item.tree
+            val query = search.trim().lowercase()
+            val matchesQuery = query.isBlank() || listOf(
+                tree.nickname.orEmpty(),
+                tree.species,
+                tree.cultivar,
+                tree.tags,
+                tree.notes
+            ).any { it.lowercase().contains(query) }
+            matchesQuery &&
+                (speciesFilter == null || tree.species == speciesFilter) &&
+                (statusFilter == null || tree.status == statusFilter) &&
+                (plantTypeFilter == null || tree.plantType == plantTypeFilter)
+        }.sortedWith(
+            when (sort) {
+                DexPlantSortOption.UPDATED -> compareByDescending { it.tree.updatedAt }
+                DexPlantSortOption.PLANTED -> compareByDescending { it.tree.plantedDate }
+                DexPlantSortOption.SPECIES -> compareBy({ it.tree.species.lowercase() }, { it.tree.cultivar.lowercase() })
+                DexPlantSortOption.CULTIVAR -> compareBy({ it.tree.cultivar.lowercase() }, { it.tree.species.lowercase() })
+            }
+        )
+    }
+
+    if (filtersVisible) {
+        AlertDialog(
+            onDismissRequest = { filtersVisible = false },
+            title = { Text("Filter plants") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                    ChoiceChipsRow(
+                        options = speciesOptions.take(12),
+                        selected = speciesFilter,
+                        onSelected = { speciesFilter = it }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = statusFilter == null, onClick = { statusFilter = null }, label = { Text("Any status") })
+                        TreeStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = statusFilter == status,
+                                onClick = { statusFilter = status },
+                                label = { Text(status.name.lowercase()) }
+                            )
+                        }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = plantTypeFilter == null, onClick = { plantTypeFilter = null }, label = { Text("Any planting") })
+                        FilterChip(
+                            selected = plantTypeFilter == PlantType.IN_GROUND,
+                            onClick = { plantTypeFilter = PlantType.IN_GROUND },
+                            label = { Text("In-ground") }
+                        )
+                        FilterChip(
+                            selected = plantTypeFilter == PlantType.CONTAINER,
+                            onClick = { plantTypeFilter = PlantType.CONTAINER },
+                            label = { Text("Container") }
+                        )
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        DexPlantSortOption.entries.forEach { option ->
+                            FilterChip(
+                                selected = sort == option,
+                                onClick = { sort = option },
+                                label = { Text(option.label) }
+                            )
                         }
                     }
                 }
+            },
+            confirmButton = {
+                TextButton(onClick = { filtersVisible = false }) { Text("Done") }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        speciesFilter = null
+                        statusFilter = null
+                        plantTypeFilter = null
+                        sort = DexPlantSortOption.UPDATED
+                    }
+                ) { Text("Reset") }
             }
+        )
+    }
+
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { addMenuVisible = true },
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.testTag("add_tree")
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "Add")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+        item {
+            SectionCard("Dex overview") {
+                Text("Owned cultivars: ${dex.ownedCultivarCount}")
+                Text("Plants tracked: ${plants.size}")
+                Text("Wishlist: ${dex.wishlistCount}")
+                Text("First fruit achieved: ${dex.firstFruitCount}")
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Search plants") }
+                )
+                OutlinedButton(onClick = { filtersVisible = true }) {
+                    Text("Filters")
+                }
+            }
+        }
+        if (filteredPlants.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = "No plants found",
+                    message = "Try a different search, clear filters, or add a plant."
+                )
+            }
+        }
+        items(filteredPlants, key = { it.tree.id }) { item ->
+            DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
         }
         item {
             SectionCard("Wishlist") {
@@ -207,6 +334,47 @@ fun DexScreen(
                         }
                     }
                 }
+            }
+        }
+        }
+    }
+}
+
+@Composable
+private fun DexPlantCard(
+    item: TreeListItem,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(modifier = Modifier.size(84.dp), contentAlignment = Alignment.Center) {
+                if (item.mainPhotoPath != null) {
+                    AsyncImage(
+                        model = File(context.filesDir, "photos/${item.mainPhotoPath}"),
+                        contentDescription = "Plant photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(84.dp)
+                    )
+                } else {
+                    Text(item.tree.species.take(2).uppercase())
+                }
+            }
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(item.tree.displayName(), style = MaterialTheme.typography.titleMedium)
+                Text("${item.tree.species} • ${item.tree.cultivar}")
+                Text(
+                    "${item.tree.status.name.lowercase()} • ${item.tree.plantType.name.replace("_", "-").lowercase()} • planted ${item.tree.plantedDate.toDateLabel()}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
         }
     }
@@ -273,15 +441,21 @@ fun TasksScreen(
         )
     }
 
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            OutlinedButton(onClick = onAddReminder, modifier = Modifier.fillMaxWidth()) {
-                Text("Add reminder")
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = onAddReminder,
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "Start a task")
             }
         }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         item {
             OutlinedTextField(
                 value = search,
@@ -330,6 +504,7 @@ fun TasksScreen(
                 }
             }
         }
+        }
     }
 }
 
@@ -339,6 +514,7 @@ fun SettingsScreen(
     onPrivacy: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val exportLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("application/zip")
     ) { uri -> uri?.let(viewModel::exportBackup) }
@@ -384,6 +560,22 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        item {
+            SectionCard("Orchard") {
+                OutlinedTextField(
+                    value = orchardNameDraft,
+                    onValueChange = { orchardNameDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Orchard name") }
+                )
+                OutlinedButton(
+                    onClick = { viewModel.updateOrchardName(orchardNameDraft) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Save orchard name")
+                }
+            }
+        }
         item {
             SectionCard("Appearance") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {

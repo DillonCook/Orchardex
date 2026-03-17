@@ -25,7 +25,9 @@ data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
     val defaultLeadTimeMode: LeadTimeMode = LeadTimeMode.SAME_DAY,
-    val defaultCustomLeadHours: Int = 6
+    val defaultCustomLeadHours: Int = 6,
+    val orchardName: String = "",
+    val onboardingComplete: Boolean = false
 )
 
 class SettingsRepository(private val context: Context) {
@@ -34,6 +36,8 @@ class SettingsRepository(private val context: Context) {
         val dynamicColor = booleanPreferencesKey("dynamic_color")
         val defaultLeadTimeMode = stringPreferencesKey("default_lead_time_mode")
         val defaultCustomLeadHours = intPreferencesKey("default_custom_lead_hours")
+        val orchardName = stringPreferencesKey("orchard_name")
+        val onboardingComplete = booleanPreferencesKey("onboarding_complete")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map(::preferencesToSettings)
@@ -53,13 +57,26 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateOrchardName(name: String) {
+        context.dataStore.edit { it[Keys.orchardName] = name.trim() }
+    }
+
+    suspend fun completeOnboarding(orchardName: String) {
+        context.dataStore.edit {
+            it[Keys.orchardName] = orchardName.trim()
+            it[Keys.onboardingComplete] = true
+        }
+    }
+
     suspend fun snapshot(): SettingsSnapshot {
         val current = settings.first()
         return SettingsSnapshot(
             themeMode = current.themeMode.name,
             dynamicColor = current.dynamicColor,
             defaultLeadTimeMode = current.defaultLeadTimeMode.name,
-            defaultCustomLeadHours = current.defaultCustomLeadHours
+            defaultCustomLeadHours = current.defaultCustomLeadHours,
+            orchardName = current.orchardName,
+            onboardingComplete = current.onboardingComplete
         )
     }
 
@@ -69,6 +86,8 @@ class SettingsRepository(private val context: Context) {
             it[Keys.dynamicColor] = snapshot.dynamicColor
             it[Keys.defaultLeadTimeMode] = snapshot.defaultLeadTimeMode
             it[Keys.defaultCustomLeadHours] = snapshot.defaultCustomLeadHours
+            it[Keys.orchardName] = snapshot.orchardName
+            it[Keys.onboardingComplete] = snapshot.onboardingComplete
         }
     }
 
@@ -77,6 +96,8 @@ class SettingsRepository(private val context: Context) {
         dynamicColor = preferences[Keys.dynamicColor] ?: true,
         defaultLeadTimeMode = preferences[Keys.defaultLeadTimeMode]?.let(LeadTimeMode::valueOf)
             ?: LeadTimeMode.SAME_DAY,
-        defaultCustomLeadHours = preferences[Keys.defaultCustomLeadHours] ?: 6
+        defaultCustomLeadHours = preferences[Keys.defaultCustomLeadHours] ?: 6,
+        orchardName = preferences[Keys.orchardName].orEmpty(),
+        onboardingComplete = preferences[Keys.onboardingComplete] ?: false
     )
 }

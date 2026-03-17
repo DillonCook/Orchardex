@@ -9,15 +9,22 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -38,15 +45,21 @@ import com.dillon.orcharddex.ui.screens.SettingsScreen
 import com.dillon.orcharddex.ui.screens.TasksScreen
 import com.dillon.orcharddex.ui.screens.TreeDetailScreen
 import com.dillon.orcharddex.ui.screens.TreeFormScreen
-import com.dillon.orcharddex.ui.screens.TreesScreen
+import com.dillon.orcharddex.ui.screens.TreesHoldingScreen
 import com.dillon.orcharddex.ui.viewmodel.OrchardViewModelProvider
+import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OrchardDexRoot(app: OrchardDexApp) {
     val navController = rememberNavController()
+    val settingsViewModel: SettingsViewModel = viewModel(factory = OrchardViewModelProvider.Factory)
+    val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route.orEmpty()
+    var setupOrchardName by rememberSaveable(settings.onboardingComplete) {
+        mutableStateOf(settings.orchardName)
+    }
     val bottomDestinations = listOf(
         BottomDestination.Dashboard,
         BottomDestination.Trees,
@@ -60,11 +73,33 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         onResult = {}
     )
 
+    if (!settings.onboardingComplete) {
+        AlertDialog(
+            onDismissRequest = {},
+            title = { Text("Set up OrchardDex") },
+            text = {
+                OutlinedTextField(
+                    value = setupOrchardName,
+                    onValueChange = { setupOrchardName = it },
+                    label = { Text("Orchard name") }
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { settingsViewModel.completeOnboarding(setupOrchardName) },
+                    enabled = setupOrchardName.isNotBlank()
+                ) {
+                    Text("Save setup")
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
             val isRootDestination = bottomDestinations.any { currentRoute.startsWith(it.route) }
             TopAppBar(
-                title = { Text(currentRoute.titleForRoute()) },
+                title = { Text(currentRoute.titleForRoute(settings.orchardName)) },
                 navigationIcon = {
                     if (!isRootDestination) {
                         IconButton(onClick = { navController.popBackStack() }) {
@@ -114,15 +149,14 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 )
             }
             composable(BottomDestination.Trees.route) {
-                TreesScreen(
-                    viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
-                    onAddTree = { navController.navigate(OrchardRoutes.treeForm()) },
-                    onTreeClick = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
+                TreesHoldingScreen(
+                    onOpenDex = { navController.navigate(BottomDestination.Dex.route) }
                 )
             }
             composable(BottomDestination.Dex.route) {
                 DexScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    onAddTree = { navController.navigate(OrchardRoutes.treeForm()) },
                     onTreeClick = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
                 )
             }
@@ -137,7 +171,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             }
             composable(BottomDestination.Settings.route) {
                 SettingsScreen(
-                    viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    viewModel = settingsViewModel,
                     onPrivacy = { navController.navigate(OrchardRoutes.PRIVACY) }
                 )
             }
@@ -243,8 +277,8 @@ fun OrchardDexRoot(app: OrchardDexApp) {
     }
 }
 
-private fun String.titleForRoute(): String = when {
-    startsWith(BottomDestination.Dashboard.route) -> "Dashboard"
+private fun String.titleForRoute(orchardName: String): String = when {
+    startsWith(BottomDestination.Dashboard.route) -> orchardName.ifBlank { "Dashboard" }
     startsWith(BottomDestination.Trees.route) -> "Trees"
     startsWith(BottomDestination.Dex.route) -> "Dex"
     startsWith(BottomDestination.Tasks.route) -> "Tasks"

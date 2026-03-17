@@ -81,5 +81,7 @@ data class SettingsSnapshot(
     val themeMode: String,
     val dynamicColor: Boolean,
     val defaultLeadTimeMode: String,
-    val defaultCustomLeadHours: Int
+    val defaultCustomLeadHours: Int,
+    val orchardName: String = "",
+    val onboardingComplete: Boolean = false
 )

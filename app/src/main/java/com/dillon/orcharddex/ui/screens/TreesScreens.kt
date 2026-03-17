@@ -1,5 +1,6 @@
 package com.dillon.orcharddex.ui.screens
 
+import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -12,10 +13,12 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -40,10 +43,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dillon.orcharddex.data.local.TreeEntity
-import com.dillon.orcharddex.data.model.CommonSpeciesSuggestions
+import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
@@ -61,13 +65,38 @@ import com.dillon.orcharddex.ui.viewmodel.TreeDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreeFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreesViewModel
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneId
+import java.util.UUID
 
 private enum class TreeSortOption(val label: String) {
     UPDATED("Updated"),
     PLANTED("Planted"),
     SPECIES("Species"),
     CULTIVAR("Cultivar")
+}
+
+@Composable
+fun TreesHoldingScreen(
+    onOpenDex: () -> Unit
+) {
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            EmptyStateCard(
+                title = "Trees is paused",
+                message = "Plant browsing and collection management now live in Dex while this tab is rebuilt."
+            )
+        }
+        item {
+            Button(onClick = onOpenDex, modifier = Modifier.fillMaxWidth()) {
+                Text("Open Dex")
+            }
+        }
+    }
 }
 
 @Composable
@@ -218,40 +247,54 @@ fun TreeFormScreen(
 ) {
     val context = LocalContext.current
     val state = viewModel.state
-    val orchardNames by viewModel.orchardNames.collectAsStateWithLifecycle()
-    val speciesNames by viewModel.speciesNames.collectAsStateWithLifecycle()
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
-    val matchingSpecies = remember(state.species, speciesNames) {
-        if (state.species.isBlank()) CommonSpeciesSuggestions else {
-            speciesNames.filter { it.contains(state.species, ignoreCase = true) }.take(6)
+    var pendingCameraUri by remember { mutableStateOf<Uri?>(null) }
+    val cameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success) {
+            pendingCameraUri?.let { viewModel.addPhotos(listOf(it)) }
+        } else {
+            pendingCameraUri?.path?.let(::File)?.delete()
         }
+        pendingCameraUri = null
     }
+    var showRootstockField by rememberSaveable(state.id, state.rootstock.isNotBlank()) {
+        mutableStateOf(state.rootstock.isNotBlank())
+    }
+    val heroExistingPath = state.existingPhotos.firstOrNull()?.relativePath
+    val heroNewUri = state.newPhotoUris.firstOrNull()
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            SectionCard(if (state.id == null) "Add tree" else "Edit tree") {
-                OutlinedTextField(
-                    value = state.orchardName,
-                    onValueChange = { viewModel.update { copy(orchardName = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Orchard name") }
-                )
-                if (orchardNames.isNotEmpty()) {
-                    ChoiceChipsRow(orchardNames, state.orchardName.takeIf(String::isNotBlank), onSelected = {
-                        viewModel.update { copy(orchardName = it.orEmpty()) }
-                    })
+            TreeHeroPhotoHeader(
+                existingPhotoPath = heroExistingPath?.let { File(context.filesDir, "photos/$it").absolutePath },
+                newPhotoUri = heroNewUri,
+                onImportPhoto = {
+                    photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                },
+                onTakePhoto = {
+                    val outputUri = createTreeCaptureUri(context)
+                    pendingCameraUri = outputUri
+                    cameraLauncher.launch(outputUri)
                 }
-                OutlinedTextField(
-                    value = state.sectionName,
-                    onValueChange = { viewModel.update { copy(sectionName = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Section / location note") }
-                )
+            )
+            LocalPhotoStrip(
+                existingPaths = state.existingPhotos.map { photo ->
+                    photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
+                },
+                newUris = state.newPhotoUris,
+                onRemoveExisting = viewModel::removeExistingPhoto,
+                onRemoveNew = viewModel::removeNewPhoto
+            )
+        }
+        item {
+            SectionCard(if (state.id == null) "Add tree" else "Edit tree") {
                 OutlinedTextField(
                     value = state.nickname,
                     onValueChange = { viewModel.update { copy(nickname = it) } },
@@ -266,9 +309,6 @@ fun TreeFormScreen(
                         .testTag("tree_species"),
                     label = { Text("Species") }
                 )
-                ChoiceChipsRow(matchingSpecies, state.species.takeIf(String::isNotBlank), onSelected = {
-                    viewModel.update { copy(species = it.orEmpty()) }
-                })
                 OutlinedTextField(
                     value = state.cultivar,
                     onValueChange = { viewModel.update { copy(cultivar = it) } },
@@ -278,17 +318,31 @@ fun TreeFormScreen(
                     label = { Text("Cultivar") }
                 )
                 OutlinedTextField(
-                    value = state.rootstock,
-                    onValueChange = { viewModel.update { copy(rootstock = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Rootstock") }
-                )
-                OutlinedTextField(
                     value = state.source,
                     onValueChange = { viewModel.update { copy(source = it) } },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Source / nursery") }
                 )
+                if (showRootstockField) {
+                    OutlinedTextField(
+                        value = state.rootstock,
+                        onValueChange = { viewModel.update { copy(rootstock = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Rootstock") }
+                    )
+                    TextButton(
+                        onClick = {
+                            viewModel.update { copy(rootstock = "") }
+                            showRootstockField = false
+                        }
+                    ) {
+                        Text("Hide rootstock")
+                    }
+                } else {
+                    TextButton(onClick = { showRootstockField = true }) {
+                        Text("Add rootstock")
+                    }
+                }
             }
         }
         item {
@@ -347,7 +401,7 @@ fun TreeFormScreen(
             }
         }
         item {
-            SectionCard("Care & notes") {
+            SectionCard("Care") {
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FrostSensitivityLevel.entries.forEach { level ->
                         FilterChip(
@@ -386,29 +440,16 @@ fun TreeFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Tags") }
                 )
+            }
+        }
+        item {
+            SectionCard("Notes") {
                 OutlinedTextField(
                     value = state.notes,
                     onValueChange = { viewModel.update { copy(notes = it) } },
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Notes") },
                     minLines = 4
-                )
-            }
-        }
-        item {
-            SectionCard("Photos") {
-                PhotoAddCard(
-                    onClick = {
-                        photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                    }
-                )
-                LocalPhotoStrip(
-                    existingPaths = state.existingPhotos.map { photo ->
-                        photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
-                    },
-                    newUris = state.newPhotoUris,
-                    onRemoveExisting = viewModel::removeExistingPhoto,
-                    onRemoveNew = viewModel::removeNewPhoto
                 )
             }
         }
@@ -432,6 +473,58 @@ fun TreeFormScreen(
 }
 
 @Composable
+private fun TreeHeroPhotoHeader(
+    existingPhotoPath: String?,
+    newPhotoUri: Uri?,
+    onImportPhoto: () -> Unit,
+    onTakePhoto: () -> Unit
+) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+            when {
+                newPhotoUri != null -> {
+                    AsyncImage(
+                        model = newPhotoUri,
+                        contentDescription = "Tree hero photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                existingPhotoPath != null -> {
+                    AsyncImage(
+                        model = File(existingPhotoPath),
+                        contentDescription = "Tree hero photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+                else -> {
+                    Text("Add a hero photo")
+                }
+            }
+        }
+    }
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(onClick = onImportPhoto, modifier = Modifier.weight(1f)) {
+            Text("Import photo")
+        }
+        Button(onClick = onTakePhoto, modifier = Modifier.weight(1f)) {
+            Text("Take photo")
+        }
+    }
+}
+
+private fun createTreeCaptureUri(context: android.content.Context): Uri {
+    val directory = File(context.cacheDir, "camera-captures").apply { mkdirs() }
+    val imageFile = File(directory, "tree-${UUID.randomUUID()}.jpg")
+    return FileProvider.getUriForFile(
+        context,
+        "${context.packageName}.fileprovider",
+        imageFile
+    )
+}
+
+@Composable
 fun TreeDetailScreen(
     viewModel: TreeDetailViewModel,
     onBack: () -> Unit,
@@ -445,6 +538,7 @@ fun TreeDetailScreen(
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
+    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
     val item = detail ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Tree not found.")
     }
@@ -467,6 +561,80 @@ fun TreeDetailScreen(
         )
     }
 
+    if (addMenuVisible) {
+        AlertDialog(
+            onDismissRequest = { addMenuVisible = false },
+            title = { Text("Add to ${item.tree.displayName()}") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            onAddEvent(item.tree.id)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Log event") }
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            onAddHarvest(item.tree.id)
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("add_harvest")
+                    ) { Text("Log harvest") }
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            onAddReminder(item.tree.id)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Add reminder") }
+                    Button(
+                        onClick = {
+                            addMenuVisible = false
+                            photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Add photo") }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { addMenuVisible = false }) { Text("Close") }
+            }
+        )
+    }
+
+    val historyByYear = remember(item.events, item.harvests) {
+        (
+            item.events.map { event ->
+                TreeHistoryEntry(
+                    date = event.eventDate,
+                    label = buildString {
+                        append(event.eventType.name.lowercase().replace("_", " "))
+                        if (event.notes.isNotBlank()) append(" • ${event.notes}")
+                    },
+                    eventType = event.eventType,
+                    isHarvest = false
+                )
+            } +
+                item.harvests.map { harvest ->
+                    TreeHistoryEntry(
+                        date = harvest.harvestDate,
+                        label = buildString {
+                            append("harvest • ${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}")
+                            if (harvest.firstFruit) append(" • First fruit")
+                            if (harvest.notes.isNotBlank()) append(" • ${harvest.notes}")
+                        },
+                        eventType = null,
+                        isHarvest = true
+                    )
+                }
+            ).groupBy { entry ->
+            Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year
+        }.toSortedMap(compareByDescending { it })
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -480,25 +648,26 @@ fun TreeDetailScreen(
                     CompactFact("Status", item.tree.status.name.lowercase())
                     CompactFact("Planted", item.tree.plantedDate.toDateLabel())
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
+                    CompactFact("Source", item.tree.source.orEmpty())
                 }
                 LocalPhotoStrip(
                     existingPaths = item.photos.map { photo ->
                         photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
                     }
                 )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { onAddEvent(item.tree.id) }) { Text("Log Event") }
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Button(
+                        onClick = { addMenuVisible = true },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Add")
+                    }
                     OutlinedButton(
-                        onClick = { onAddHarvest(item.tree.id) },
-                        modifier = Modifier.testTag("add_harvest")
-                    ) { Text("Log Harvest") }
-                    OutlinedButton(onClick = { onAddReminder(item.tree.id) }) { Text("Add Reminder") }
-                    OutlinedButton(
-                        onClick = {
-                            photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }
-                    ) { Text("Add Photo") }
-                    OutlinedButton(onClick = { onEditTree(item.tree.id) }) { Text("Edit Tree") }
+                        onClick = { onEditTree(item.tree.id) },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Edit plant")
+                    }
                 }
             }
         }
@@ -520,7 +689,28 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard("Harvest history") {
+            SectionCard("Season history") {
+                if (historyByYear.isEmpty()) {
+                    Text("No bloom, fruit set, or harvest history yet.")
+                } else {
+                    historyByYear.forEach { (year, entries) ->
+                        val bloomCount = entries.count { it.eventType == EventType.BLOOM }
+                        val fruitSetCount = entries.count { it.eventType == EventType.FRUIT_SET }
+                        val harvestCount = entries.count(TreeHistoryEntry::isHarvest)
+                        Text(year.toString(), style = MaterialTheme.typography.titleSmall)
+                        Text(
+                            "$bloomCount blooms • $fruitSetCount fruit sets • $harvestCount harvests",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        entries.sortedByDescending(TreeHistoryEntry::date).forEach { entry ->
+                            Text("${entry.date.toDateLabel()} • ${entry.label}")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SectionCard("Harvest log") {
                 if (item.harvests.isEmpty()) {
                     Text("No harvests logged yet.")
                 } else {
@@ -534,7 +724,7 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard("Timeline") {
+            SectionCard("Activity log") {
                 val timeline = (
                     item.events.map { it.eventDate to "${it.eventType.name.lowercase().replace("_", " ")} • ${it.notes}" } +
                         item.harvests.map { it.harvestDate to "harvest • ${it.quantityValue.displayAmount()} ${it.quantityUnit}" }
@@ -555,6 +745,13 @@ fun TreeDetailScreen(
         }
     }
 }
+
+private data class TreeHistoryEntry(
+    val date: Long,
+    val label: String,
+    val eventType: EventType?,
+    val isHarvest: Boolean
+)
 
 @Composable
 private fun TreeThumbnail(relativePath: String?) {
