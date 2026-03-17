@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">OrchardDex</string>
+    <string name="privacy_title">Privacy</string>
+    <string name="privacy_body">OrchardDex stores orchard records only on this device. No account, analytics, ads, or server sync are included.</string>
+</resources>
