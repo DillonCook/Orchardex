@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -564,7 +567,7 @@ fun TreeDetailScreen(
     if (addMenuVisible) {
         AlertDialog(
             onDismissRequest = { addMenuVisible = false },
-            title = { Text("Add to ${item.tree.displayName()}") },
+            title = { Text("Plant actions") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(
@@ -597,6 +600,13 @@ fun TreeDetailScreen(
                         },
                         modifier = Modifier.fillMaxWidth()
                     ) { Text("Add photo") }
+                    OutlinedButton(
+                        onClick = {
+                            addMenuVisible = false
+                            onEditTree(item.tree.id)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) { Text("Edit plant") }
                 }
             },
             confirmButton = {
@@ -635,10 +645,22 @@ fun TreeDetailScreen(
         }.toSortedMap(compareByDescending { it })
     }
 
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
+    Scaffold(
+        floatingActionButton = {
+            FloatingActionButton(
+                onClick = { addMenuVisible = true },
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.testTag("tree_actions")
+            ) {
+                Icon(Icons.Outlined.Add, contentDescription = "Plant actions")
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier.padding(innerPadding),
+            contentPadding = PaddingValues(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
         item {
             SectionCard(item.tree.displayName()) {
                 Text("${item.tree.species} • ${item.tree.cultivar}")
@@ -655,20 +677,6 @@ fun TreeDetailScreen(
                         photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
                     }
                 )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Button(
-                        onClick = { addMenuVisible = true },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Add")
-                    }
-                    OutlinedButton(
-                        onClick = { onEditTree(item.tree.id) },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("Edit plant")
-                    }
-                }
             }
         }
         item {
@@ -742,6 +750,7 @@ fun TreeDetailScreen(
             OutlinedButton(onClick = viewModel::requestDeleteConfirmation, modifier = Modifier.fillMaxWidth()) {
                 Text("Delete tree")
             }
+        }
         }
     }
 }

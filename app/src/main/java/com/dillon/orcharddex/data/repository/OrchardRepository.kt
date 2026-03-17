@@ -291,21 +291,39 @@ class OrchardRepository(
         }
     }
 
-    suspend fun addEvent(input: EventInput) = withContext(Dispatchers.IO) {
-        val photoPath = input.photoUri?.let { photoStorage.importPhoto(it, PhotoStorage.Category.EVENT) }
-        eventDao.insert(
-            EventEntity(
-                id = UUID.randomUUID().toString(),
-                treeId = input.treeId,
-                eventType = input.eventType,
-                eventDate = input.eventDate,
-                notes = input.notes.trim(),
-                cost = input.cost,
-                quantityValue = input.quantityValue,
-                quantityUnit = input.quantityUnit.trim().takeIf(String::isNotBlank),
-                photoPath = photoPath,
-                createdAt = System.currentTimeMillis()
-            )
+    suspend fun addEvent(input: EventInput) = addEvents(listOf(input))
+
+    suspend fun addEvents(inputs: List<EventInput>) = withContext(Dispatchers.IO) {
+        if (inputs.isEmpty()) return@withContext
+
+        val sharedPhotoUri = inputs.first().photoUri
+        val sharedPhotoPath = if (
+            sharedPhotoUri != null &&
+            inputs.all { it.photoUri == sharedPhotoUri }
+        ) {
+            photoStorage.importPhoto(sharedPhotoUri, PhotoStorage.Category.EVENT)
+        } else {
+            null
+        }
+        val now = System.currentTimeMillis()
+
+        eventDao.insertAll(
+            inputs.map { input ->
+                EventEntity(
+                    id = UUID.randomUUID().toString(),
+                    treeId = input.treeId,
+                    eventType = input.eventType,
+                    eventDate = input.eventDate,
+                    notes = input.notes.trim(),
+                    cost = input.cost,
+                    quantityValue = input.quantityValue,
+                    quantityUnit = input.quantityUnit.trim().takeIf(String::isNotBlank),
+                    photoPath = sharedPhotoPath ?: input.photoUri?.let {
+                        photoStorage.importPhoto(it, PhotoStorage.Category.EVENT)
+                    },
+                    createdAt = now
+                )
+            }
         )
     }
 

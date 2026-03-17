@@ -55,29 +55,6 @@ class DashboardViewModel(
         SharingStarted.WhileSubscribed(5_000),
         com.dillon.orcharddex.data.model.DashboardModel()
     )
-
-    var confirmLoadSample by mutableStateOf(false)
-        private set
-
-    var busy by mutableStateOf(false)
-        private set
-
-    fun requestLoadSampleConfirmation() {
-        confirmLoadSample = true
-    }
-
-    fun dismissLoadSampleConfirmation() {
-        confirmLoadSample = false
-    }
-
-    fun loadSampleData() {
-        viewModelScope.launch {
-            busy = true
-            confirmLoadSample = false
-            repository.loadSampleDataReplaceAll()
-            busy = false
-        }
-    }
 }
 
 class TreesViewModel(
@@ -269,7 +246,8 @@ class TreeDetailViewModel(
 }
 
 data class EventFormState(
-    val treeId: String? = null,
+    val applyToAllActive: Boolean = false,
+    val selectedTreeIds: Set<String> = emptySet(),
     val eventType: EventType = EventType.NOTE,
     val eventDate: LocalDate = LocalDate.now(),
     val notes: String = "",
@@ -285,8 +263,12 @@ class EventFormViewModel(
     savedStateHandle: SavedStateHandle,
     private val repository: OrchardRepository
 ) : ViewModel() {
-    private val initialTreeId: String? = savedStateHandle[TREE_ID]
-    var state by mutableStateOf(EventFormState(treeId = initialTreeId))
+    private val initialTreeId: String? = savedStateHandle.get<String>(TREE_ID)?.takeIf(String::isNotBlank)
+    var state by mutableStateOf(
+        EventFormState(
+            selectedTreeIds = initialTreeId?.let(::setOf) ?: emptySet()
+        )
+    )
         private set
 
     val trees = repository.observeTreeNames().stateIn(
@@ -299,28 +281,62 @@ class EventFormViewModel(
         state = state.update().copy(errorMessage = null)
     }
 
+    fun setApplyToAllActive(enabled: Boolean) {
+        state = state.copy(applyToAllActive = enabled, errorMessage = null)
+    }
+
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        state = state.copy(
+            selectedTreeIds = if (treeId in selected) selected - treeId else selected + treeId,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
+    }
+
     fun save(onSaved: (String) -> Unit) {
-        val treeId = state.treeId
-        if (treeId.isNullOrBlank()) {
-            state = state.copy(errorMessage = "Select a tree.")
+        val targetTreeIds = if (state.applyToAllActive) {
+            trees.value.filter { it.status == TreeStatus.ACTIVE }.map(TreeEntity::id)
+        } else {
+            state.selectedTreeIds.toList()
+        }.distinct()
+
+        if (targetTreeIds.isEmpty()) {
+            state = state.copy(
+                errorMessage = if (state.applyToAllActive) {
+                    "No active plants are available."
+                } else {
+                    "Select at least one plant."
+                }
+            )
             return
         }
+
         viewModelScope.launch {
             state = state.copy(isSaving = true)
-            repository.addEvent(
-                EventInput(
-                    treeId = treeId,
-                    eventType = state.eventType,
-                    eventDate = localDateAtStartOfDay(state.eventDate),
-                    notes = state.notes,
-                    cost = state.cost.toDoubleOrNull(),
-                    quantityValue = state.quantityValue.toDoubleOrNull(),
-                    quantityUnit = state.quantityUnit,
-                    photoUri = state.photoUri
-                )
+            repository.addEvents(
+                targetTreeIds.map { treeId ->
+                    EventInput(
+                        treeId = treeId,
+                        eventType = state.eventType,
+                        eventDate = localDateAtStartOfDay(state.eventDate),
+                        notes = state.notes,
+                        cost = state.cost.toDoubleOrNull(),
+                        quantityValue = state.quantityValue.toDoubleOrNull(),
+                        quantityUnit = state.quantityUnit,
+                        photoUri = state.photoUri
+                    )
+                }
             )
             state = state.copy(isSaving = false)
-            onSaved(treeId)
+            onSaved(targetTreeIds.singleOrNull().orEmpty())
         }
     }
 }
@@ -592,6 +608,9 @@ class SettingsViewModel(
     var confirmClearAll by mutableStateOf(false)
         private set
 
+    var confirmLoadSample by mutableStateOf(false)
+        private set
+
     fun updateTheme(mode: AppThemeMode) {
         viewModelScope.launch {
             settingsRepository.updateTheme(mode)
@@ -662,6 +681,14 @@ class SettingsViewModel(
         confirmClearAll = false
     }
 
+    fun requestLoadSample() {
+        confirmLoadSample = true
+    }
+
+    fun dismissLoadSample() {
+        confirmLoadSample = false
+    }
+
     fun clearAllData() {
         viewModelScope.launch {
             busy = true
@@ -674,6 +701,7 @@ class SettingsViewModel(
     fun loadSampleData() {
         viewModelScope.launch {
             busy = true
+            confirmLoadSample = false
             repository.loadSampleDataReplaceAll()
             busy = false
         }

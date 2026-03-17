@@ -7,10 +7,8 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
@@ -29,27 +27,9 @@ fun DashboardScreen(
     onAddEvent: () -> Unit,
     onAddHarvest: () -> Unit,
     onAddReminder: () -> Unit,
-    onImportBackup: () -> Unit,
     onViewTree: (String) -> Unit
 ) {
     val dashboard by viewModel.dashboard.collectAsStateWithLifecycle()
-    if (viewModel.confirmLoadSample) {
-        AlertDialog(
-            onDismissRequest = viewModel::dismissLoadSampleConfirmation,
-            title = { Text("Load sample orchard?") },
-            text = { Text("This replaces current app data with a practical sample orchard for exploration.") },
-            confirmButton = {
-                TextButton(onClick = viewModel::loadSampleData) {
-                    Text("Replace data")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = viewModel::dismissLoadSampleConfirmation) {
-                    Text("Cancel")
-                }
-            }
-        )
-    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -59,7 +39,7 @@ fun DashboardScreen(
             if (dashboard.totalTreeCount == 0) {
                 EmptyStateCard(
                     title = "Start with your first tree",
-                    message = "Add a tree, import a backup, or load sample orchard data to explore the full app."
+                    message = "Add a plant, then use orchard-wide events and reminders to track the season."
                 )
             }
         }
@@ -82,12 +62,10 @@ fun DashboardScreen(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    OutlinedButton(onClick = onAddTree) { Text("Add Tree") }
-                    OutlinedButton(onClick = onAddEvent) { Text("Add Event") }
-                    OutlinedButton(onClick = onAddHarvest) { Text("Add Harvest") }
-                    OutlinedButton(onClick = onAddReminder) { Text("Add Reminder") }
-                    OutlinedButton(onClick = onImportBackup) { Text("Import Backup") }
-                    OutlinedButton(onClick = viewModel::requestLoadSampleConfirmation) { Text("Load Sample Data") }
+                    OutlinedButton(onClick = onAddTree) { Text("Add plant") }
+                    OutlinedButton(onClick = onAddEvent) { Text("Apply event") }
+                    OutlinedButton(onClick = onAddHarvest) { Text("Add harvest") }
+                    OutlinedButton(onClick = onAddReminder) { Text("Add reminder") }
                 }
             }
         }
@@ -112,7 +90,7 @@ fun DashboardScreen(
                                     }
                             ) {
                                 Text(item.title)
-                                Text("${item.subtitle} • ${item.date.toDateLabel()}")
+                                Text("${item.subtitle} - ${item.date.toDateLabel()}")
                             }
                         }
                     }
@@ -126,7 +104,7 @@ fun DashboardScreen(
                 } else {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         dashboard.recentHarvests.forEach { harvest ->
-                            Text("${harvest.quantityValue} ${harvest.quantityUnit} • ${harvest.harvestDate.toDateLabel()}")
+                            Text("${harvest.quantityValue} ${harvest.quantityUnit} - ${harvest.harvestDate.toDateLabel()}")
                         }
                     }
                 }

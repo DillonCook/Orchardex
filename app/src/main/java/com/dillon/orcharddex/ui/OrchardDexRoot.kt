@@ -144,7 +144,6 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                     onAddEvent = { navController.navigate(OrchardRoutes.eventForm()) },
                     onAddHarvest = { navController.navigate(OrchardRoutes.harvestForm()) },
                     onAddReminder = { navController.navigate(OrchardRoutes.reminderForm()) },
-                    onImportBackup = { navController.navigate(BottomDestination.Settings.route) },
                     onViewTree = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
                 )
             }

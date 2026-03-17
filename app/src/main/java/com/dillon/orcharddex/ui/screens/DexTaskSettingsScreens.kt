@@ -556,6 +556,20 @@ fun SettingsScreen(
         )
     }
 
+    if (viewModel.confirmLoadSample) {
+        AlertDialog(
+            onDismissRequest = viewModel::dismissLoadSample,
+            title = { Text("Load sample orchard data?") },
+            text = { Text("This replaces current app data with the built-in sample orchard.") },
+            confirmButton = {
+                TextButton(onClick = viewModel::loadSampleData) { Text("Replace data") }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissLoadSample) { Text("Cancel") }
+            }
+        )
+    }
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -636,7 +650,7 @@ fun SettingsScreen(
         }
         item {
             SectionCard("Data") {
-                OutlinedButton(onClick = viewModel::loadSampleData, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(onClick = viewModel::requestLoadSample, modifier = Modifier.fillMaxWidth()) {
                     Text("Load sample orchard data")
                 }
                 OutlinedButton(onClick = viewModel::requestClearAll, modifier = Modifier.fillMaxWidth()) {
