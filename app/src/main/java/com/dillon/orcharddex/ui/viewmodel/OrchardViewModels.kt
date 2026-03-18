@@ -178,6 +178,11 @@ class TreeFormViewModel(
     private val repository: OrchardRepository
 ) : ViewModel() {
     private val treeId: String? = savedStateHandle[TREE_ID]
+    val knownTrees = repository.observeTreeNames().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
     var state by mutableStateOf(TreeFormState(isLoading = treeId != null))
         private set
 

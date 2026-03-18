@@ -55,6 +55,8 @@ import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
+import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.CultivarAutocompleteOption
 import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
@@ -230,6 +232,7 @@ fun TreeFormScreen(
 ) {
     val context = LocalContext.current
     val state = viewModel.state
+    val knownTrees by viewModel.knownTrees.collectAsStateWithLifecycle()
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
@@ -247,8 +250,32 @@ fun TreeFormScreen(
     var showRootstockField by rememberSaveable(state.id, state.rootstock.isNotBlank()) {
         mutableStateOf(state.rootstock.isNotBlank())
     }
+    var suppressSpeciesAutocomplete by rememberSaveable(state.id) {
+        mutableStateOf(false)
+    }
     val heroExistingPath = state.existingPhotos.firstOrNull()?.relativePath
     val heroNewUri = state.newPhotoUris.firstOrNull()
+    val supportedSpecies = remember { BloomForecastEngine.supportedSpeciesCatalog() }
+    val speciesCatalog = remember(knownTrees, supportedSpecies) {
+        (knownTrees.map(TreeEntity::species) + supportedSpecies)
+            .filter(String::isNotBlank)
+            .distinctBy(::normalizeAutocomplete)
+            .sortedBy(String::lowercase)
+    }
+    val speciesSuggestions = remember(state.species, speciesCatalog) {
+        autocompleteSpeciesOptions(state.species, speciesCatalog)
+    }
+    val builtInCultivarSuggestions = remember(state.cultivar, state.species) {
+        BloomForecastEngine.cultivarAutocompleteOptions(state.cultivar, state.species)
+    }
+    val orchardCultivarSuggestions = remember(state.cultivar, state.species, knownTrees) {
+        existingCultivarAutocompleteOptions(state.cultivar, state.species, knownTrees)
+    }
+    val cultivarSuggestions = remember(builtInCultivarSuggestions, orchardCultivarSuggestions) {
+        (builtInCultivarSuggestions + orchardCultivarSuggestions)
+            .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
+            .take(8)
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -286,19 +313,58 @@ fun TreeFormScreen(
                 )
                 OutlinedTextField(
                     value = state.species,
-                    onValueChange = { viewModel.update { copy(species = it) } },
+                    onValueChange = { input ->
+                        suppressSpeciesAutocomplete = false
+                        val exactSpecies = speciesCatalog.firstOrNull {
+                            normalizeAutocomplete(it) == normalizeAutocomplete(input)
+                        }
+                        viewModel.update { copy(species = exactSpecies ?: input) }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("tree_species"),
                     label = { Text("Species") }
                 )
+                if (!suppressSpeciesAutocomplete) {
+                    SpeciesAutocompleteCard(
+                        query = state.species,
+                        suggestions = speciesSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            viewModel.update { copy(species = suggestion) }
+                        }
+                    )
+                }
                 OutlinedTextField(
                     value = state.cultivar,
-                    onValueChange = { viewModel.update { copy(cultivar = it) } },
+                    onValueChange = { input ->
+                        val exactMatch = BloomForecastEngine.resolveCultivarAutocomplete(input, state.species)
+                            ?: resolveExistingCultivarAutocomplete(input, knownTrees)
+                        if (exactMatch != null) {
+                            suppressSpeciesAutocomplete = true
+                        }
+                        viewModel.update {
+                            if (exactMatch != null) {
+                                copy(species = exactMatch.species, cultivar = exactMatch.cultivar)
+                            } else {
+                                copy(cultivar = input)
+                            }
+                        }
+                    },
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("tree_cultivar"),
                     label = { Text("Cultivar (optional)") }
+                )
+                CultivarAutocompleteCard(
+                    query = state.cultivar,
+                    suggestions = cultivarSuggestions,
+                    onSelected = { suggestion ->
+                        suppressSpeciesAutocomplete = true
+                        viewModel.update {
+                            copy(species = suggestion.species, cultivar = suggestion.cultivar)
+                        }
+                    }
                 )
                 OutlinedTextField(
                     value = state.source,
@@ -478,6 +544,59 @@ fun TreeFormScreen(
 }
 
 @Composable
+private fun SpeciesAutocompleteCard(
+    query: String,
+    suggestions: List<String>,
+    onSelected: (String) -> Unit
+) {
+    if (query.isBlank() || suggestions.isEmpty()) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Species matches", style = MaterialTheme.typography.labelMedium)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                suggestions.forEach { suggestion ->
+                    AssistChip(onClick = { onSelected(suggestion) }, label = { Text(suggestion) })
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CultivarAutocompleteCard(
+    query: String,
+    suggestions: List<CultivarAutocompleteOption>,
+    onSelected: (CultivarAutocompleteOption) -> Unit
+) {
+    if (query.isBlank() || suggestions.isEmpty()) return
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Cultivar matches", style = MaterialTheme.typography.labelMedium)
+            suggestions.forEach { suggestion ->
+                TextButton(
+                    onClick = { onSelected(suggestion) },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(suggestion.cultivar, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            buildString {
+                                append(suggestion.species)
+                                if (suggestion.aliases.isNotEmpty()) {
+                                    append(" | also known as ")
+                                    append(suggestion.aliases.take(2).joinToString(", "))
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun TreeHeroPhotoHeader(
     existingPhotoPath: String?,
     newPhotoUri: Uri?,
@@ -528,6 +647,96 @@ private fun createTreeCaptureUri(context: android.content.Context): Uri {
         imageFile
     )
 }
+
+private fun autocompleteSpeciesOptions(
+    query: String,
+    options: List<String>,
+    limit: Int = 8
+): List<String> {
+    val normalizedQuery = normalizeAutocomplete(query)
+    if (normalizedQuery.isBlank()) return emptyList()
+    return options
+        .mapNotNull { option ->
+            autocompleteMatchScore(normalizedQuery, normalizeAutocomplete(option))?.let { score -> option to score }
+        }
+        .sortedWith(
+            compareByDescending<Pair<String, Int>> { it.second }
+                .thenBy { it.first.lowercase() }
+        )
+        .map(Pair<String, Int>::first)
+        .distinctBy(::normalizeAutocomplete)
+        .take(limit)
+}
+
+private fun existingCultivarAutocompleteOptions(
+    query: String,
+    speciesQuery: String,
+    trees: List<TreeEntity>,
+    limit: Int = 8
+): List<CultivarAutocompleteOption> {
+    val normalizedQuery = normalizeAutocomplete(query)
+    if (normalizedQuery.isBlank()) return emptyList()
+    return trees
+        .filter { it.cultivar.isNotBlank() }
+        .mapNotNull { tree ->
+            val score = autocompleteMatchScore(normalizedQuery, normalizeAutocomplete(tree.cultivar))
+                ?: return@mapNotNull null
+            CultivarAutocompleteOption(species = tree.species, cultivar = tree.cultivar) to score
+        }
+        .sortedWith(
+            compareByDescending<Pair<CultivarAutocompleteOption, Int>> { it.second }
+                .thenByDescending {
+                    speciesAutocompleteScore(speciesQuery, it.first.species)
+                }
+                .thenBy { it.first.species.lowercase() }
+                .thenBy { it.first.cultivar.lowercase() }
+        )
+        .map(Pair<CultivarAutocompleteOption, Int>::first)
+        .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
+        .take(limit)
+}
+
+private fun resolveExistingCultivarAutocomplete(
+    query: String,
+    trees: List<TreeEntity>
+): CultivarAutocompleteOption? {
+    val normalizedQuery = normalizeAutocomplete(query)
+    if (normalizedQuery.isBlank()) return null
+    val matches = trees
+        .filter { normalizeAutocomplete(it.cultivar) == normalizedQuery }
+        .map { CultivarAutocompleteOption(species = it.species, cultivar = it.cultivar) }
+        .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
+    if (matches.isEmpty()) return null
+    return matches.singleOrNull()
+}
+
+private fun speciesAutocompleteScore(query: String, species: String): Int {
+    val normalizedQuery = normalizeAutocomplete(query)
+    if (normalizedQuery.isBlank()) return 0
+    val normalizedSpecies = normalizeAutocomplete(species)
+    return when {
+        normalizedSpecies == normalizedQuery -> 3
+        normalizedSpecies.startsWith(normalizedQuery) -> 2
+        normalizedSpecies.contains(normalizedQuery) -> 1
+        else -> 0
+    }
+}
+
+private fun autocompleteMatchScore(query: String, candidate: String): Int? = when {
+    candidate == query -> 500
+    candidate.startsWith(query) -> 400
+    candidate.split(' ').any { it.startsWith(query) } -> 320
+    candidate.contains(query) -> 220
+    else -> null
+}
+
+private fun normalizeAutocomplete(value: String): String = value
+    .trim()
+    .lowercase()
+    .replace("&", "and")
+    .replace(Regex("[^a-z0-9]+"), " ")
+    .replace(Regex("\\s+"), " ")
+    .trim()
 
 @Composable
 fun TreeDetailScreen(

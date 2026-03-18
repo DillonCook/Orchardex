@@ -90,7 +90,7 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         filteredHistory.groupBy { it.date.monthBucketLabel() }.toList()
     }
-    val recent30Cutoff = remember { System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000 }
+    val totalHarvests = remember(history) { history.count { it.kind == ActivityKind.HARVEST } }
 
     if (addMenuVisible) {
         AlertDialog(
@@ -143,37 +143,19 @@ fun HistoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Timeline snapshot") {
+                SectionCard("Harvests") {
                     Text(
-                        text = "Review what happened across the orchard, then drill into a specific plant only when you need detail.",
+                        text = "Total seasonal harvests logged across all tracked plants.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        com.dillon.orcharddex.ui.components.StatCard("Entries", history.size.toString())
-                        com.dillon.orcharddex.ui.components.StatCard(
-                            "Events",
-                            history.count { it.kind == ActivityKind.EVENT }.toString()
-                        )
-                        com.dillon.orcharddex.ui.components.StatCard(
-                            "Harvests",
-                            history.count { it.kind == ActivityKind.HARVEST }.toString()
-                        )
-                        com.dillon.orcharddex.ui.components.StatCard(
-                            "Issues",
-                            history.count(HistoryEntryModel::isIssueLog).toString()
-                        )
-                        com.dillon.orcharddex.ui.components.StatCard(
-                            "Last 30 days",
-                            history.count { it.date >= recent30Cutoff }.toString()
-                        )
-                    }
+                    com.dillon.orcharddex.ui.components.StatCard(
+                        label = "Seasonal harvests logged",
+                        value = totalHarvests.toString()
+                    )
                 }
             }
             item {
-                SectionCard("Find logs") {
+                SectionCard("Search") {
                     OutlinedTextField(
                         value = search,
                         onValueChange = { search = it },

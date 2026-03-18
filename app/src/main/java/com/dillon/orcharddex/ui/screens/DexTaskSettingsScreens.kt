@@ -190,20 +190,8 @@ fun DexScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Collection snapshot") {
-                    Text("Review varieties first, then open an individual plant only when you need the full detail.")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatCard("Plants", plants.size.toString())
-                        StatCard("Active", plants.count { it.tree.status == TreeStatus.ACTIVE }.toString())
-                        StatCard("Varieties", dex.ownedCultivarCount.toString())
-                        StatCard("Species", dex.ownedGroups.size.toString())
-                        StatCard("First fruit", dex.firstFruitCount.toString())
-                        StatCard("Wishlist", dex.wishlistCount.toString())
-                    }
-                }
-            }
-            item {
-                SectionCard("Find plants") {
+                SectionCard("Plant library") {
+                    Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = search,
@@ -217,6 +205,13 @@ fun DexScreen(
                         Text(it, style = MaterialTheme.typography.bodySmall)
                     }
                     Text("${filteredPlants.size} plants shown", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+            if (filteredPlants.isEmpty()) {
+                item { EmptyStateCard("No plants found", "Try a different search, clear filters, or add a plant.") }
+            } else {
+                items(filteredPlants, key = { it.tree.id }) { item ->
+                    DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
                 }
             }
             item {
@@ -237,18 +232,6 @@ fun DexScreen(
                             }
                         }
                     }
-                }
-            }
-            item {
-                SectionCard("Plants") {
-                    Text("Tap a plant to open its photos, reminders, and full timeline.")
-                }
-            }
-            if (filteredPlants.isEmpty()) {
-                item { EmptyStateCard("No plants found", "Try a different search, clear filters, or add a plant.") }
-            } else {
-                items(filteredPlants, key = { it.tree.id }) { item ->
-                    DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
                 }
             }
             item {
@@ -491,6 +474,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
+    val supportedCultivarCatalog = remember {
+        BloomForecastEngine.supportedCultivarCatalog()
+            .groupBy { it.species }
+            .toList()
+            .sortedBy { it.first.lowercase() }
+    }
     var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
     }
@@ -597,6 +586,26 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
                     OutlinedButton(onClick = viewModel::requestLoadSample, modifier = Modifier.fillMaxWidth()) { Text("Load sample orchard data") }
                 }
                 OutlinedButton(onClick = viewModel::requestClearAll, modifier = Modifier.fillMaxWidth()) { Text("Clear all data") }
+            }
+        }
+        item {
+            SectionCard("Bloom forecast catalog") {
+                Text("${supportedCultivarCatalog.sumOf { it.second.size }} cultivar-adjusted profiles currently supported.")
+                Text("Species | cultivars", style = MaterialTheme.typography.bodySmall)
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    supportedCultivarCatalog.forEach { (species, cultivars) ->
+                        Text(
+                            "$species | ${cultivars.joinToString(", ") { entry ->
+                                if (entry.aliases.isEmpty()) {
+                                    entry.cultivar
+                                } else {
+                                    "${entry.cultivar} (${entry.aliases.joinToString("/")})"
+                                }
+                            }}",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             }
         }
         item {
