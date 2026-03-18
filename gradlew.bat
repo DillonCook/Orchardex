@@ -16,7 +16,22 @@ if "%DIRNAME%" == "" set DIRNAME=.
 set APP_BASE_NAME=%~n0
 set APP_HOME=%DIRNAME%
 
+if not defined GRADLE_USER_HOME set "GRADLE_USER_HOME=%APP_HOME%\.gradle-user-home"
+if not exist "%GRADLE_USER_HOME%" mkdir "%GRADLE_USER_HOME%"
+if not defined ANDROID_USER_HOME set "ANDROID_USER_HOME=%APP_HOME%\.android-user-home"
+if not exist "%ANDROID_USER_HOME%" mkdir "%ANDROID_USER_HOME%"
+
 @rem Find java.exe
+if defined JAVA_HOME goto findJavaFromJavaHome
+
+set "ANDROID_STUDIO_JBR=C:\Program Files\Android\Android Studio\jbr"
+if exist "%ANDROID_STUDIO_JBR%\bin\java.exe" set "JAVA_HOME=%ANDROID_STUDIO_JBR%"
+
+if defined JAVA_HOME goto findJavaFromJavaHome
+
+set "ANDROID_STUDIO_JBR=%LOCALAPPDATA%\Programs\Android Studio\jbr"
+if exist "%ANDROID_STUDIO_JBR%\bin\java.exe" set "JAVA_HOME=%ANDROID_STUDIO_JBR%"
+
 if defined JAVA_HOME goto findJavaFromJavaHome
 
 set JAVA_EXE=java.exe

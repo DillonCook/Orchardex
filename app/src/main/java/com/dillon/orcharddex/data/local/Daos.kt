@@ -43,6 +43,9 @@ interface TreeDao {
     @Query("SELECT DISTINCT orchardName FROM trees WHERE orchardName != '' ORDER BY orchardName")
     fun observeOrchardNames(): Flow<List<String>>
 
+    @Query("UPDATE trees SET orchardName = :orchardName")
+    suspend fun updateOrchardNameForAll(orchardName: String)
+
     @Query("SELECT DISTINCT species FROM trees ORDER BY species")
     fun observeSpeciesNames(): Flow<List<String>>
 

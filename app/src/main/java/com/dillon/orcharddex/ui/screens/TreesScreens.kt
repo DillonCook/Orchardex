@@ -25,6 +25,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -55,6 +56,7 @@ import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.repository.displayName
+import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.DateField
@@ -78,28 +80,6 @@ private enum class TreeSortOption(val label: String) {
     PLANTED("Planted"),
     SPECIES("Species"),
     CULTIVAR("Cultivar")
-}
-
-@Composable
-fun TreesHoldingScreen(
-    onOpenDex: () -> Unit
-) {
-    LazyColumn(
-        contentPadding = PaddingValues(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
-    ) {
-        item {
-            EmptyStateCard(
-                title = "Trees is paused",
-                message = "Plant browsing and collection management now live in Dex while this tab is rebuilt."
-            )
-        }
-        item {
-            Button(onClick = onOpenDex, modifier = Modifier.fillMaxWidth()) {
-                Text("Open Dex")
-            }
-        }
-    }
 }
 
 @Composable
@@ -228,7 +208,7 @@ fun TreesScreen(
                         TreeThumbnail(item.mainPhotoPath)
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             Text(item.tree.displayName(), style = MaterialTheme.typography.titleMedium)
-                            Text("${item.tree.orchardName.ifBlank { "No orchard" }} • ${item.tree.sectionName.ifBlank { "No section" }}")
+                            Text(item.tree.sectionName.ifBlank { "No section" })
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 AssistChip(onClick = {}, label = { Text(item.tree.species) })
                                 AssistChip(onClick = {}, label = { Text(item.tree.plantType.name.replace("_", "-").lowercase()) })
@@ -318,7 +298,7 @@ fun TreeFormScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .testTag("tree_cultivar"),
-                    label = { Text("Cultivar") }
+                    label = { Text("Cultivar (optional)") }
                 )
                 OutlinedTextField(
                     value = state.source,
@@ -375,6 +355,28 @@ fun TreeFormScreen(
                     value = state.plantedDate,
                     onDateSelected = { viewModel.update { copy(plantedDate = it) } }
                 )
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.update { copy(hasFruitedBefore = !hasFruitedBefore) } },
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text("Has fruited before")
+                        Text(
+                            text = "Use this for older plants so first-fruit tracking stays accurate without adding old harvest logs.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                    Checkbox(
+                        checked = state.hasFruitedBefore,
+                        onCheckedChange = { checked -> viewModel.update { copy(hasFruitedBefore = checked) } }
+                    )
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     FilterChip(
                         selected = state.plantType == PlantType.IN_GROUND,
@@ -576,7 +578,7 @@ fun TreeDetailScreen(
                             onAddEvent(item.tree.id)
                         },
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text("Log event") }
+                    ) { Text("Add event") }
                     Button(
                         onClick = {
                             addMenuVisible = false
@@ -585,7 +587,7 @@ fun TreeDetailScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("add_harvest")
-                    ) { Text("Log harvest") }
+                    ) { Text("Add harvest") }
                     Button(
                         onClick = {
                             addMenuVisible = false
@@ -663,12 +665,13 @@ fun TreeDetailScreen(
         ) {
         item {
             SectionCard(item.tree.displayName()) {
-                Text("${item.tree.species} • ${item.tree.cultivar}")
-                Text("${item.tree.orchardName.ifBlank { "No orchard" }} • ${item.tree.sectionName.ifBlank { "No section" }}")
+                Text(item.tree.speciesCultivarLabel())
+                Text(item.tree.sectionName.ifBlank { "No section assigned" })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactFact("Planting", item.tree.plantType.name.replace("_", "-").lowercase())
                     CompactFact("Status", item.tree.status.name.lowercase())
                     CompactFact("Planted", item.tree.plantedDate.toDateLabel())
+                    CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
                     CompactFact("Source", item.tree.source.orEmpty())
                 }
@@ -718,9 +721,9 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard("Harvest log") {
+            SectionCard("Harvest history") {
                 if (item.harvests.isEmpty()) {
-                    Text("No harvests logged yet.")
+                    Text("No harvests yet.")
                 } else {
                     item.harvests.forEach { harvest ->
                         Text(

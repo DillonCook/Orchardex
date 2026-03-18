@@ -150,7 +150,7 @@ fun EventFormScreen(
         )
     }
 
-    EntryFormLayout(title = "Log event") {
+    EntryFormLayout(title = "Add event") {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = !state.applyToAllActive,
@@ -189,14 +189,24 @@ fun EventFormScreen(
                 }
             }
         }
-        SelectionField(
-            label = "Event type",
-            value = state.eventType.eventLabel(),
-            options = EventType.entries.map(EventType::eventLabel),
-            onSelected = { label ->
-                viewModel.update { copy(eventType = EventType.entries.first { it.eventLabel() == label }) }
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Event type",
+                style = MaterialTheme.typography.labelLarge
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                EventType.entries.forEach { eventType ->
+                    FilterChip(
+                        selected = state.eventType == eventType,
+                        onClick = { viewModel.update { copy(eventType = eventType) } },
+                        label = { Text(eventType.eventLabel()) }
+                    )
+                }
             }
-        )
+        }
         DateField(
             label = "Event date",
             value = state.eventDate,
@@ -266,7 +276,7 @@ fun HarvestFormScreen(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri -> viewModel.update { copy(photoUri = uri) } }
 
-    EntryFormLayout(title = "Log harvest") {
+    EntryFormLayout(title = "Add harvest") {
         SelectionField(
             label = "Tree",
             value = trees.selectedTreeLabel(state.treeId),
@@ -457,14 +467,53 @@ fun ReminderFormScreen(
 @Composable
 fun PrivacyScreen() {
     LazyColumn(
-        contentPadding = PaddingValues(16.dp)
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            SectionCard("Privacy") {
+            SectionCard("Privacy policy") {
+                Text("Last updated: Mar 18, 2026")
+                Text("OrchardDex is an offline-first Android app for orchard records, reminders, photos, harvest logs, and manual backups.")
+            }
+        }
+        item {
+            SectionCard("Summary") {
                 Text("OrchardDex stores orchard records only on this device.")
                 Text("No account or login is required.")
                 Text("No analytics, ads, crash reporting, or server sync are included.")
-                Text("Backups are manual files that you control with the system file picker.")
+                Text("OrchardDex does not sell, share, or transmit your orchard data to the developer or third parties.")
+            }
+        }
+        item {
+            SectionCard("Data OrchardDex stores") {
+                Text("Plant records, notes, tags, orchard details, event logs, harvest logs, reminders, and app settings.")
+                Text("Photos you choose are copied into app-private storage inside OrchardDex.")
+                Text("Manual backup files are created or imported only when you choose to export or import them.")
+            }
+        }
+        item {
+            SectionCard("How data is used") {
+                Text("Your data is used only to power app features on your device.")
+                Text("Notifications are generated locally for reminders you create.")
+                Text("Selected photos are attached to your orchard records and stored inside the app sandbox.")
+                Text("Backups are written only to the location you choose with the system file picker.")
+            }
+        }
+        item {
+            SectionCard("Permissions") {
+                Text("Notification permission is requested only when you enable reminders on Android 13 and newer.")
+                Text("OrchardDex uses the Android photo picker and does not request broad media-library permissions.")
+            }
+        }
+        item {
+            SectionCard("Deletion and control") {
+                Text("You can delete local app data at any time from Settings > Data > Clear all data or by uninstalling the app.")
+                Text("Any backup files you export remain under your control and can be deleted separately.")
+            }
+        }
+        item {
+            SectionCard("Contact") {
+                Text("For privacy questions, use the contact method listed in the OrchardDex Google Play listing.")
             }
         }
     }
@@ -524,13 +573,21 @@ private fun List<TreeEntity>.treeLabels(): List<String> = map(TreeEntity::select
 private fun List<TreeEntity>.selectedTreeLabel(treeId: String?, fallback: String = ""): String =
     firstOrNull { it.id == treeId }?.selectorLabel() ?: fallback
 
-private fun TreeEntity.selectorLabel(): String = "${displayName()} - ${orchardName.ifBlank { "No orchard" }}"
+private fun TreeEntity.selectorLabel(): String = buildString {
+    append(displayName())
+    if (sectionName.isNotBlank()) {
+        append(" - ")
+        append(sectionName)
+    }
+}
 
 private fun TreeEntity.selectorSubtitle(): String = buildString {
     append(species)
     if (cultivar.isNotBlank()) append(" - $cultivar")
-    append(" - ")
-    append(orchardName.ifBlank { "No orchard" })
+    if (sectionName.isNotBlank()) {
+        append(" - ")
+        append(sectionName)
+    }
     if (status != TreeStatus.ACTIVE) {
         append(" - ${status.name.lowercase()}")
     }
@@ -540,7 +597,7 @@ private fun TreeEntity.matchesPlantSearch(query: String): Boolean = listOf(
     displayName(),
     species,
     cultivar,
-    orchardName,
+    sectionName,
     notes,
     tags
 ).any { value -> value.lowercase().contains(query) }

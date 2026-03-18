@@ -20,6 +20,7 @@ data class TreeInput(
     val frostSensitivityNote: String = "",
     val irrigationNote: String = "",
     val status: TreeStatus = TreeStatus.ACTIVE,
+    val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
     val newPhotoUris: List<Uri> = emptyList(),

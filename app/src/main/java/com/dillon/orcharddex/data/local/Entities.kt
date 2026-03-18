@@ -43,6 +43,7 @@ data class TreeEntity(
     val frostSensitivityNote: String?,
     val irrigationNote: String?,
     val status: TreeStatus,
+    val hasFruitedBefore: Boolean = false,
     val notes: String,
     val tags: String,
     val createdAt: Long,

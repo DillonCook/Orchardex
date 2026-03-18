@@ -17,7 +17,10 @@ class OrchardDexContainer(context: Context) {
         appContext,
         OrchardDexDatabase::class.java,
         OrchardDexDatabase.DB_NAME
-    ).fallbackToDestructiveMigration().build()
+    )
+        .addMigrations(OrchardDexDatabase.MIGRATION_1_2)
+        .fallbackToDestructiveMigration()
+        .build()
 
     val settingsRepository = SettingsRepository(appContext)
     val photoStorage = PhotoStorage(appContext)

@@ -17,11 +17,13 @@ import com.dillon.orcharddex.backup.BackupManager
 import com.dillon.orcharddex.backup.BackupValidation
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
+import com.dillon.orcharddex.data.model.ActivityKind
 import com.dillon.orcharddex.data.model.CommonSpeciesSuggestions
 import com.dillon.orcharddex.data.model.EventInput
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.HarvestInput
+import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -46,14 +48,37 @@ import java.time.LocalTime
 
 private const val TREE_ID = "treeId"
 private const val REMINDER_ID = "reminderId"
+private const val HISTORY_KIND = "kind"
+private const val HISTORY_ENTRY_ID = "entryId"
 
 class DashboardViewModel(
-    private val repository: OrchardRepository
+    private val repository: OrchardRepository,
+    settingsRepository: SettingsRepository
 ) : ViewModel() {
     val dashboard = repository.observeDashboard().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         com.dillon.orcharddex.data.model.DashboardModel()
+    )
+    val trees = repository.observeTreeNames().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val reminders = repository.observeReminders().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val history = repository.observeHistory().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val settings = settingsRepository.settings.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        AppSettings()
     )
 }
 
@@ -82,6 +107,43 @@ class TreesViewModel(
     )
 }
 
+class HistoryViewModel(
+    repository: OrchardRepository
+) : ViewModel() {
+    val history = repository.observeHistory().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+}
+
+class HistoryDetailViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val repository: OrchardRepository
+) : ViewModel() {
+    private val kind = savedStateHandle.get<String>(HISTORY_KIND)
+        ?.uppercase()
+        ?.let { value -> runCatching { ActivityKind.valueOf(value) }.getOrNull() }
+    private val entryId: String? = savedStateHandle[HISTORY_ENTRY_ID]
+
+    var isLoading by mutableStateOf(true)
+        private set
+
+    var detail by mutableStateOf<HistoryEntryModel?>(null)
+        private set
+
+    init {
+        viewModelScope.launch {
+            detail = if (kind != null && entryId != null) {
+                repository.getHistoryEntry(kind, entryId)
+            } else {
+                null
+            }
+            isLoading = false
+        }
+    }
+}
+
 data class TreeFormState(
     val id: String? = null,
     val orchardName: String = "",
@@ -100,6 +162,7 @@ data class TreeFormState(
     val frostSensitivityNote: String = "",
     val irrigationNote: String = "",
     val status: TreeStatus = TreeStatus.ACTIVE,
+    val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
     val existingPhotos: List<TreePhotoEntity> = emptyList(),
@@ -141,6 +204,7 @@ class TreeFormViewModel(
                         frostSensitivityNote = it.tree.frostSensitivityNote.orEmpty(),
                         irrigationNote = it.tree.irrigationNote.orEmpty(),
                         status = it.tree.status,
+                        hasFruitedBefore = it.tree.hasFruitedBefore,
                         notes = it.tree.notes,
                         tags = it.tree.tags,
                         existingPhotos = it.photos,
@@ -171,8 +235,8 @@ class TreeFormViewModel(
     }
 
     fun save(onSaved: (String) -> Unit) {
-        if (state.species.isBlank() || state.cultivar.isBlank()) {
-            state = state.copy(errorMessage = "Species and cultivar are required.")
+        if (state.species.isBlank()) {
+            state = state.copy(errorMessage = "Species is required.")
             return
         }
         viewModelScope.launch {
@@ -196,6 +260,7 @@ class TreeFormViewModel(
                     frostSensitivityNote = state.frostSensitivityNote,
                     irrigationNote = state.irrigationNote,
                     status = state.status,
+                    hasFruitedBefore = state.hasFruitedBefore,
                     notes = state.notes,
                     tags = state.tags,
                     newPhotoUris = state.newPhotoUris,
@@ -623,21 +688,28 @@ class SettingsViewModel(
         }
     }
 
+    fun updateOrchardProfile(name: String, usdaZone: String) {
+        viewModelScope.launch {
+            val trimmedName = name.trim()
+            val normalizedZone = usdaZone.trim().lowercase()
+            settingsRepository.updateOrchardName(trimmedName)
+            settingsRepository.updateUsdaZone(normalizedZone)
+            repository.syncOrchardName(trimmedName)
+        }
+    }
+
     fun updateDefaultReminder(mode: LeadTimeMode, customHours: Int) {
         viewModelScope.launch {
             settingsRepository.updateDefaultLeadTime(mode, customHours)
         }
     }
 
-    fun updateOrchardName(name: String) {
+    fun completeOnboarding(orchardName: String, usdaZone: String) {
         viewModelScope.launch {
-            settingsRepository.updateOrchardName(name)
-        }
-    }
-
-    fun completeOnboarding(orchardName: String) {
-        viewModelScope.launch {
-            settingsRepository.completeOnboarding(orchardName)
+            val trimmed = orchardName.trim()
+            val normalizedZone = usdaZone.trim().lowercase()
+            settingsRepository.completeOnboarding(trimmed, normalizedZone)
+            repository.syncOrchardName(trimmed)
         }
     }
 
@@ -710,8 +782,15 @@ class SettingsViewModel(
 
 object OrchardViewModelProvider {
     val Factory: ViewModelProvider.Factory = viewModelFactory {
-        initializer { DashboardViewModel(orchardDexApplication().container.repository) }
+        initializer {
+            DashboardViewModel(
+                orchardDexApplication().container.repository,
+                orchardDexApplication().container.settingsRepository
+            )
+        }
         initializer { TreesViewModel(orchardDexApplication().container.repository) }
+        initializer { HistoryViewModel(orchardDexApplication().container.repository) }
+        initializer { HistoryDetailViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { TreeFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { TreeDetailViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { EventFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }

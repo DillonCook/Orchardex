@@ -4,6 +4,9 @@ import android.Manifest
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.foundation.layout.padding
@@ -17,6 +20,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.runtime.remember
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -33,19 +37,22 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.dillon.orcharddex.OrchardDexApp
+import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.ui.navigation.BottomDestination
 import com.dillon.orcharddex.ui.navigation.OrchardRoutes
+import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.screens.DashboardScreen
 import com.dillon.orcharddex.ui.screens.DexScreen
 import com.dillon.orcharddex.ui.screens.EventFormScreen
 import com.dillon.orcharddex.ui.screens.HarvestFormScreen
+import com.dillon.orcharddex.ui.screens.HistoryDetailScreen
+import com.dillon.orcharddex.ui.screens.HistoryScreen
 import com.dillon.orcharddex.ui.screens.PrivacyScreen
 import com.dillon.orcharddex.ui.screens.ReminderFormScreen
 import com.dillon.orcharddex.ui.screens.SettingsScreen
 import com.dillon.orcharddex.ui.screens.TasksScreen
 import com.dillon.orcharddex.ui.screens.TreeDetailScreen
 import com.dillon.orcharddex.ui.screens.TreeFormScreen
-import com.dillon.orcharddex.ui.screens.TreesHoldingScreen
 import com.dillon.orcharddex.ui.viewmodel.OrchardViewModelProvider
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 
@@ -59,6 +66,10 @@ fun OrchardDexRoot(app: OrchardDexApp) {
     val currentRoute = backStackEntry?.destination?.route.orEmpty()
     var setupOrchardName by rememberSaveable(settings.onboardingComplete) {
         mutableStateOf(settings.orchardName)
+    }
+    val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
+    var setupUsdaZone by rememberSaveable(settings.onboardingComplete, settings.usdaZone) {
+        mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
     }
     val bottomDestinations = listOf(
         BottomDestination.Dashboard,
@@ -78,15 +89,29 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             onDismissRequest = {},
             title = { Text("Set up OrchardDex") },
             text = {
-                OutlinedTextField(
-                    value = setupOrchardName,
-                    onValueChange = { setupOrchardName = it },
-                    label = { Text("Orchard name") }
-                )
+                androidx.compose.foundation.layout.Column {
+                    OutlinedTextField(
+                        value = setupOrchardName,
+                        onValueChange = { setupOrchardName = it },
+                        label = { Text("Orchard name") }
+                    )
+                    SelectionField(
+                        label = "USDA zone",
+                        value = setupUsdaZone,
+                        options = zoneOptions,
+                        onSelected = { setupUsdaZone = it }
+                    )
+                    Text("Used for bloom forecast timing. You can change it later in Settings.")
+                }
             },
             confirmButton = {
                 TextButton(
-                    onClick = { settingsViewModel.completeOnboarding(setupOrchardName) },
+                    onClick = {
+                        settingsViewModel.completeOnboarding(
+                            setupOrchardName,
+                            if (setupUsdaZone == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(setupUsdaZone)
+                        )
+                    },
                     enabled = setupOrchardName.isNotBlank()
                 ) {
                     Text("Save setup")
@@ -135,7 +160,11 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         NavHost(
             navController = navController,
             startDestination = BottomDestination.Dashboard.route,
-            modifier = Modifier.padding(innerPadding)
+            modifier = Modifier.padding(innerPadding),
+            enterTransition = { fadeIn(animationSpec = tween(durationMillis = 140)) },
+            exitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
+            popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 140)) },
+            popExitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) }
         ) {
             composable(BottomDestination.Dashboard.route) {
                 DashboardScreen(
@@ -148,8 +177,13 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 )
             }
             composable(BottomDestination.Trees.route) {
-                TreesHoldingScreen(
-                    onOpenDex = { navController.navigate(BottomDestination.Dex.route) }
+                HistoryScreen(
+                    viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    onEntryClick = { kind, entryId ->
+                        navController.navigate(OrchardRoutes.historyDetail(kind, entryId))
+                    },
+                    onAddEvent = { navController.navigate(OrchardRoutes.eventForm()) },
+                    onAddHarvest = { navController.navigate(OrchardRoutes.harvestForm()) }
                 )
             }
             composable(BottomDestination.Dex.route) {
@@ -172,6 +206,19 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 SettingsScreen(
                     viewModel = settingsViewModel,
                     onPrivacy = { navController.navigate(OrchardRoutes.PRIVACY) }
+                )
+            }
+            composable(
+                route = OrchardRoutes.HISTORY_DETAIL,
+                arguments = listOf(
+                    navArgument(OrchardRoutes.HISTORY_KIND_ARG) { type = NavType.StringType },
+                    navArgument(OrchardRoutes.HISTORY_ENTRY_ID_ARG) { type = NavType.StringType }
+                )
+            ) {
+                HistoryDetailScreen(
+                    viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    onBack = { navController.popBackStack() },
+                    onOpenTree = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
                 )
             }
             composable(
@@ -278,14 +325,15 @@ fun OrchardDexRoot(app: OrchardDexApp) {
 
 private fun String.titleForRoute(orchardName: String): String = when {
     startsWith(BottomDestination.Dashboard.route) -> orchardName.ifBlank { "Dashboard" }
-    startsWith(BottomDestination.Trees.route) -> "Trees"
+    startsWith(BottomDestination.Trees.route) -> "History"
     startsWith(BottomDestination.Dex.route) -> "Dex"
     startsWith(BottomDestination.Tasks.route) -> "Tasks"
     startsWith(BottomDestination.Settings.route) -> "Settings"
+    startsWith("historyDetail") -> "Log details"
     startsWith("treeDetail") -> "Tree details"
     startsWith("treeForm") -> "Tree"
-    startsWith("eventForm") -> "Log event"
-    startsWith("harvestForm") -> "Log harvest"
+    startsWith("eventForm") -> "Add event"
+    startsWith("harvestForm") -> "Add harvest"
     startsWith("reminderForm") -> "Reminder"
     startsWith("privacy") -> "Privacy"
     else -> "OrchardDex"

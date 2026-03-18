@@ -99,6 +99,11 @@ ORCHARDDEX_KEY_ALIAS=orcharddex
 ORCHARDDEX_KEY_PASSWORD=replace-me
 ```
 
+## Play Store Prep
+
+- Privacy policy draft: [`docs/privacy-policy.md`](/C:/Users/Dillo/code/orchardex/docs/privacy-policy.md)
+- Release checklist: [`docs/google-play-release-checklist.md`](/C:/Users/Dillo/code/orchardex/docs/google-play-release-checklist.md)
+
 ## Changing The Package Name
 
 Current package/application ID:

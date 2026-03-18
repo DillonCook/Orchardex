@@ -14,6 +14,20 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 
 CLASSPATH=$APP_HOME/gradle/wrapper/gradle-wrapper.jar
 
+if [ -z "$GRADLE_USER_HOME" ] ; then
+    GRADLE_USER_HOME="$APP_HOME/.gradle-user-home"
+fi
+
+mkdir -p "$GRADLE_USER_HOME"
+export GRADLE_USER_HOME
+
+if [ -z "$ANDROID_USER_HOME" ] ; then
+    ANDROID_USER_HOME="$APP_HOME/.android-user-home"
+fi
+
+mkdir -p "$ANDROID_USER_HOME"
+export ANDROID_USER_HOME
+
 if [ -n "$JAVA_HOME" ] ; then
     JAVACMD="$JAVA_HOME/bin/java"
 else

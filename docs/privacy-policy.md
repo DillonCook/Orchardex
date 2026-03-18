@@ -1,0 +1,75 @@
+# Privacy Policy for OrchardDex
+
+Last updated: March 18, 2026
+
+OrchardDex is an offline-first Android app for managing orchard records, plant histories, reminders, harvest logs, photos, and manual backups.
+
+## Summary
+
+- OrchardDex does not require an account.
+- OrchardDex does not use analytics, ads, crash-reporting SDKs, or server sync.
+- OrchardDex does not transmit your orchard data to the developer or third parties.
+- OrchardDex stores your data locally on your device.
+
+## Data OrchardDex Accesses
+
+OrchardDex may access or store the following information you enter or select:
+
+- Plant records, notes, tags, and orchard details
+- Event logs and harvest logs
+- Reminder titles, dates, and notes
+- Photos you choose through the Android photo picker
+- App settings such as theme and reminder defaults
+- Manual backup archives that you explicitly export or import
+
+## How Data Is Used
+
+OrchardDex uses your data only to provide app features on your device, including:
+
+- displaying your orchard records
+- scheduling and showing local reminder notifications
+- attaching photos to plants, events, and harvests
+- exporting and importing manual backups
+
+## Data Sharing
+
+OrchardDex does not sell, rent, share, or transmit your personal or app data to the developer or any third party.
+
+The app does not include:
+
+- account systems
+- cloud backup or cloud sync
+- advertising SDKs
+- analytics SDKs
+- third-party crash reporting
+
+## Notifications
+
+If you enable reminders, OrchardDex may request Android's notification permission on supported devices. Reminder notifications are generated locally on your device.
+
+## Photos
+
+When you select a photo, OrchardDex copies it into app-private storage on your device so it can remain attached to your orchard records. OrchardDex uses the Android photo picker and does not request broad media-library permissions.
+
+## Backup Files
+
+If you export a backup, the backup file is written only to the location you choose using the Android system file picker. Backup files remain under your control. If you import a backup, the selected file is used only to restore app data on your device.
+
+## Data Retention and Deletion
+
+Your data remains on your device until you remove it.
+
+You can delete data by:
+
+- deleting individual items in the app where supported
+- using `Settings > Data > Clear all data`
+- uninstalling the app
+- deleting any exported backup files you created
+
+## Security
+
+OrchardDex stores data in app-local Android storage and local databases controlled by the Android app sandbox. No method of storage is perfectly secure, but OrchardDex is designed to minimize exposure by avoiding unnecessary network transmission and third-party services.
+
+## Contact
+
+For privacy questions or requests, use the contact method listed in the OrchardDex Google Play listing.

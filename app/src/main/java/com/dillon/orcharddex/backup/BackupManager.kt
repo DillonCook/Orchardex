@@ -74,7 +74,7 @@ class BackupManager(
                     "manifest.json",
                     BackupManifest(
                         appVersion = BuildConfig.VERSION_NAME,
-                        schemaVersion = 1,
+                        schemaVersion = OrchardDexDatabase.DB_VERSION,
                         exportedAt = System.currentTimeMillis()
                     )
                 )
