@@ -93,4 +93,47 @@ class OrchardRepositoryTest {
         assertThat(savedTrees.map { it.cultivar }.distinct()).containsExactly("Ruby Red")
         assertThat(savedTrees.map { it.sectionName }.distinct()).containsExactly("Block A")
     }
+
+    @Test
+    fun saveTree_withQuantity_autoNumbersDuplicateNicknames() = runBlocking {
+        repository.saveTree(
+            TreeInput(
+                orchardName = "Home",
+                sectionName = "Block A",
+                species = "Grapefruit",
+                cultivar = "Ruby Red",
+                plantedDate = 1_700_000_000_000,
+                quantity = 3
+            )
+        )
+
+        val nicknames = database.treeDao().getAllTrees().mapNotNull { it.nickname }.sorted()
+        assertThat(nicknames).containsExactly("Plant 1", "Plant 2", "Plant 3").inOrder()
+    }
+
+    @Test
+    fun saveTree_newDuplicateWithoutNickname_usesNextAutoNumber() = runBlocking {
+        repository.saveTree(
+            TreeInput(
+                orchardName = "Home",
+                sectionName = "Block A",
+                species = "Grapefruit",
+                cultivar = "Ruby Red",
+                plantedDate = 1_700_000_000_000
+            )
+        )
+
+        repository.saveTree(
+            TreeInput(
+                orchardName = "Home",
+                sectionName = "Block A",
+                species = "Grapefruit",
+                cultivar = "Ruby Red",
+                plantedDate = 1_700_000_000_000
+            )
+        )
+
+        val savedTrees = database.treeDao().getAllTrees()
+        assertThat(savedTrees.map { it.nickname }).contains("Plant 2")
+    }
 }

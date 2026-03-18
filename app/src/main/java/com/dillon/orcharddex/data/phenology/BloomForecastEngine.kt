@@ -14,6 +14,11 @@ enum class BloomPhase(val label: String, val startOffsetDays: Int) {
     LATE("Late", 10)
 }
 
+enum class BloomForecastBehavior {
+    WINDOW,
+    MANUAL_ONLY
+}
+
 data class SpeciesBloomProfile(
     val key: String,
     val aliases: Set<String>,
@@ -22,7 +27,8 @@ data class SpeciesBloomProfile(
     val startDay: Int,
     val durationDays: Long,
     val shiftDaysPerHalfZone: Long = 4,
-    val defaultPhase: BloomPhase = BloomPhase.MID
+    val defaultPhase: BloomPhase = BloomPhase.MID,
+    val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW
 )
 
 data class CultivarBloomProfile(
@@ -84,9 +90,8 @@ object BloomForecastEngine {
         SpeciesBloomProfile("dragon fruit", setOf("dragon fruit", "dragonfruit", "pitaya"), "10a", 6, 1, 70),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
-        SpeciesBloomProfile("banana", setOf("banana"), "10b", 5, 1, 90),
         SpeciesBloomProfile("papaya", setOf("papaya"), "10b", 4, 1, 90)
-    ) + CitrusBloomCatalog.speciesProfiles
+    ) + BananaBloomCatalog.speciesProfiles + CitrusBloomCatalog.speciesProfiles
 
     // The first catalog is phase-based so it can scale to thousands of cultivars by adding rows,
     // without changing the date engine itself.
@@ -220,7 +225,7 @@ object BloomForecastEngine {
         CultivarBloomProfile("blueberry", "Tifblue", aliases = setOf("Tif Blue"), phase = BloomPhase.LATE),
         CultivarBloomProfile("blueberry", "Vernon", phase = BloomPhase.MID_LATE),
         CultivarBloomProfile("blueberry", "Woodard", phase = BloomPhase.LATE)
-    ) + CitrusBloomCatalog.cultivarProfiles
+    ) + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private data class ProfileMatch(
         val profile: SpeciesBloomProfile,
@@ -330,6 +335,9 @@ object BloomForecastEngine {
         return trees.mapNotNull { tree ->
             val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
             val speciesProfile = profileMatch.profile
+            if (speciesProfile.forecastBehavior != BloomForecastBehavior.WINDOW) {
+                return@mapNotNull null
+            }
             val phase = profileMatch.phase
             val referenceZone = UsdaZoneCatalog.resolve(speciesProfile.referenceZoneCode)
             val shiftDays = (referenceZone.index - targetZone.index) * speciesProfile.shiftDaysPerHalfZone

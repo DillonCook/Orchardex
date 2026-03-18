@@ -397,7 +397,7 @@ fun TreeFormScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                     Text(
-                        text = "This creates separate plant records with the same details.",
+                        text = "This creates separate plant records with the same details and auto-numbers duplicate nicknames.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }

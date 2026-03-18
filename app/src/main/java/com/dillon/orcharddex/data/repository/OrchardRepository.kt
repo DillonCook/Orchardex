@@ -321,6 +321,12 @@ class OrchardRepository(
         val now = System.currentTimeMillis()
         val existing = input.id?.let { treeDao.getTree(it) }
         val globalOrchardName = settingsRepository.snapshot().orchardName.trim()
+        val existingDuplicateCount = if (input.id == null) {
+            countMatchingTrees(input.species, input.cultivar)
+        } else {
+            0
+        }
+        val plannedNicknames = plannedTreeNicknames(input.nickname, quantity, existingDuplicateCount)
 
         if (input.id != null || quantity == 1) {
             val treeId = input.id ?: UUID.randomUUID().toString()
@@ -330,7 +336,8 @@ class OrchardRepository(
                     treeId = treeId,
                     globalOrchardName = globalOrchardName,
                     existing = existing,
-                    timestamp = now
+                    timestamp = now,
+                    nickname = plannedNicknames.firstOrNull()
                 )
                 treeDao.insert(entity)
 
@@ -369,7 +376,8 @@ class OrchardRepository(
                     treeId = treeId,
                     globalOrchardName = globalOrchardName,
                     existing = null,
-                    timestamp = now + index
+                    timestamp = now + index,
+                    nickname = plannedNicknames.getOrNull(index)
                 )
             }
             treeDao.insertAll(trees)
@@ -589,12 +597,13 @@ class OrchardRepository(
         treeId: String,
         globalOrchardName: String,
         existing: TreeEntity?,
-        timestamp: Long
+        timestamp: Long,
+        nickname: String? = input.nickname
     ): TreeEntity = TreeEntity(
         id = treeId,
         orchardName = globalOrchardName.ifBlank { existing?.orchardName ?: input.orchardName.trim() },
         sectionName = input.sectionName.trim(),
-        nickname = input.nickname.trim().takeIf(String::isNotBlank),
+        nickname = nickname?.trim()?.takeIf(String::isNotBlank),
         species = input.species.trim(),
         cultivar = input.cultivar.trim(),
         rootstock = input.rootstock.trim().takeIf(String::isNotBlank),
@@ -614,6 +623,32 @@ class OrchardRepository(
         createdAt = existing?.createdAt ?: timestamp,
         updatedAt = timestamp
     )
+
+    private suspend fun countMatchingTrees(species: String, cultivar: String): Int = treeDao.getAllTrees().count {
+        it.species.normalized() == species.normalized() &&
+            it.cultivar.normalized() == cultivar.normalized()
+    }
+
+    private fun plannedTreeNicknames(
+        inputNickname: String,
+        quantity: Int,
+        existingDuplicateCount: Int
+    ): List<String?> {
+        val trimmedNickname = inputNickname.trim()
+        val shouldAutoNumber = quantity > 1 || (existingDuplicateCount > 0 && trimmedNickname.isBlank())
+        if (!shouldAutoNumber) {
+            return List(quantity) { trimmedNickname.takeIf(String::isNotBlank) }
+        }
+        val startingOrdinal = existingDuplicateCount + 1
+        return List(quantity) { index ->
+            val ordinal = startingOrdinal + index
+            if (trimmedNickname.isNotBlank()) {
+                "$trimmedNickname $ordinal"
+            } else {
+                "Plant $ordinal"
+            }
+        }
+    }
 
     private suspend fun markWishlistAcquired(species: String, cultivar: String, treeId: String) {
         if (cultivar.isBlank()) return
