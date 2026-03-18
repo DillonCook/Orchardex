@@ -132,7 +132,7 @@ internal object CitrusBloomCatalog {
         lemon("Primofiori", phase = BloomPhase.EARLY),
         lemon("Lapithkiotiki", phase = BloomPhase.EARLY_MID),
         lemon("Meyer", aliases = setOf("Improved Meyer"), phase = BloomPhase.EARLY_MID),
-        lemon("Bearss Lemon", aliases = setOf("Bearss"), phase = BloomPhase.MID),
+        lemon("Bearss", aliases = setOf("Bearss Lemon"), phase = BloomPhase.MID),
         lemon("Eureka", phase = BloomPhase.MID),
         lemon("Genoa", aliases = setOf("Genova"), phase = BloomPhase.MID),
         lemon("Lisbon", phase = BloomPhase.MID),
@@ -145,7 +145,7 @@ internal object CitrusBloomCatalog {
 
         lime("Key Lime", aliases = setOf("Mexican", "Mexican Lime"), phase = BloomPhase.EARLY_MID),
         lime("Rangpur", phase = BloomPhase.EARLY),
-        lime("Bearss Lime", aliases = setOf("Persian", "Persian Lime", "Bearss", "Tahiti", "Tahiti Lime"), phase = BloomPhase.MID),
+        lime("Bearss", aliases = setOf("Bearss Lime", "Persian", "Persian Lime", "Tahiti", "Tahiti Lime"), phase = BloomPhase.MID),
         lime("Palestine Sweet", aliases = setOf("Palestinian Sweet"), phase = BloomPhase.MID),
         lime("Sweet Lime", phase = BloomPhase.MID),
         lime("Australian Finger", aliases = setOf("Finger Lime"), phase = BloomPhase.MID_LATE),

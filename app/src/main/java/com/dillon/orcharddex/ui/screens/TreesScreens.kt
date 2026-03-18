@@ -253,6 +253,9 @@ fun TreeFormScreen(
     var suppressSpeciesAutocomplete by rememberSaveable(state.id) {
         mutableStateOf(false)
     }
+    var suppressCultivarAutocomplete by rememberSaveable(state.id) {
+        mutableStateOf(false)
+    }
     val heroExistingPath = state.existingPhotos.firstOrNull()?.relativePath
     val heroNewUri = state.newPhotoUris.firstOrNull()
     val supportedSpecies = remember { BloomForecastEngine.supportedSpeciesCatalog() }
@@ -338,10 +341,12 @@ fun TreeFormScreen(
                 OutlinedTextField(
                     value = state.cultivar,
                     onValueChange = { input ->
+                        suppressCultivarAutocomplete = false
                         val exactMatch = BloomForecastEngine.resolveCultivarAutocomplete(input, state.species)
                             ?: resolveExistingCultivarAutocomplete(input, knownTrees)
                         if (exactMatch != null) {
                             suppressSpeciesAutocomplete = true
+                            suppressCultivarAutocomplete = true
                         }
                         viewModel.update {
                             if (exactMatch != null) {
@@ -356,16 +361,19 @@ fun TreeFormScreen(
                         .testTag("tree_cultivar"),
                     label = { Text("Cultivar (optional)") }
                 )
-                CultivarAutocompleteCard(
-                    query = state.cultivar,
-                    suggestions = cultivarSuggestions,
-                    onSelected = { suggestion ->
-                        suppressSpeciesAutocomplete = true
-                        viewModel.update {
-                            copy(species = suggestion.species, cultivar = suggestion.cultivar)
+                if (!suppressCultivarAutocomplete) {
+                    CultivarAutocompleteCard(
+                        query = state.cultivar,
+                        suggestions = cultivarSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            suppressCultivarAutocomplete = true
+                            viewModel.update {
+                                copy(species = suggestion.species, cultivar = suggestion.cultivar)
+                            }
                         }
-                    }
-                )
+                    )
+                }
                 OutlinedTextField(
                     value = state.source,
                     onValueChange = { viewModel.update { copy(source = it) } },
