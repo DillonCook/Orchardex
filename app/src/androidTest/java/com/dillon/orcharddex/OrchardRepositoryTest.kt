@@ -73,4 +73,24 @@ class OrchardRepositoryTest {
         assertThat(savedWishlist.acquired).isTrue()
         assertThat(savedWishlist.linkedTreeId).isEqualTo(savedTreeId)
     }
+
+    @Test
+    fun saveTree_withQuantity_createsMultiplePlantRecords() = runBlocking {
+        repository.saveTree(
+            TreeInput(
+                orchardName = "Home",
+                sectionName = "Block A",
+                species = "Grapefruit",
+                cultivar = "Ruby Red",
+                plantedDate = 1_700_000_000_000,
+                quantity = 3
+            )
+        )
+
+        val savedTrees = database.treeDao().getAllTrees()
+        assertThat(savedTrees).hasSize(3)
+        assertThat(savedTrees.map { it.species }.distinct()).containsExactly("Grapefruit")
+        assertThat(savedTrees.map { it.cultivar }.distinct()).containsExactly("Ruby Red")
+        assertThat(savedTrees.map { it.sectionName }.distinct()).containsExactly("Block A")
+    }
 }

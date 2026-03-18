@@ -23,6 +23,7 @@ data class TreeInput(
     val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
+    val quantity: Int = 1,
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: List<String> = emptyList()
 )

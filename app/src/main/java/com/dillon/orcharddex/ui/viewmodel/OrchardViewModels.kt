@@ -165,6 +165,7 @@ data class TreeFormState(
     val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
+    val quantity: String = "1",
     val existingPhotos: List<TreePhotoEntity> = emptyList(),
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: Set<String> = emptySet(),
@@ -244,6 +245,15 @@ class TreeFormViewModel(
             state = state.copy(errorMessage = "Species is required.")
             return
         }
+        val quantity = if (state.id == null) {
+            state.quantity.toIntOrNull()?.takeIf { it > 0 }
+        } else {
+            1
+        }
+        if (quantity == null) {
+            state = state.copy(errorMessage = "Quantity must be at least 1.")
+            return
+        }
         viewModelScope.launch {
             state = state.copy(isSaving = true, errorMessage = null)
             val savedTreeId = repository.saveTree(
@@ -268,6 +278,7 @@ class TreeFormViewModel(
                     hasFruitedBefore = state.hasFruitedBefore,
                     notes = state.notes,
                     tags = state.tags,
+                    quantity = quantity,
                     newPhotoUris = state.newPhotoUris,
                     removedPhotoIds = state.removedPhotoIds.toList()
                 )

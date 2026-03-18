@@ -44,8 +44,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -380,6 +382,25 @@ fun TreeFormScreen(
                     modifier = Modifier.fillMaxWidth(),
                     label = { Text("Source / nursery") }
                 )
+                if (state.id == null) {
+                    OutlinedTextField(
+                        value = state.quantity,
+                        onValueChange = { input ->
+                            if (input.all(Char::isDigit)) {
+                                viewModel.update { copy(quantity = input) }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("tree_quantity"),
+                        label = { Text("How many plants?") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Text(
+                        text = "This creates separate plant records with the same details.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 if (showRootstockField) {
                     OutlinedTextField(
                         value = state.rootstock,
@@ -544,7 +565,13 @@ fun TreeFormScreen(
                         .weight(1f)
                         .testTag("tree_save")
                 ) {
-                    Text(if (state.id == null) "Save tree" else "Update tree")
+                    Text(
+                        when {
+                            state.id != null -> "Update tree"
+                            state.quantity.toIntOrNull()?.let { it > 1 } == true -> "Save trees"
+                            else -> "Save tree"
+                        }
+                    )
                 }
             }
         }

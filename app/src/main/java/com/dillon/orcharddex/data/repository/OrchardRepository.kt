@@ -317,61 +317,83 @@ class OrchardRepository(
 
     suspend fun saveTree(input: TreeInput): String = withContext(Dispatchers.IO) {
         require(input.species.isNotBlank()) { "Species is required." }
+        val quantity = input.quantity.coerceAtLeast(1)
         val now = System.currentTimeMillis()
         val existing = input.id?.let { treeDao.getTree(it) }
         val globalOrchardName = settingsRepository.snapshot().orchardName.trim()
-        val treeId = input.id ?: UUID.randomUUID().toString()
-        database.withTransaction {
-            val entity = TreeEntity(
-                id = treeId,
-                orchardName = globalOrchardName.ifBlank { existing?.orchardName ?: input.orchardName.trim() },
-                sectionName = input.sectionName.trim(),
-                nickname = input.nickname.trim().takeIf(String::isNotBlank),
-                species = input.species.trim(),
-                cultivar = input.cultivar.trim(),
-                rootstock = input.rootstock.trim().takeIf(String::isNotBlank),
-                source = input.source.trim().takeIf(String::isNotBlank),
-                purchaseDate = input.purchaseDate,
-                plantedDate = input.plantedDate,
-                plantType = input.plantType,
-                containerSize = input.containerSize.trim().takeIf(String::isNotBlank),
-                sunExposure = input.sunExposure.trim().takeIf(String::isNotBlank),
-                frostSensitivity = input.frostSensitivity,
-                frostSensitivityNote = input.frostSensitivityNote.trim().takeIf(String::isNotBlank),
-                irrigationNote = input.irrigationNote.trim().takeIf(String::isNotBlank),
-                status = input.status,
-                hasFruitedBefore = input.hasFruitedBefore,
-                notes = input.notes.trim(),
-                tags = input.tags.trim(),
-                createdAt = existing?.createdAt ?: now,
-                updatedAt = now
-            )
-            treeDao.insert(entity)
 
-            if (input.removedPhotoIds.isNotEmpty()) {
-                val photos = treePhotoDao.getPhotosByIds(input.removedPhotoIds)
-                photos.forEach { photoStorage.deletePhoto(it.relativePath) }
-                treePhotoDao.deleteByIds(input.removedPhotoIds)
-            }
+        if (input.id != null || quantity == 1) {
+            val treeId = input.id ?: UUID.randomUUID().toString()
+            database.withTransaction {
+                val entity = buildTreeEntity(
+                    input = input,
+                    treeId = treeId,
+                    globalOrchardName = globalOrchardName,
+                    existing = existing,
+                    timestamp = now
+                )
+                treeDao.insert(entity)
 
-            val existingCount = treePhotoDao.getPhotosForTree(treeId).size
-            input.newPhotoUris.forEachIndexed { index, uri ->
-                val relativePath = photoStorage.importPhoto(uri, PhotoStorage.Category.TREE)
-                treePhotoDao.insert(
-                    TreePhotoEntity(
-                        id = UUID.randomUUID().toString(),
-                        treeId = treeId,
-                        relativePath = relativePath,
-                        caption = null,
-                        createdAt = now,
-                        sortOrder = existingCount + index
+                if (input.removedPhotoIds.isNotEmpty()) {
+                    val photos = treePhotoDao.getPhotosByIds(input.removedPhotoIds)
+                    photos.forEach { photoStorage.deletePhoto(it.relativePath) }
+                    treePhotoDao.deleteByIds(input.removedPhotoIds)
+                }
+
+                val existingCount = treePhotoDao.getPhotosForTree(treeId).size
+                input.newPhotoUris.forEachIndexed { index, uri ->
+                    val relativePath = photoStorage.importPhoto(uri, PhotoStorage.Category.TREE)
+                    treePhotoDao.insert(
+                        TreePhotoEntity(
+                            id = UUID.randomUUID().toString(),
+                            treeId = treeId,
+                            relativePath = relativePath,
+                            caption = null,
+                            createdAt = now,
+                            sortOrder = existingCount + index
+                        )
                     )
+                }
+
+                markWishlistAcquired(entity.species, entity.cultivar, treeId)
+            }
+            return@withContext treeId
+        }
+
+        val firstTreeId = UUID.randomUUID().toString()
+        val treeIds = listOf(firstTreeId) + List(quantity - 1) { UUID.randomUUID().toString() }
+        database.withTransaction {
+            val trees = treeIds.mapIndexed { index, treeId ->
+                buildTreeEntity(
+                    input = input,
+                    treeId = treeId,
+                    globalOrchardName = globalOrchardName,
+                    existing = null,
+                    timestamp = now + index
                 )
             }
+            treeDao.insertAll(trees)
 
-            markWishlistAcquired(entity.species, entity.cultivar, treeId)
+            treeIds.forEach { treeId ->
+                input.newPhotoUris.forEachIndexed { index, uri ->
+                    val relativePath = photoStorage.importPhoto(uri, PhotoStorage.Category.TREE)
+                    treePhotoDao.insert(
+                        TreePhotoEntity(
+                            id = UUID.randomUUID().toString(),
+                            treeId = treeId,
+                            relativePath = relativePath,
+                            caption = null,
+                            createdAt = now,
+                            sortOrder = index
+                        )
+                    )
+                }
+            }
+
+            val firstTree = trees.first()
+            markWishlistAcquired(firstTree.species, firstTree.cultivar, firstTree.id)
         }
-        treeId
+        firstTreeId
     }
 
     suspend fun deleteTree(treeId: String) = withContext(Dispatchers.IO) {
@@ -561,6 +583,37 @@ class OrchardRepository(
     }
 
     suspend fun currentSettingsSnapshot() = settingsRepository.snapshot()
+
+    private fun buildTreeEntity(
+        input: TreeInput,
+        treeId: String,
+        globalOrchardName: String,
+        existing: TreeEntity?,
+        timestamp: Long
+    ): TreeEntity = TreeEntity(
+        id = treeId,
+        orchardName = globalOrchardName.ifBlank { existing?.orchardName ?: input.orchardName.trim() },
+        sectionName = input.sectionName.trim(),
+        nickname = input.nickname.trim().takeIf(String::isNotBlank),
+        species = input.species.trim(),
+        cultivar = input.cultivar.trim(),
+        rootstock = input.rootstock.trim().takeIf(String::isNotBlank),
+        source = input.source.trim().takeIf(String::isNotBlank),
+        purchaseDate = input.purchaseDate,
+        plantedDate = input.plantedDate,
+        plantType = input.plantType,
+        containerSize = input.containerSize.trim().takeIf(String::isNotBlank),
+        sunExposure = input.sunExposure.trim().takeIf(String::isNotBlank),
+        frostSensitivity = input.frostSensitivity,
+        frostSensitivityNote = input.frostSensitivityNote.trim().takeIf(String::isNotBlank),
+        irrigationNote = input.irrigationNote.trim().takeIf(String::isNotBlank),
+        status = input.status,
+        hasFruitedBefore = input.hasFruitedBefore,
+        notes = input.notes.trim(),
+        tags = input.tags.trim(),
+        createdAt = existing?.createdAt ?: timestamp,
+        updatedAt = timestamp
+    )
 
     private suspend fun markWishlistAcquired(species: String, cultivar: String, treeId: String) {
         if (cultivar.isBlank()) return
