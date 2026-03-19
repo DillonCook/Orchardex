@@ -205,6 +205,28 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesBarbadosCherrySeedSetAndPollinationMetadata() {
+        val barbadosCherryCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Barbados Cherry" }
+            .associateBy { it.cultivar }
+
+        assertThat(barbadosCherryCultivars.keys).containsAtLeast(
+            "Florida Sweet",
+            "B-17",
+            "J.H. Beaumont",
+            "Tropical Ruby",
+            "BRS Cabocla",
+            "BRS 236 Cereja",
+            "Olivier",
+            "UEL 5 - Natalia"
+        )
+        assertThat(barbadosCherryCultivars.getValue("Florida Sweet").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(barbadosCherryCultivars.getValue("Olivier").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -294,6 +316,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesBarbadosCherryAliases() {
+        val beaumontMatch = BloomForecastEngine.resolveCultivarAutocomplete("Beaumont", "Acerola")
+        val rehnborgMatch = BloomForecastEngine.resolveCultivarAutocomplete("Rehnborg", "Barbados cherry")
+        val apodiMatch = BloomForecastEngine.resolveCultivarAutocomplete("Apodi", "Malpighia emarginata")
+        val uelMatch = BloomForecastEngine.resolveCultivarAutocomplete("UEL4 Ligia", "West Indian cherry")
+
+        assertThat(beaumontMatch?.cultivar).isEqualTo("J.H. Beaumont")
+        assertThat(rehnborgMatch?.cultivar).isEqualTo("C.F. Rehnborg")
+        assertThat(apodiMatch?.cultivar).isEqualTo("BRS 235 Apodi")
+        assertThat(uelMatch?.cultivar).isEqualTo("UEL 4 - Ligia")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -357,6 +392,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Ananas comosus", "Del Monte Gold"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Acerola"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Barbados cherry", "Beaumont"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Malpighia emarginata", "Olivier"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -575,6 +616,42 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun predictMonth_skipsAutomaticBarbadosCherryForecasts() {
+        val barbadosCherryTree = TreeEntity(
+            id = "acerola-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Acerola",
+            cultivar = "Florida Sweet",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(barbadosCherryTree),
+            yearMonth = YearMonth.of(2026, 6),
+            zoneCode = "10b"
+        )
+
+        assertThat(windows).isEmpty()
+    }
+
+    @Test
     fun predictMonth_usesRegionalLycheeOverrides() {
         val lycheeTree = TreeEntity(
             id = "lychee-1",
@@ -710,5 +787,48 @@ class BloomForecastEngineTest {
         assertThat(everbearing.single().treeId).isEqualTo("banana-1")
         assertThat(everbearing.single().treeLabel).isEqualTo("Plant 2 (Goldfinger)")
         assertThat(everbearing.single().speciesLabel).isEqualTo("Banana • Goldfinger")
+        assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
+    }
+
+    @Test
+    fun everbearingPlants_returnsTrackedBarbadosCherryForSeparateDashboardListing() {
+        val acerolaTree = TreeEntity(
+            id = "acerola-1",
+            orchardName = "Home",
+            sectionName = "Berry hedge",
+            nickname = "Ruby",
+            species = "Acerola",
+            cultivar = "Florida Sweet",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val tamarindTree = acerolaTree.copy(
+            id = "tamarind-1",
+            species = "Tamarind",
+            cultivar = "Manila Sweet",
+            nickname = null
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(acerolaTree, tamarindTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("acerola-1")
+        assertThat(everbearing.single().treeLabel).isEqualTo("Ruby (Florida Sweet)")
+        assertThat(everbearing.single().speciesLabel).isEqualTo("Acerola • Florida Sweet")
+        assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
     }
 }

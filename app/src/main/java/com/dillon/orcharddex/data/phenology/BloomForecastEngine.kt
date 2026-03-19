@@ -219,6 +219,24 @@ object BloomForecastEngine {
             75,
             pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
+        SpeciesBloomProfile(
+            "barbados cherry",
+            setOf(
+                "barbados cherry",
+                "acerola",
+                "west indian cherry",
+                "acerola cherry",
+                "malpighia emarginata",
+                "malpighia glabra",
+                "malpighia punicifolia"
+            ),
+            "10b",
+            4,
+            1,
+            210,
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -885,7 +903,41 @@ object BloomForecastEngine {
             "Amritha",
             aliases = setOf("Amrutha"),
             phase = BloomPhase.MID
-        )
+        ),
+        CultivarBloomProfile("barbados cherry", "Florida Sweet", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "B-17", aliases = setOf("B17"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "J.H. Beaumont", aliases = setOf("Beaumont"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "F. Haley", aliases = setOf("Haley"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Hawaiian Queen", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Maunawili", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Tropical Ruby", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "C.F. Rehnborg", aliases = setOf("Rehnborg"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Manoa Sweet", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Red Jumbo", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Flor Branca", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Junko", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS Sertaneja", aliases = setOf("Sertaneja"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Costa Rica", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Okinawa", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Nikki", phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Coopama Nº 1", aliases = setOf("Coopama No. 1"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS Cabocla", aliases = setOf("Cabocla"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS 235 Apodi", aliases = setOf("Apodi"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS 236 Cereja", aliases = setOf("Cereja"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS 237 Roxinha", aliases = setOf("Roxinha"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS 238 Frutacor", aliases = setOf("Frutacor"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "BRS 366 Jaburu", aliases = setOf("Jaburu"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "Rubra", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "barbados cherry",
+            "Olivier",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile("barbados cherry", "Waldy-CATI 30", aliases = setOf("Waldy CATI 30"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "UEL 3 - Dominga", aliases = setOf("UEL3 Dominga"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "UEL 4 - Ligia", aliases = setOf("UEL4 Ligia"), phase = BloomPhase.MID),
+        CultivarBloomProfile("barbados cherry", "UEL 5 - Natalia", aliases = setOf("UEL5 Natalia"), phase = BloomPhase.MID)
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private val regionalBloomOverrides = listOf(
@@ -1046,7 +1098,7 @@ object BloomForecastEngine {
             treeId = tree.id,
             treeLabel = tree.displayName(),
             speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
-            detailLabel = "Continuous / opportunistic bloom"
+            detailLabel = "Continuous / repeat-bearing"
         )
     }.sortedWith(compareBy({ it.speciesLabel.lowercase() }, { it.treeLabel.lowercase() }))
 
