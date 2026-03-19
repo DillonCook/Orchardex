@@ -28,6 +28,7 @@ data class AppSettings(
     val defaultCustomLeadHours: Int = 6,
     val orchardName: String = "",
     val usdaZone: String = "",
+    val orchardRegion: String = "",
     val onboardingComplete: Boolean = false
 )
 
@@ -39,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val defaultCustomLeadHours = intPreferencesKey("default_custom_lead_hours")
         val orchardName = stringPreferencesKey("orchard_name")
         val usdaZone = stringPreferencesKey("usda_zone")
+        val orchardRegion = stringPreferencesKey("orchard_region")
         val onboardingComplete = booleanPreferencesKey("onboarding_complete")
     }
 
@@ -67,10 +69,15 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { it[Keys.usdaZone] = zoneCode.trim().lowercase() }
     }
 
-    suspend fun completeOnboarding(orchardName: String, usdaZone: String) {
+    suspend fun updateOrchardRegion(regionCode: String) {
+        context.dataStore.edit { it[Keys.orchardRegion] = regionCode.trim().lowercase() }
+    }
+
+    suspend fun completeOnboarding(orchardName: String, usdaZone: String, orchardRegion: String) {
         context.dataStore.edit {
             it[Keys.orchardName] = orchardName.trim()
             it[Keys.usdaZone] = usdaZone.trim().lowercase()
+            it[Keys.orchardRegion] = orchardRegion.trim().lowercase()
             it[Keys.onboardingComplete] = true
         }
     }
@@ -84,6 +91,7 @@ class SettingsRepository(private val context: Context) {
             defaultCustomLeadHours = current.defaultCustomLeadHours,
             orchardName = current.orchardName,
             usdaZone = current.usdaZone,
+            orchardRegion = current.orchardRegion,
             onboardingComplete = current.onboardingComplete
         )
     }
@@ -96,6 +104,7 @@ class SettingsRepository(private val context: Context) {
             it[Keys.defaultCustomLeadHours] = snapshot.defaultCustomLeadHours
             it[Keys.orchardName] = snapshot.orchardName
             it[Keys.usdaZone] = snapshot.usdaZone
+            it[Keys.orchardRegion] = snapshot.orchardRegion
             it[Keys.onboardingComplete] = snapshot.onboardingComplete
         }
     }
@@ -108,6 +117,7 @@ class SettingsRepository(private val context: Context) {
         defaultCustomLeadHours = preferences[Keys.defaultCustomLeadHours] ?: 6,
         orchardName = preferences[Keys.orchardName].orEmpty(),
         usdaZone = preferences[Keys.usdaZone].orEmpty(),
+        orchardRegion = preferences[Keys.orchardRegion].orEmpty(),
         onboardingComplete = preferences[Keys.onboardingComplete] ?: false
     )
 }

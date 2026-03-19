@@ -23,6 +23,7 @@ enum class PollinationRequirement(val label: String) {
     SELF_FERTILE("Self-fertile"),
     NEEDS_CROSS_POLLINATION("Needs cross-pollination"),
     CROSS_POLLINATION_RECOMMENDED("Cross-pollination recommended"),
+    PARTIAL_SELF_INCOMPATIBILITY("Partial self-incompatibility"),
     POLLINATION_NOT_REQUIRED("Pollination not required"),
     UNKNOWN("Unknown")
 }
@@ -38,6 +39,16 @@ data class SpeciesBloomProfile(
     val defaultPhase: BloomPhase = BloomPhase.MID,
     val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW,
     val pollinationRequirement: PollinationRequirement = PollinationRequirement.UNKNOWN
+)
+
+data class RegionalBloomOverride(
+    val speciesKey: String,
+    val orchardRegion: OrchardRegion,
+    val referenceZoneCode: String,
+    val startMonth: Int,
+    val startDay: Int,
+    val durationDays: Long,
+    val shiftDaysPerHalfZone: Long = 4
 )
 
 data class CultivarBloomProfile(
@@ -153,7 +164,15 @@ object BloomForecastEngine {
         SpeciesBloomProfile("pomegranate", setOf("pomegranate"), "8b", 5, 8, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("avocado", setOf("avocado"), "10a", 3, 1, 45, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
         SpeciesBloomProfile("mango", setOf("mango"), "10b", 2, 10, 35, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("lychee", setOf("lychee"), "10a", 2, 20, 20),
+        SpeciesBloomProfile(
+            "lychee",
+            setOf("lychee"),
+            "10a",
+            2,
+            20,
+            20,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -375,8 +394,49 @@ object BloomForecastEngine {
         CultivarBloomProfile("blueberry", "Premier", phase = BloomPhase.MID_LATE),
         CultivarBloomProfile("blueberry", "Tifblue", aliases = setOf("Tif Blue"), phase = BloomPhase.LATE),
         CultivarBloomProfile("blueberry", "Vernon", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Woodard", phase = BloomPhase.LATE)
+        CultivarBloomProfile("blueberry", "Woodard", phase = BloomPhase.LATE),
+        CultivarBloomProfile(
+            "lychee",
+            "Mauritius",
+            aliases = setOf("Tai So"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "lychee",
+            "Fei Zi Xiao",
+            aliases = setOf("Fay Zee Siu", "Feizixiao"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY
+        )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
+
+    private val regionalBloomOverrides = listOf(
+        RegionalBloomOverride(
+            speciesKey = "lychee",
+            orchardRegion = OrchardRegion.SOUTH_FLORIDA,
+            referenceZoneCode = "10b",
+            startMonth = 2,
+            startDay = 5,
+            durationDays = 55
+        ),
+        RegionalBloomOverride(
+            speciesKey = "lychee",
+            orchardRegion = OrchardRegion.HAWAII,
+            referenceZoneCode = "11a",
+            startMonth = 2,
+            startDay = 1,
+            durationDays = 65
+        ),
+        RegionalBloomOverride(
+            speciesKey = "lychee",
+            orchardRegion = OrchardRegion.CALIFORNIA,
+            referenceZoneCode = "10a",
+            startMonth = 3,
+            startDay = 15,
+            durationDays = 45
+        )
+    )
 
     private data class ProfileMatch(
         val profile: SpeciesBloomProfile,
@@ -516,12 +576,13 @@ object BloomForecastEngine {
     fun predictMonth(
         trees: List<TreeEntity>,
         yearMonth: YearMonth,
-        zoneCode: String?
+        zoneCode: String?,
+        orchardRegionCode: String? = null
     ): List<PredictedBloomWindow> {
         val targetZone = UsdaZoneCatalog.resolve(zoneCode)
         return trees.mapNotNull { tree ->
             val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
-            val speciesProfile = profileMatch.profile
+            val speciesProfile = profileMatch.profile.withRegionalOverride(orchardRegionCode)
             if (speciesProfile.forecastBehavior != BloomForecastBehavior.WINDOW) {
                 return@mapNotNull null
             }
@@ -532,6 +593,20 @@ object BloomForecastEngine {
                 .map { bloomWindowForYear(tree, speciesProfile, phase, shiftDays, profileMatch.cultivarMatched, it) }
                 .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
         }.sortedBy(PredictedBloomWindow::startDate)
+    }
+
+    private fun SpeciesBloomProfile.withRegionalOverride(orchardRegionCode: String?): SpeciesBloomProfile {
+        val orchardRegion = OrchardRegionCatalog.resolve(orchardRegionCode)
+        val override = regionalBloomOverrides.firstOrNull {
+            it.speciesKey == key && it.orchardRegion == orchardRegion
+        } ?: return this
+        return copy(
+            referenceZoneCode = override.referenceZoneCode,
+            startMonth = override.startMonth,
+            startDay = override.startDay,
+            durationDays = override.durationDays,
+            shiftDaysPerHalfZone = override.shiftDaysPerHalfZone
+        )
     }
 
     private fun bloomWindowForYear(

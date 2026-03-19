@@ -121,7 +121,7 @@ fun DashboardScreen(
     var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val visibleMonth = remember(visibleMonthText) { YearMonth.parse(visibleMonthText) }
     val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
-    val calendarState = remember(trees, reminders, history, settings.usdaZone, visibleMonth) {
+    val calendarState = remember(trees, reminders, history, settings.usdaZone, settings.orchardRegion, visibleMonth) {
         buildDashboardCalendarState(
             settings = settings,
             visibleMonth = visibleMonth,
@@ -592,7 +592,8 @@ private fun buildDashboardCalendarState(
     val bloomWindows = BloomForecastEngine.predictMonth(
         trees = activeTrees,
         yearMonth = visibleMonth,
-        zoneCode = settings.usdaZone
+        zoneCode = settings.usdaZone,
+        orchardRegionCode = settings.orchardRegion
     )
     val everbearingPlants = BloomForecastEngine.everbearingPlants(activeTrees)
     val bloomItems = bloomWindows.map(PredictedBloomWindow::toCalendarItem)

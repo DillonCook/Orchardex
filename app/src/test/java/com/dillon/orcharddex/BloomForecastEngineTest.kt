@@ -120,6 +120,73 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Honeycrisp"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Tai So"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Fay Zee Siu"))
+            .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+    }
+
+    @Test
+    fun predictMonth_usesRegionalLycheeOverrides() {
+        val lycheeTree = TreeEntity(
+            id = "lychee-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Lychee",
+            cultivar = "Mauritius",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val southFlorida = BloomForecastEngine.predictMonth(
+            trees = listOf(lycheeTree),
+            yearMonth = YearMonth.of(2026, 2),
+            zoneCode = "10b",
+            orchardRegionCode = "south_florida"
+        )
+        val hawaii = BloomForecastEngine.predictMonth(
+            trees = listOf(lycheeTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "11a",
+            orchardRegionCode = "hawaii"
+        )
+        val californiaWinter = BloomForecastEngine.predictMonth(
+            trees = listOf(lycheeTree),
+            yearMonth = YearMonth.of(2026, 2),
+            zoneCode = "10a",
+            orchardRegionCode = "california"
+        )
+        val californiaSpring = BloomForecastEngine.predictMonth(
+            trees = listOf(lycheeTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10a",
+            orchardRegionCode = "california"
+        )
+
+        assertThat(southFlorida).hasSize(1)
+        assertThat(southFlorida.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 5))
+        assertThat(hawaii).hasSize(1)
+        assertThat(hawaii.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 1))
+        assertThat(californiaWinter).isEmpty()
+        assertThat(californiaSpring).hasSize(1)
+        assertThat(californiaSpring.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 3, 15))
     }
 
     @Test

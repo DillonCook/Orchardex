@@ -56,6 +56,7 @@ import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.OrchardRegionCatalog
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
@@ -486,6 +487,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
+    val regionOptions = remember { OrchardRegionCatalog.supportedLabels() }
     val supportedCultivarCatalog = remember {
         BloomForecastEngine.supportedCultivarCatalog()
             .groupBy { it.species }
@@ -494,6 +496,9 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
     }
     var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
+    }
+    var orchardRegionDraft by rememberSaveable(settings.orchardRegion) {
+        mutableStateOf(OrchardRegionCatalog.labelForCode(settings.orchardRegion))
     }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(viewModel::exportBackup)
@@ -541,12 +546,23 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
                     onSelected = { usdaZoneDraft = it },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("Used for the dashboard bloom forecast calendar.", style = MaterialTheme.typography.bodySmall)
+                SelectionField(
+                    label = "Orchard region",
+                    value = orchardRegionDraft,
+                    options = regionOptions,
+                    onSelected = { orchardRegionDraft = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "USDA zone drives bloom timing. Orchard region refines regional bloom patterns for fruits like lychee.",
+                    style = MaterialTheme.typography.bodySmall
+                )
                 OutlinedButton(
                     onClick = {
                         viewModel.updateOrchardProfile(
                             orchardNameDraft,
-                            if (usdaZoneDraft == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft)
+                            if (usdaZoneDraft == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft),
+                            OrchardRegionCatalog.codeFromLabel(orchardRegionDraft)
                         )
                     },
                     modifier = Modifier.fillMaxWidth()

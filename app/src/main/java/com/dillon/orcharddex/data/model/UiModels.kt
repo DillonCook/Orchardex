@@ -120,5 +120,6 @@ data class SettingsSnapshot(
     val defaultCustomLeadHours: Int,
     val orchardName: String = "",
     val usdaZone: String = "",
+    val orchardRegion: String = "",
     val onboardingComplete: Boolean = false
 )
