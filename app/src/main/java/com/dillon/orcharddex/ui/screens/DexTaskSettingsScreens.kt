@@ -57,8 +57,6 @@ import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.preferences.AppThemeMode
-import com.dillon.orcharddex.data.repository.displayName
-import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
@@ -87,7 +85,6 @@ fun DexScreen(
 ) {
     val dex by viewModel.dex.collectAsStateWithLifecycle()
     val plants by viewModel.trees.collectAsStateWithLifecycle()
-    val settings by viewModel.settings.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
     var addMenuVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
@@ -212,11 +209,7 @@ fun DexScreen(
                 item { EmptyStateCard("No plants found", "Try a different search, clear filters, or add a plant.") }
             } else {
                 items(filteredPlants, key = { it.tree.id }) { item ->
-                    DexPlantCard(
-                        item = item,
-                        zoneCode = settings.usdaZone,
-                        onClick = { onTreeClick(item.tree.id) }
-                    )
+                    DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
                 }
             }
             item {
@@ -294,13 +287,10 @@ private fun DexCultivarCard(entry: DexCultivarEntry, onClick: (() -> Unit)?) {
 }
 
 @Composable
-private fun DexPlantCard(item: TreeListItem, zoneCode: String, onClick: () -> Unit) {
+private fun DexPlantCard(item: TreeListItem, onClick: () -> Unit) {
     val context = LocalContext.current
-    val pollination = BloomForecastEngine.pollinationRequirementFor(item.tree.species, item.tree.cultivar)
-    val bloomWindow = BloomForecastEngine.bloomWindowLabelFor(item.tree.species, item.tree.cultivar, zoneCode)
     val title = item.tree.dexPrimaryTitle()
     val subtitle = item.tree.dexSecondaryTitle()
-    val supportingLine = item.tree.dexSupportingLine()
     val thumbnailLabel = item.tree.cultivar.takeIf(String::isNotBlank)?.take(2)
         ?: item.tree.species.take(2)
 
@@ -310,70 +300,36 @@ private fun DexPlantCard(item: TreeListItem, zoneCode: String, onClick: () -> Un
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(64.dp), contentAlignment = Alignment.Center) {
+            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
                 if (item.mainPhotoPath != null) {
                     AsyncImage(
                         model = File(context.filesDir, "photos/${item.mainPhotoPath}"),
                         contentDescription = "Plant photo",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(64.dp)
+                        modifier = Modifier.size(56.dp)
                     )
                 } else {
                     Text(thumbnailLabel.uppercase())
                 }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(subtitle, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                supportingLine?.let {
-                    Text(it, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactFact("Pollination", pollination.dexListLabel())
-                    CompactFact("Bloom", bloomWindow.orEmpty())
-                    CompactFact("Planting", item.tree.plantType.dexLabel())
-                    CompactFact("Status", item.tree.status.dexBadgeLabel())
+                subtitle?.let {
+                    Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
     }
 }
 
-private fun TreeStatus.dexBadgeLabel(): String = when (this) {
-    TreeStatus.ACTIVE -> ""
-    else -> name.lowercase().replaceFirstChar(Char::uppercase)
-}
+private fun com.dillon.orcharddex.data.local.TreeEntity.dexPrimaryTitle(): String = cultivar
+    .trim()
+    .takeIf(String::isNotBlank)
+    ?: species.trim()
 
-private fun PlantType.dexLabel(): String = when (this) {
-    PlantType.IN_GROUND -> "In-ground"
-    PlantType.CONTAINER -> "Container"
-}
-
-private fun com.dillon.orcharddex.data.phenology.PollinationRequirement?.dexListLabel(): String = when (this) {
-    null -> ""
-    com.dillon.orcharddex.data.phenology.PollinationRequirement.SELF_FERTILE -> "Self-fertile"
-    com.dillon.orcharddex.data.phenology.PollinationRequirement.NEEDS_CROSS_POLLINATION -> "Cross-pollination"
-    com.dillon.orcharddex.data.phenology.PollinationRequirement.CROSS_POLLINATION_RECOMMENDED -> "Cross helpful"
-    com.dillon.orcharddex.data.phenology.PollinationRequirement.POLLINATION_NOT_REQUIRED -> ""
-    com.dillon.orcharddex.data.phenology.PollinationRequirement.UNKNOWN -> ""
-}
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexPrimaryTitle(): String = when {
-    cultivar.isNotBlank() -> cultivar.trim()
-    !nickname.isNullOrBlank() -> nickname.trim()
-    else -> species.trim()
-}
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexSecondaryTitle(): String = when {
-    species.isBlank() && cultivar.isBlank() -> displayName()
-    species.isBlank() -> displayName()
-    else -> species.trim()
-}
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexSupportingLine(): String? = buildList {
-    nickname?.trim()?.takeIf { it.isNotBlank() && !cultivar.equals(it, ignoreCase = true) }?.let(::add)
-    sectionName.trim().takeIf { it.isNotBlank() }?.let(::add)
-}.distinct().joinToString(" • ").takeIf(String::isNotBlank)
+private fun com.dillon.orcharddex.data.local.TreeEntity.dexSecondaryTitle(): String? = species
+    .trim()
+    .takeIf { cultivar.isNotBlank() && it.isNotBlank() }
 
 private enum class ReminderFilterTab(val label: String) {
     ALL("All"),

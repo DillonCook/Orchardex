@@ -123,18 +123,6 @@ class BloomForecastEngineTest {
     }
 
     @Test
-    fun bloomWindowLabelFor_returnsCompactZoneAdjustedSummary() {
-        assertThat(BloomForecastEngine.bloomWindowLabelFor("Apple", zoneCode = "7a"))
-            .isEqualTo("Apr")
-        assertThat(BloomForecastEngine.bloomWindowLabelFor("Apple", zoneCode = "10b"))
-            .isEqualTo("Mar")
-        assertThat(BloomForecastEngine.bloomWindowLabelFor("Dragon fruit", "American Beauty", "10a"))
-            .isEqualTo("Jun–Aug")
-        assertThat(BloomForecastEngine.bloomWindowLabelFor("Banana", "Goldfinger", "10b"))
-            .isEqualTo("Continuous")
-    }
-
-    @Test
     fun predictMonth_skipsAutomaticBananaForecasts() {
         val bananaTree = TreeEntity(
             id = "banana-1",

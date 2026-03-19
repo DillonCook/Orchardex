@@ -481,8 +481,7 @@ class HarvestFormViewModel(
 }
 
 class DexViewModel(
-    private val repository: OrchardRepository,
-    settingsRepository: SettingsRepository
+    private val repository: OrchardRepository
 ) : ViewModel() {
     val trees = repository.observeTrees().stateIn(
         viewModelScope,
@@ -493,11 +492,6 @@ class DexViewModel(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         com.dillon.orcharddex.data.model.DexModel()
-    )
-    val settings = settingsRepository.settings.stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        AppSettings()
     )
 
     var addDialogVisible by mutableStateOf(false)
@@ -817,12 +811,7 @@ object OrchardViewModelProvider {
         initializer { TreeDetailViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { EventFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { HarvestFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
-        initializer {
-            DexViewModel(
-                orchardDexApplication().container.repository,
-                orchardDexApplication().container.settingsRepository
-            )
-        }
+        initializer { DexViewModel(orchardDexApplication().container.repository) }
         initializer { ReminderListViewModel(orchardDexApplication().container.repository) }
         initializer {
             ReminderFormViewModel(
