@@ -454,6 +454,26 @@ object BloomForecastEngine {
         return requirement.takeUnless { it == PollinationRequirement.UNKNOWN }
     }
 
+    fun bloomWindowLabelFor(
+        speciesInput: String,
+        cultivarInput: String = "",
+        zoneCode: String?
+    ): String? {
+        val speciesProfile = speciesByAlias[normalize(speciesInput)] ?: return null
+        if (speciesProfile.forecastBehavior != BloomForecastBehavior.WINDOW) {
+            return "Continuous"
+        }
+        val phase = matchCultivarProfile(speciesProfile, cultivarInput)?.phase ?: speciesProfile.defaultPhase
+        val referenceZone = UsdaZoneCatalog.resolve(speciesProfile.referenceZoneCode)
+        val targetZone = UsdaZoneCatalog.resolve(zoneCode)
+        val shiftDays = (referenceZone.index - targetZone.index) * speciesProfile.shiftDaysPerHalfZone
+        val startDate = LocalDate.of(2024, speciesProfile.startMonth, speciesProfile.startDay)
+            .plusDays(phase.startOffsetDays.toLong())
+            .plusDays(shiftDays)
+        val endDate = startDate.plusDays(speciesProfile.durationDays)
+        return monthRangeLabel(startDate, endDate)
+    }
+
     fun cultivarAutocompleteOptions(
         query: String,
         speciesQuery: String? = null,
@@ -623,6 +643,17 @@ object BloomForecastEngine {
         candidate.contains(query) -> 220
         else -> null
     }
+
+    private fun monthRangeLabel(startDate: LocalDate, endDate: LocalDate): String {
+        val startMonth = monthLabel(startDate.monthValue)
+        val endMonth = monthLabel(endDate.monthValue)
+        return if (startMonth == endMonth) startMonth else "$startMonth–$endMonth"
+    }
+
+    private fun monthLabel(monthValue: Int): String = listOf(
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+    )[monthValue - 1]
 
     private fun normalize(value: String): String = value
         .trim()

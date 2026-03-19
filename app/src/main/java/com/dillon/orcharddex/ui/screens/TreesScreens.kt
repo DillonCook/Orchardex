@@ -216,7 +216,9 @@ fun TreesScreen(
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 AssistChip(onClick = {}, label = { Text(item.tree.species) })
                                 AssistChip(onClick = {}, label = { Text(item.tree.plantType.name.replace("_", "-").lowercase()) })
-                                AssistChip(onClick = {}, label = { Text(item.tree.status.name.lowercase()) })
+                                if (item.tree.status != TreeStatus.ACTIVE) {
+                                    AssistChip(onClick = {}, label = { Text(item.tree.status.name.lowercase()) })
+                                }
                             }
                         }
                     }
@@ -925,7 +927,9 @@ fun TreeDetailScreen(
                 Text(item.tree.sectionName.ifBlank { "No section assigned" })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactFact("Planting", item.tree.plantType.name.replace("_", "-").lowercase())
-                    CompactFact("Status", item.tree.status.name.lowercase())
+                    if (item.tree.status != TreeStatus.ACTIVE) {
+                        CompactFact("Status", item.tree.status.name.lowercase())
+                    }
                     CompactFact("Planted", item.tree.plantedDate.toDateLabel())
                     CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
