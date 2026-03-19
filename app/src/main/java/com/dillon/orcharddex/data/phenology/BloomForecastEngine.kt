@@ -61,6 +61,13 @@ data class CultivarAutocompleteOption(
     val aliases: List<String> = emptyList()
 )
 
+data class EverbearingPlant(
+    val treeId: String,
+    val treeLabel: String,
+    val speciesLabel: String,
+    val detailLabel: String
+)
+
 object BloomForecastEngine {
     private val speciesProfiles = listOf(
         SpeciesBloomProfile("apple", setOf("apple", "malus", "malus domestica"), "7a", 4, 5, 12),
@@ -325,6 +332,19 @@ object BloomForecastEngine {
             .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
             .singleOrNull()
     }
+
+    fun everbearingPlants(trees: List<TreeEntity>): List<EverbearingPlant> = trees.mapNotNull { tree ->
+        val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
+        if (profileMatch.profile.forecastBehavior == BloomForecastBehavior.WINDOW) {
+            return@mapNotNull null
+        }
+        EverbearingPlant(
+            treeId = tree.id,
+            treeLabel = tree.displayName(),
+            speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
+            detailLabel = "Continuous / opportunistic bloom"
+        )
+    }.sortedWith(compareBy({ it.speciesLabel.lowercase() }, { it.treeLabel.lowercase() }))
 
     fun predictMonth(
         trees: List<TreeEntity>,

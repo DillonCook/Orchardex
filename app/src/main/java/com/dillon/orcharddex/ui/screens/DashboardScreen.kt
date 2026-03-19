@@ -42,6 +42,7 @@ import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.ReminderListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.EverbearingPlant
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.ui.components.EmptyStateCard
@@ -87,7 +88,8 @@ private data class DashboardCalendarItem(
 private data class DashboardCalendarState(
     val items: List<DashboardCalendarItem> = emptyList(),
     val activeTreeCount: Int = 0,
-    val forecastedTreeCount: Int = 0
+    val forecastedTreeCount: Int = 0,
+    val everbearingPlants: List<EverbearingPlant> = emptyList()
 )
 
 private data class DashboardDaySummary(
@@ -114,6 +116,7 @@ fun DashboardScreen(
     val history by viewModel.history.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var selectedStat by rememberSaveable { mutableStateOf<DashboardStat?>(null) }
+    var showEverbearingDialog by rememberSaveable { mutableStateOf(false) }
     var visibleMonthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
     var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
     val visibleMonth = remember(visibleMonthText) { YearMonth.parse(visibleMonthText) }
@@ -144,6 +147,13 @@ fun DashboardScreen(
             stat = stat,
             dashboard = dashboard,
             onDismiss = { selectedStat = null },
+            onViewTree = onViewTree
+        )
+    }
+    if (showEverbearingDialog && calendarState.everbearingPlants.isNotEmpty()) {
+        EverbearingFruitDialog(
+            plants = calendarState.everbearingPlants,
+            onDismiss = { showEverbearingDialog = false },
             onViewTree = onViewTree
         )
     }
@@ -225,6 +235,7 @@ fun DashboardScreen(
                 itemsForSelectedDay = itemsForSelectedDay,
                 onPreviousMonth = { jumpMonth(-1) },
                 onNextMonth = { jumpMonth(1) },
+                onShowEverbearing = { showEverbearingDialog = true },
                 onSelectDay = { selectedDateText = it.toString() },
                 onViewTree = onViewTree
             )
@@ -241,6 +252,7 @@ private fun DashboardCalendarSection(
     itemsForSelectedDay: List<DashboardCalendarItem>,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
+    onShowEverbearing: () -> Unit,
     onSelectDay: (LocalDate) -> Unit,
     onViewTree: (String) -> Unit
 ) {
@@ -271,6 +283,17 @@ private fun DashboardCalendarSection(
                     style = MaterialTheme.typography.bodySmall
                 )
             }
+        }
+        if (calendarState.everbearingPlants.isNotEmpty()) {
+            OutlinedButton(onClick = onShowEverbearing) {
+                Text(
+                    "${calendarState.everbearingPlants.size} everbearing ${"fruit".pluralize(calendarState.everbearingPlants.size)}"
+                )
+            }
+            Text(
+                text = "Open the badge to see the tracked fruits that bloom opportunistically instead of on a fixed monthly window.",
+                style = MaterialTheme.typography.bodySmall
+            )
         }
         DashboardMonthGrid(
             visibleMonth = visibleMonth,
@@ -490,6 +513,53 @@ private fun DashboardDetailDialog(
 }
 
 @Composable
+private fun EverbearingFruitDialog(
+    plants: List<EverbearingPlant>,
+    onDismiss: () -> Unit,
+    onViewTree: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Everbearing fruits") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    text = "These fruits are tracked separately because they can bloom across much of the year instead of following a tight month window.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(plants, key = EverbearingPlant::treeId) { plant ->
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    onDismiss()
+                                    onViewTree(plant.treeId)
+                                },
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(plant.treeLabel, style = MaterialTheme.typography.titleMedium)
+                            Text(plant.speciesLabel, style = MaterialTheme.typography.bodySmall)
+                            Text(plant.detailLabel, style = MaterialTheme.typography.labelSmall)
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
 private fun DashboardDetailRow(
     item: DashboardDetailItem,
     onClick: (() -> Unit)? = null
@@ -524,6 +594,7 @@ private fun buildDashboardCalendarState(
         yearMonth = visibleMonth,
         zoneCode = settings.usdaZone
     )
+    val everbearingPlants = BloomForecastEngine.everbearingPlants(activeTrees)
     val bloomItems = bloomWindows.map(PredictedBloomWindow::toCalendarItem)
     val reminderItems = reminders.mapNotNull { reminderItem ->
         val reminder = reminderItem.reminder
@@ -564,7 +635,8 @@ private fun buildDashboardCalendarState(
     return DashboardCalendarState(
         items = allItems,
         activeTreeCount = activeTrees.size,
-        forecastedTreeCount = bloomWindows.map(PredictedBloomWindow::treeId).distinct().size
+        forecastedTreeCount = bloomWindows.map(PredictedBloomWindow::treeId).distinct().size,
+        everbearingPlants = everbearingPlants
     )
 }
 

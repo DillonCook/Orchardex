@@ -70,4 +70,45 @@ class BloomForecastEngineTest {
 
         assertThat(windows).isEmpty()
     }
+
+    @Test
+    fun everbearingPlants_returnsTrackedBananasForSeparateDashboardListing() {
+        val bananaTree = TreeEntity(
+            id = "banana-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = "Plant 2",
+            species = "Banana",
+            cultivar = "Goldfinger",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val appleTree = bananaTree.copy(
+            id = "apple-1",
+            species = "Apple",
+            cultivar = "Anna",
+            nickname = "Back row"
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(bananaTree, appleTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("banana-1")
+        assertThat(everbearing.single().treeLabel).isEqualTo("Plant 2 (Goldfinger)")
+        assertThat(everbearing.single().speciesLabel).isEqualTo("Banana • Goldfinger")
+    }
 }
