@@ -13,7 +13,8 @@ internal object BananaBloomCatalog {
             startMonth = 5,
             startDay = 1,
             durationDays = 90,
-            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            pollinationRequirement = PollinationRequirement.POLLINATION_NOT_REQUIRED
         )
     )
 

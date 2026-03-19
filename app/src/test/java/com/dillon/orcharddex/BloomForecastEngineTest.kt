@@ -5,6 +5,7 @@ import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.PollinationRequirement
 import com.google.common.truth.Truth.assertThat
 import java.time.YearMonth
 import org.junit.Test
@@ -27,12 +28,46 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesDragonFruitAndPollinationMetadata() {
+        val dragonFruitCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Dragon Fruit" }
+            .associateBy { it.cultivar }
+
+        assertThat(dragonFruitCultivars.keys).containsAtLeast(
+            "American Beauty",
+            "AX",
+            "Cosmic Charlie",
+            "Sugar Dragon",
+            "Vietnamese White",
+            "Voodoo Child"
+        )
+        assertThat(dragonFruitCultivars.getValue("American Beauty").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(dragonFruitCultivars.getValue("AX").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
         assertThat(match).isNotNull()
         assertThat(match?.species).isEqualTo("Banana")
         assertThat(match?.cultivar).isEqualTo("Blue Java")
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
+            .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Sugar Dragon"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "AX"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Golden Delicious"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Honeycrisp"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
     }
 
     @Test

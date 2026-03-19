@@ -19,6 +19,14 @@ enum class BloomForecastBehavior {
     MANUAL_ONLY
 }
 
+enum class PollinationRequirement(val label: String) {
+    SELF_FERTILE("Self-fertile"),
+    NEEDS_CROSS_POLLINATION("Needs cross-pollination"),
+    CROSS_POLLINATION_RECOMMENDED("Cross-pollination recommended"),
+    POLLINATION_NOT_REQUIRED("Pollination not required"),
+    UNKNOWN("Unknown")
+}
+
 data class SpeciesBloomProfile(
     val key: String,
     val aliases: Set<String>,
@@ -28,7 +36,8 @@ data class SpeciesBloomProfile(
     val durationDays: Long,
     val shiftDaysPerHalfZone: Long = 4,
     val defaultPhase: BloomPhase = BloomPhase.MID,
-    val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW
+    val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW,
+    val pollinationRequirement: PollinationRequirement = PollinationRequirement.UNKNOWN
 )
 
 data class CultivarBloomProfile(
@@ -36,7 +45,8 @@ data class CultivarBloomProfile(
     val cultivar: String,
     val aliases: Set<String> = emptySet(),
     val phase: BloomPhase,
-    val catalogSpeciesLabel: String = speciesKey
+    val catalogSpeciesLabel: String = speciesKey,
+    val pollinationRequirement: PollinationRequirement? = null
 )
 
 data class PredictedBloomWindow(
@@ -52,13 +62,15 @@ data class PredictedBloomWindow(
 data class SupportedCultivarCatalogEntry(
     val species: String,
     val cultivar: String,
-    val aliases: List<String> = emptyList()
+    val aliases: List<String> = emptyList(),
+    val pollinationRequirement: PollinationRequirement? = null
 )
 
 data class CultivarAutocompleteOption(
     val species: String,
     val cultivar: String,
-    val aliases: List<String> = emptyList()
+    val aliases: List<String> = emptyList(),
+    val pollinationRequirement: PollinationRequirement? = null
 )
 
 data class EverbearingPlant(
@@ -70,31 +82,90 @@ data class EverbearingPlant(
 
 object BloomForecastEngine {
     private val speciesProfiles = listOf(
-        SpeciesBloomProfile("apple", setOf("apple", "malus", "malus domestica"), "7a", 4, 5, 12),
-        SpeciesBloomProfile("pear", setOf("pear", "european pear"), "7a", 3, 30, 10),
-        SpeciesBloomProfile("asian pear", setOf("asian pear", "nashi"), "7a", 3, 27, 10, defaultPhase = BloomPhase.EARLY),
-        SpeciesBloomProfile("peach", setOf("peach"), "7a", 3, 20, 12),
-        SpeciesBloomProfile("nectarine", setOf("nectarine"), "7a", 3, 18, 12),
+        SpeciesBloomProfile(
+            "apple",
+            setOf("apple", "malus", "malus domestica"),
+            "7a",
+            4,
+            5,
+            12,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        SpeciesBloomProfile(
+            "pear",
+            setOf("pear", "european pear"),
+            "7a",
+            3,
+            30,
+            10,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        SpeciesBloomProfile(
+            "asian pear",
+            setOf("asian pear", "nashi"),
+            "7a",
+            3,
+            27,
+            10,
+            defaultPhase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        SpeciesBloomProfile("peach", setOf("peach"), "7a", 3, 20, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("nectarine", setOf("nectarine"), "7a", 3, 18, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("plum", setOf("plum", "japanese plum", "european plum"), "7a", 3, 18, 12),
-        SpeciesBloomProfile("apricot", setOf("apricot"), "7a", 3, 8, 10, defaultPhase = BloomPhase.EARLY),
-        SpeciesBloomProfile("sweet cherry", setOf("sweet cherry", "cherry"), "7a", 3, 24, 10),
-        SpeciesBloomProfile("sour cherry", setOf("sour cherry", "tart cherry"), "7a", 3, 28, 10, defaultPhase = BloomPhase.MID_LATE),
-        SpeciesBloomProfile("blueberry", setOf("blueberry"), "7a", 3, 29, 18),
-        SpeciesBloomProfile("grape", setOf("grape", "grapes", "grape vine"), "7a", 5, 20, 12),
-        SpeciesBloomProfile("raspberry", setOf("raspberry"), "7a", 5, 10, 18),
-        SpeciesBloomProfile("blackberry", setOf("blackberry"), "7a", 5, 12, 20),
-        SpeciesBloomProfile("strawberry", setOf("strawberry"), "7a", 4, 10, 25),
-        SpeciesBloomProfile("fig", setOf("fig"), "8a", 5, 10, 20),
+        SpeciesBloomProfile(
+            "apricot",
+            setOf("apricot"),
+            "7a",
+            3,
+            8,
+            10,
+            defaultPhase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        SpeciesBloomProfile(
+            "sweet cherry",
+            setOf("sweet cherry", "cherry"),
+            "7a",
+            3,
+            24,
+            10,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        SpeciesBloomProfile(
+            "sour cherry",
+            setOf("sour cherry", "tart cherry"),
+            "7a",
+            3,
+            28,
+            10,
+            defaultPhase = BloomPhase.MID_LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        SpeciesBloomProfile("blueberry", setOf("blueberry"), "7a", 3, 29, 18, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
+        SpeciesBloomProfile("grape", setOf("grape", "grapes", "grape vine"), "7a", 5, 20, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("raspberry", setOf("raspberry"), "7a", 5, 10, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("blackberry", setOf("blackberry"), "7a", 5, 12, 20, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("strawberry", setOf("strawberry"), "7a", 4, 10, 25, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("fig", setOf("fig"), "8a", 5, 10, 20, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("persimmon", setOf("persimmon"), "7b", 5, 15, 14),
         SpeciesBloomProfile("mulberry", setOf("mulberry"), "7a", 4, 15, 14),
-        SpeciesBloomProfile("pomegranate", setOf("pomegranate"), "8b", 5, 8, 18),
-        SpeciesBloomProfile("avocado", setOf("avocado"), "10a", 3, 1, 45),
-        SpeciesBloomProfile("mango", setOf("mango"), "10b", 2, 10, 35),
+        SpeciesBloomProfile("pomegranate", setOf("pomegranate"), "8b", 5, 8, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile("avocado", setOf("avocado"), "10a", 3, 1, 45, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
+        SpeciesBloomProfile("mango", setOf("mango"), "10b", 2, 10, 35, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("lychee", setOf("lychee"), "10a", 2, 20, 20),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
-        SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30),
+        SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
-        SpeciesBloomProfile("dragon fruit", setOf("dragon fruit", "dragonfruit", "pitaya"), "10a", 6, 1, 70),
+        SpeciesBloomProfile(
+            "dragon fruit",
+            setOf("dragon fruit", "dragonfruit", "pitaya"),
+            "10a",
+            6,
+            1,
+            70,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
         SpeciesBloomProfile("papaya", setOf("papaya"), "10b", 4, 1, 90)
@@ -115,7 +186,12 @@ object BloomForecastEngine {
         CultivarBloomProfile("apple", "Honeycrisp", phase = BloomPhase.MID_LATE),
         CultivarBloomProfile("apple", "Liberty", phase = BloomPhase.MID),
         CultivarBloomProfile("apple", "Granny Smith", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Golden Delicious", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "apple",
+            "Golden Delicious",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         CultivarBloomProfile("apple", "Pink Lady", aliases = setOf("Cripps Pink"), phase = BloomPhase.MID),
         CultivarBloomProfile("apple", "Pristine", phase = BloomPhase.MID),
         CultivarBloomProfile("apple", "Red Delicious", phase = BloomPhase.MID),
@@ -169,20 +245,88 @@ object BloomForecastEngine {
         CultivarBloomProfile("peach", "TropicSnow", aliases = setOf("Tropic Snow"), phase = BloomPhase.MID),
         CultivarBloomProfile("peach", "Contender", phase = BloomPhase.LATE),
         CultivarBloomProfile("peach", "Redhaven", phase = BloomPhase.LATE),
-        CultivarBloomProfile("sweet cherry", "Black Tartarian", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("sweet cherry", "Lapins", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("sweet cherry", "Bing", phase = BloomPhase.MID),
-        CultivarBloomProfile("sweet cherry", "Rainier", phase = BloomPhase.MID),
-        CultivarBloomProfile("sweet cherry", "Stella", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sweet cherry",
+            "Black Tartarian",
+            phase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "sweet cherry",
+            "Lapins",
+            phase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "sweet cherry",
+            "Bing",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "sweet cherry",
+            "Rainier",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "sweet cherry",
+            "Stella",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         CultivarBloomProfile("sour cherry", "Montmorency", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("plum", "Methley", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("plum", "Shiro", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("plum", "Gulfbeauty", aliases = setOf("Gulf Beauty"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("plum", "Gulfblaze", aliases = setOf("Gulf Blaze"), phase = BloomPhase.MID),
-        CultivarBloomProfile("plum", "Gulfrose", aliases = setOf("Gulf Rose"), phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("plum", "Santa Rosa", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("plum", "Stanley", phase = BloomPhase.LATE),
-        CultivarBloomProfile("plum", "Damson", phase = BloomPhase.LATE),
+        CultivarBloomProfile(
+            "plum",
+            "Methley",
+            phase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Shiro",
+            phase = BloomPhase.EARLY,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Gulfbeauty",
+            aliases = setOf("Gulf Beauty"),
+            phase = BloomPhase.EARLY_MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Gulfblaze",
+            aliases = setOf("Gulf Blaze"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Gulfrose",
+            aliases = setOf("Gulf Rose"),
+            phase = BloomPhase.MID_LATE,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Santa Rosa",
+            phase = BloomPhase.MID_LATE,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Stanley",
+            phase = BloomPhase.LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "plum",
+            "Damson",
+            phase = BloomPhase.LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         CultivarBloomProfile("apricot", "Blenheim", phase = BloomPhase.EARLY),
         CultivarBloomProfile("apricot", "Goldcot", phase = BloomPhase.MID),
         CultivarBloomProfile("apricot", "Moorpark", phase = BloomPhase.MID),
@@ -232,7 +376,7 @@ object BloomForecastEngine {
         CultivarBloomProfile("blueberry", "Tifblue", aliases = setOf("Tif Blue"), phase = BloomPhase.LATE),
         CultivarBloomProfile("blueberry", "Vernon", phase = BloomPhase.MID_LATE),
         CultivarBloomProfile("blueberry", "Woodard", phase = BloomPhase.LATE)
-    ) + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
+    ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private data class ProfileMatch(
         val profile: SpeciesBloomProfile,
@@ -250,18 +394,24 @@ object BloomForecastEngine {
         .map(SpeciesBloomProfile::key)
         .toSet() - "citrus"
 
+    private val speciesByKey = speciesProfiles.associateBy(SpeciesBloomProfile::key)
+
     private val speciesByAlias = speciesProfiles.flatMap { profile ->
         (profile.aliases + profile.key).map { alias -> normalize(alias) to profile }
     }.toMap()
 
     private val cultivarAutocompleteCatalog = cultivarProfiles
         .map { profile ->
+            val speciesPollination = speciesByKey[profile.speciesKey]
+                ?.pollinationRequirement
+                ?.takeUnless { it == PollinationRequirement.UNKNOWN }
             CultivarAutocompleteOption(
                 species = profile.catalogSpeciesLabel.toDisplayLabel(),
                 cultivar = profile.cultivar,
                 aliases = profile.aliases
                     .filterNot { normalize(it) == normalize(profile.cultivar) }
-                    .sortedBy(String::lowercase)
+                    .sortedBy(String::lowercase),
+                pollinationRequirement = profile.pollinationRequirement ?: speciesPollination
             )
         }
         .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
@@ -284,8 +434,25 @@ object BloomForecastEngine {
         .sortedBy(String::lowercase)
 
     fun supportedCultivarCatalog(): List<SupportedCultivarCatalogEntry> = cultivarAutocompleteCatalog
-        .map { SupportedCultivarCatalogEntry(species = it.species, cultivar = it.cultivar, aliases = it.aliases) }
+        .map {
+            SupportedCultivarCatalogEntry(
+                species = it.species,
+                cultivar = it.cultivar,
+                aliases = it.aliases,
+                pollinationRequirement = it.pollinationRequirement
+            )
+        }
         .sortedWith(compareBy({ it.species.lowercase() }, { it.cultivar.lowercase() }))
+
+    fun pollinationRequirementFor(
+        speciesInput: String,
+        cultivarInput: String = ""
+    ): PollinationRequirement? {
+        val speciesProfile = speciesByAlias[normalize(speciesInput)] ?: return null
+        val cultivarRequirement = matchCultivarProfile(speciesProfile, cultivarInput)?.pollinationRequirement
+        val requirement = cultivarRequirement ?: speciesProfile.pollinationRequirement
+        return requirement.takeUnless { it == PollinationRequirement.UNKNOWN }
+    }
 
     fun cultivarAutocompleteOptions(
         query: String,
@@ -392,15 +559,7 @@ object BloomForecastEngine {
 
     private fun TreeEntity.resolveProfileMatch(): ProfileMatch? {
         val speciesMatch = speciesProfile()
-        val cultivarKey = normalize(cultivar)
-        val cultivarMatch = cultivarProfiles.firstOrNull { cultivarProfile ->
-            cultivarKey.isNotBlank() &&
-                speciesCompatible(speciesMatch, cultivarProfile.speciesKey) &&
-                (
-                    cultivarKey == normalize(cultivarProfile.cultivar) ||
-                        cultivarProfile.aliases.any { normalize(it) == cultivarKey }
-                    )
-        }
+        val cultivarMatch = speciesMatch?.let { matchCultivarProfile(it, cultivar) }
         if (cultivarMatch != null) {
             val profile = speciesProfiles.firstOrNull { it.key == cultivarMatch.speciesKey }
             if (profile != null) {
@@ -409,6 +568,21 @@ object BloomForecastEngine {
         }
         val profile = speciesMatch ?: return null
         return ProfileMatch(profile = profile, phase = profile.defaultPhase, cultivarMatched = false)
+    }
+
+    private fun matchCultivarProfile(
+        speciesProfile: SpeciesBloomProfile,
+        cultivarInput: String
+    ): CultivarBloomProfile? {
+        val cultivarKey = normalize(cultivarInput)
+        if (cultivarKey.isBlank()) return null
+        return cultivarProfiles.firstOrNull { cultivarProfile ->
+            speciesCompatible(speciesProfile, cultivarProfile.speciesKey) &&
+                (
+                    cultivarKey == normalize(cultivarProfile.cultivar) ||
+                        cultivarProfile.aliases.any { normalize(it) == cultivarKey }
+                    )
+        }
     }
 
     private fun TreeEntity.speciesProfile(): SpeciesBloomProfile? {

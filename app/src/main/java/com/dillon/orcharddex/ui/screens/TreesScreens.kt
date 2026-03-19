@@ -281,6 +281,9 @@ fun TreeFormScreen(
             .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
             .take(8)
     }
+    val pollinationRequirement = remember(state.species, state.cultivar) {
+        BloomForecastEngine.pollinationRequirementFor(state.species, state.cultivar)
+    }
 
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
@@ -374,6 +377,12 @@ fun TreeFormScreen(
                                 copy(species = suggestion.species, cultivar = suggestion.cultivar)
                             }
                         }
+                    )
+                }
+                pollinationRequirement?.let { requirement ->
+                    Text(
+                        text = "Known pollination: ${requirement.label}",
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
                 OutlinedTextField(
@@ -791,6 +800,9 @@ fun TreeDetailScreen(
     val item = detail ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Tree not found.")
     }
+    val pollinationRequirement = remember(item.tree.species, item.tree.cultivar) {
+        BloomForecastEngine.pollinationRequirementFor(item.tree.species, item.tree.cultivar)
+    }
 
     if (viewModel.confirmDelete) {
         AlertDialog(
@@ -918,6 +930,7 @@ fun TreeDetailScreen(
                     CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
                     CompactFact("Source", item.tree.source.orEmpty())
+                    CompactFact("Pollination", pollinationRequirement?.label.orEmpty())
                 }
                 LocalPhotoStrip(
                     existingPaths = item.photos.map { photo ->

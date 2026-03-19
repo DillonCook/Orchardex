@@ -589,17 +589,23 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
             }
         }
         item {
-            SectionCard("Bloom forecast catalog") {
-                Text("${supportedCultivarCatalog.sumOf { it.second.size }} cultivar-adjusted profiles currently supported.")
+            SectionCard("Bloom & pollination catalog") {
+                Text("${supportedCultivarCatalog.sumOf { it.second.size }} cataloged cultivars currently supported.")
                 Text("Species | cultivars", style = MaterialTheme.typography.bodySmall)
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     supportedCultivarCatalog.forEach { (species, cultivars) ->
                         Text(
                             "$species | ${cultivars.joinToString(", ") { entry ->
-                                if (entry.aliases.isEmpty()) {
+                                val cultivarLabel = if (entry.aliases.isEmpty()) {
                                     entry.cultivar
                                 } else {
                                     "${entry.cultivar} (${entry.aliases.joinToString("/")})"
+                                }
+                                val pollinationLabel = entry.pollinationRequirement?.label
+                                if (pollinationLabel == null) {
+                                    cultivarLabel
+                                } else {
+                                    "$cultivarLabel — $pollinationLabel"
                                 }
                             }}",
                             style = MaterialTheme.typography.bodySmall
