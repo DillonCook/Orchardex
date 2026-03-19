@@ -179,6 +179,32 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesPineappleSeedSetAndPollinationMetadata() {
+        val pineappleCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Pineapple" }
+            .associateBy { it.cultivar }
+
+        assertThat(pineappleCultivars.keys).containsAtLeast(
+            "Smooth Cayenne",
+            "Kew",
+            "Red Spanish",
+            "Victoria",
+            "Mauritius",
+            "Sugarloaf",
+            "MD-2",
+            "N36",
+            "Josapine",
+            "BRS Vitória",
+            "Gold Barrel",
+            "Amritha"
+        )
+        assertThat(pineappleCultivars.getValue("MD-2").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(pineappleCultivars.getValue("Sugarloaf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -255,6 +281,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesPineappleAliases() {
+        val victoriaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Queen Victoria", "Pineapple")
+        val mauritiusMatch = BloomForecastEngine.resolveCultivarAutocomplete("Moris", "Piña")
+        val sugarloafMatch = BloomForecastEngine.resolveCultivarAutocomplete("Kona Sugarloaf", "Ananas")
+        val md2Match = BloomForecastEngine.resolveCultivarAutocomplete("Del Monte Gold", "Ananas comosus")
+
+        assertThat(victoriaMatch?.cultivar).isEqualTo("Victoria")
+        assertThat(mauritiusMatch?.cultivar).isEqualTo("Mauritius")
+        assertThat(sugarloafMatch?.cultivar).isEqualTo("Sugarloaf")
+        assertThat(md2Match?.cultivar).isEqualTo("MD-2")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -312,6 +351,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Tamarindus indica", "Namphueng"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Pineapple"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Piña", "Moris"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Ananas comosus", "Del Monte Gold"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
     @Test
@@ -484,6 +529,49 @@ class BloomForecastEngineTest {
         assertThat(juneWindow).hasSize(1)
         assertThat(juneWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 5, 15))
         assertThat(octoberWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesPineappleWeakPrimaryBloomWindow() {
+        val pineappleTree = TreeEntity(
+            id = "pineapple-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Piña",
+            cultivar = "Sugarloaf",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val marchWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(pineappleTree),
+            yearMonth = YearMonth.of(2026, 3),
+            zoneCode = "10b"
+        )
+        val novemberWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(pineappleTree),
+            yearMonth = YearMonth.of(2026, 11),
+            zoneCode = "10b"
+        )
+
+        assertThat(marchWindow).hasSize(1)
+        assertThat(marchWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 15))
+        assertThat(novemberWindow).isEmpty()
     }
 
     @Test

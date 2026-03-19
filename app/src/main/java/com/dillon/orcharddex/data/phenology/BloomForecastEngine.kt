@@ -210,6 +210,15 @@ object BloomForecastEngine {
             100,
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
         ),
+        SpeciesBloomProfile(
+            "pineapple",
+            setOf("pineapple", "piña", "pina", "ananas", "ananas comosus"),
+            "10b",
+            2,
+            15,
+            75,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -808,7 +817,75 @@ object BloomForecastEngine {
             phase = BloomPhase.MID
         ),
         CultivarBloomProfile("tamarind", "Aglibut Sweet", phase = BloomPhase.MID),
-        CultivarBloomProfile("tamarind", "PSAU Sour 2", phase = BloomPhase.MID)
+        CultivarBloomProfile("tamarind", "PSAU Sour 2", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Smooth Cayenne", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Kew", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Giant Kew", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Red Spanish", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Green Spanish", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Singapore Spanish", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Queen", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Natal Queen", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Ripley Queen", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "MacGregor", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "pineapple",
+            "Victoria",
+            aliases = setOf("Queen Victoria"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "pineapple",
+            "Mauritius",
+            aliases = setOf("Red Ceylon", "Moris", "Morris"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "pineapple",
+            "Sugarloaf",
+            aliases = setOf("White Sugarloaf", "Kona Sugar Loaf", "Kona Sugarloaf"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("pineapple", "Pernambuco", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Perolera", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Manzana", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "pineapple",
+            "MD-2",
+            aliases = setOf("MD2", "Del Monte Gold", "Gold Extra Sweet", "Extra Sweet"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("pineapple", "N36", aliases = setOf("N-36"), phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "pineapple",
+            "Josapine",
+            aliases = setOf("Josephine", "Josaphine"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("pineapple", "Gandul", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "pineapple",
+            "BRS Imperial",
+            aliases = setOf("Imperial"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "pineapple",
+            "BRS Vitória",
+            aliases = setOf("BRS Vitoria"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("pineapple", "Tainung 17", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Tainung 21", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "N67-10", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Soft Touch", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "Gold Barrel", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "pineapple",
+            "Amritha",
+            aliases = setOf("Amrutha"),
+            phase = BloomPhase.MID
+        )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private val regionalBloomOverrides = listOf(
