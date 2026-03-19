@@ -259,7 +259,24 @@ object BloomForecastEngine {
         ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
+        SpeciesBloomProfile(
+            "passionfruit",
+            setOf(
+                "passionfruit",
+                "passion fruit",
+                "lilikoi",
+                "lilikoʻi",
+                "maracuja azedo",
+                "maracujá azedo",
+                "sour passion fruit",
+                "passiflora edulis"
+            ),
+            "10b",
+            3,
+            15,
+            260,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile(
             "dragon fruit",
             setOf("dragon fruit", "dragonfruit", "pitaya"),
@@ -973,8 +990,129 @@ object BloomForecastEngine {
                 "Yellow Strawberry Tree"
             ),
             phase = BloomPhase.MID
+        ),
+        passionFruit(
+            "Possum Purple",
+            aliases = setOf("Purple Possum"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        passionFruit("Panama Red", pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
+        passionFruit("Sweet Sunrise", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit(
+            "Whitman Yellow",
+            aliases = setOf("Whitman"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit("Australian Purple", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Nellie Kelly", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Don's Choice", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Frederick", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Misty Gem", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Sweetheart", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Tango", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit(
+            "Flamenco",
+            aliases = setOf("Red Flamenco", "Red Flemenco"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        passionFruit("Red Rover", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Tas Black", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit(
+            "Toms Special",
+            aliases = setOf("Tom's Special"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        passionFruit("Waimanalo Selection", pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS),
+        passionFruit("Kapoho Selection", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("Mike's Choice", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("Panama Gold", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("Sevcik Selection", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("University Round Selection", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit(
+            "University Selection No. B-74",
+            aliases = setOf("B-74"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit("Yee Selection", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("Pandora", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit(
+            "McGuffies Red",
+            aliases = setOf("McGuffy"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "Noel's Special",
+            aliases = setOf("Noels Special"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit("IAC-Paulista", pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
+        passionFruit(
+            "BRS Gigante Amarelo",
+            aliases = setOf("BRS GA1"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "BRS Sol do Cerrado",
+            aliases = setOf("BRS SC1"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "BRS Rubi do Cerrado",
+            aliases = setOf("BRS RC"),
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        passionFruit(
+            "BRS Ouro Vermelho",
+            aliases = setOf("BRS OV1"),
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        passionFruit(
+            "IAC 275 - Wonder",
+            aliases = setOf("IAC 275 Wonder"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "IAC 273 - Monte Alegre",
+            aliases = setOf("IAC 273 Monte Alegre"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "IAC 277 - Jewelry",
+            aliases = setOf("IAC 277 Jewelry"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit("FB 200 Yellow Master", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit("FB 300 Araguari", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit(
+            "SCS437 Catarina",
+            aliases = setOf("SCS437 Catherine"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit(
+            "UENF Rio Dourado",
+            aliases = setOf("UENF Golden River"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        passionFruit("Solar", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        passionFruit(
+            "Round Yellow",
+            aliases = setOf("Redondo Amarelo"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
         )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
+
+    private fun passionFruit(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "passionfruit",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Passion Fruit",
+        pollinationRequirement = pollinationRequirement
+    )
 
     private val regionalBloomOverrides = listOf(
         RegionalBloomOverride(

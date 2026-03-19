@@ -243,6 +243,32 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesPassionFruitSeedSetAndPollinationMetadata() {
+        val passionFruitCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Passion Fruit" }
+            .associateBy { it.cultivar }
+
+        assertThat(passionFruitCultivars.keys).containsAtLeast(
+            "Possum Purple",
+            "Sweet Sunrise",
+            "Whitman Yellow",
+            "Frederick",
+            "Panama Gold",
+            "Pandora",
+            "BRS Gigante Amarelo",
+            "BRS Rubi do Cerrado",
+            "UENF Rio Dourado",
+            "Round Yellow"
+        )
+        assertThat(passionFruitCultivars.getValue("Possum Purple").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(passionFruitCultivars.getValue("Sweet Sunrise").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(passionFruitCultivars.getValue("Panama Red").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -354,6 +380,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesPassionFruitAliases() {
+        val whitmanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Lilikoi")
+        val flamencoMatch = BloomForecastEngine.resolveCultivarAutocomplete("Red Flemenco", "Passion fruit")
+        val b74Match = BloomForecastEngine.resolveCultivarAutocomplete("B-74", "Passiflora edulis")
+        val uenfMatch = BloomForecastEngine.resolveCultivarAutocomplete("UENF Golden River", "Maracuja azedo")
+
+        assertThat(whitmanMatch?.cultivar).isEqualTo("Whitman Yellow")
+        assertThat(flamencoMatch?.cultivar).isEqualTo("Flamenco")
+        assertThat(b74Match?.cultivar).isEqualTo("University Selection No. B-74")
+        assertThat(uenfMatch?.cultivar).isEqualTo("UENF Rio Dourado")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -429,6 +468,14 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Muntingia calabura", "Standard red-fruited type"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lilikoi"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Passion fruit", "Possum Purple"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Passiflora edulis", "Sweet Sunrise"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Maracuja azedo", "BRS OV1"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -716,6 +763,49 @@ class BloomForecastEngineTest {
         )
 
         assertThat(windows).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesPassionFruitBroadPrimaryBloomWindow() {
+        val passionFruitTree = TreeEntity(
+            id = "passion-fruit-1",
+            orchardName = "Home",
+            sectionName = "Vines",
+            nickname = null,
+            species = "Lilikoi",
+            cultivar = "Possum Purple",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(passionFruitTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val februaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(passionFruitTree),
+            yearMonth = YearMonth.of(2026, 2),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 3, 15))
+        assertThat(februaryWindow).isEmpty()
     }
 
     @Test
