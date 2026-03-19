@@ -69,14 +69,14 @@ Explicit cultivar overrides currently wired:
 - `Arkin` → `Self-fertile`
 - `Golden Star` → `Self-fertile`
 - `Kary` → `Self-fertile`
-- `Fwang Tung` → `Cross-pollination recommended`
+- `Fwang Tung` → `Self-fertile, cross-pollination helps`
 - `B-10` → `Cross-pollination recommended`
 - `B-17` → `Cross-pollination recommended`
 - `B-2` → `Cross-pollination recommended`
-- `B-11` → `Cross-pollination recommended`
-- `Tean Ma` → `Cross-pollination recommended`
+- `B-11` → `Self-fertile, cross-pollination helps`
+- `Tean Ma` → `Self-fertile, cross-pollination helps`
 - `Mih Tao` → `Partial self-incompatibility`
-- `Star King` → `Cross-pollination recommended`
+- `Star King` → `Self-fertile, cross-pollination helps`
 - `Wheeler` → `Cross-pollination recommended`
 
 Other seeded cultivars currently inherit the species default.

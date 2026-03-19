@@ -18,9 +18,9 @@ Current app implementation keeps a general fallback if orchard region is unset, 
 Lychee fertility is graded, not binary.
 
 - **Species default:** treat lychee as able to fruit alone, but often improved by cross-pollination.
-  - OrchardDex label: `Cross-pollination recommended`
+  - OrchardDex label: `Self-fertile, cross-pollination helps`
 - **Mauritius / Tai So:** can self-fruit, but cross-pollination often improves set and retention.
-  - OrchardDex label: `Cross-pollination recommended`
+  - OrchardDex label: `Self-fertile, cross-pollination helps`
 - **Fei Zi Xiao / Fay Zee Siu:** strongest current signal for partial self-incompatibility.
   - OrchardDex label: `Partial self-incompatibility`
 

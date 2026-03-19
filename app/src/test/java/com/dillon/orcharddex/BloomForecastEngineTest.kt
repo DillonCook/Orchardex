@@ -101,6 +101,8 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
         assertThat(starFruitCultivars.getValue("Kajang").pollinationRequirement)
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(starFruitCultivars.getValue("Fwang Tung").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
     }
 
     @Test
@@ -126,6 +128,31 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(sugarAppleCultivars.getValue("Kampong Mauve").pollinationRequirement)
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesJackfruitSeedSetAndPollinationMetadata() {
+        val jackfruitCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Jackfruit" }
+            .associateBy { it.cultivar }
+
+        assertThat(jackfruitCultivars.keys).containsAtLeast(
+            "Black Gold",
+            "Dang Rasimi",
+            "Golden Nugget",
+            "J-31",
+            "NS1",
+            "Golden Pillow",
+            "Fairchild First",
+            "PLR 1",
+            "PPI 1",
+            "Siddu",
+            "Sindhoor"
+        )
+        assertThat(jackfruitCultivars.getValue("Dang Rasimi").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(jackfruitCultivars.getValue("PLR 1").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
     }
 
     @Test
@@ -179,6 +206,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesJackfruitAliases() {
+        val nuggetMatch = BloomForecastEngine.resolveCultivarAutocomplete("Gold Nugget", "Jackfruit")
+        val nansiMatch = BloomForecastEngine.resolveCultivarAutocomplete("Nansi", "Jack")
+        val pillowMatch = BloomForecastEngine.resolveCultivarAutocomplete("Mong Tong", "Artocarpus heterophyllus")
+        val plrMatch = BloomForecastEngine.resolveCultivarAutocomplete("Palur 1", "Jack fruit")
+
+        assertThat(nuggetMatch?.cultivar).isEqualTo("Golden Nugget")
+        assertThat(nansiMatch?.cultivar).isEqualTo("N.A.N.S.I.")
+        assertThat(pillowMatch?.cultivar).isEqualTo("Golden Pillow")
+        assertThat(plrMatch?.cultivar).isEqualTo("PLR 1")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -203,9 +243,9 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Honeycrisp"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee"))
-            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Tai So"))
-            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Fay Zee Siu"))
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Carambola"))
@@ -214,6 +254,8 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Belimbing Madu"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Fwang Tung"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Mei Tao"))
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Annona squamosa"))
@@ -222,6 +264,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Sweetsop", "Seedless Cuban"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Jackfruit"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Jack fruit", "Gold Nugget"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Artocarpus heterophyllus", "Nansi"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
     }
 
     @Test
@@ -308,6 +356,49 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow).hasSize(1)
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 3, 15))
         assertThat(augustWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesJackfruitPrimaryBloomWindow() {
+        val jackfruitTree = TreeEntity(
+            id = "jackfruit-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Jack fruit",
+            cultivar = "Black Gold",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val februaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(jackfruitTree),
+            yearMonth = YearMonth.of(2026, 2),
+            zoneCode = "10b"
+        )
+        val julyWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(jackfruitTree),
+            yearMonth = YearMonth.of(2026, 7),
+            zoneCode = "10b"
+        )
+
+        assertThat(februaryWindow).hasSize(1)
+        assertThat(februaryWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 1, 20))
+        assertThat(julyWindow).isEmpty()
     }
 
     @Test

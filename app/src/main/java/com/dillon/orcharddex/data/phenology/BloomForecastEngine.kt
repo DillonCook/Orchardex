@@ -21,6 +21,7 @@ enum class BloomForecastBehavior {
 
 enum class PollinationRequirement(val label: String) {
     SELF_FERTILE("Self-fertile"),
+    SELF_FERTILE_CROSS_BENEFITS("Self-fertile, cross-pollination helps"),
     NEEDS_CROSS_POLLINATION("Needs cross-pollination"),
     CROSS_POLLINATION_RECOMMENDED("Cross-pollination recommended"),
     PARTIAL_SELF_INCOMPATIBILITY("Partial self-incompatibility"),
@@ -171,7 +172,7 @@ object BloomForecastEngine {
             2,
             20,
             20,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         SpeciesBloomProfile(
             "star fruit",
@@ -190,6 +191,15 @@ object BloomForecastEngine {
             15,
             95,
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        SpeciesBloomProfile(
+            "jackfruit",
+            setOf("jackfruit", "jack fruit", "jack", "artocarpus heterophyllus", "kathal", "panas", "nangka", "nagka"),
+            "10b",
+            1,
+            20,
+            55,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
@@ -418,7 +428,7 @@ object BloomForecastEngine {
             "Mauritius",
             aliases = setOf("Tai So"),
             phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile(
             "lychee",
@@ -443,7 +453,7 @@ object BloomForecastEngine {
             "star fruit",
             "Fwang Tung",
             phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile(
             "star fruit",
@@ -503,7 +513,7 @@ object BloomForecastEngine {
             "B-11",
             aliases = setOf("B11", "Chan Yong I"),
             phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile(
             "star fruit",
@@ -518,7 +528,7 @@ object BloomForecastEngine {
             "Tean Ma",
             aliases = setOf("Team Ma", "Tean-Ma"),
             phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile(
             "star fruit",
@@ -538,7 +548,7 @@ object BloomForecastEngine {
             "star fruit",
             "Star King",
             phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile("star fruit", "Thayer", phase = BloomPhase.MID),
         CultivarBloomProfile("star fruit", "Maha", phase = BloomPhase.MID),
@@ -626,6 +636,83 @@ object BloomForecastEngine {
             "sugar apple",
             "Abd El Razik",
             aliases = setOf("Abd E1 Razik"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "Black Gold", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Dang Rasimi", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Golden Nugget",
+            aliases = setOf("Gold Nugget"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "Honey Gold", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "J-30", aliases = setOf("J30"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "J-31", aliases = setOf("J31"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "NS1", aliases = setOf("NS-1"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Tabouey", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Cochin", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Chompa Gob",
+            aliases = setOf("Chompa Grob", "Champa Gob"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "Kun Wi Chan", aliases = setOf("Thai Globe"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Lemon Gold", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Golden Pillow",
+            aliases = setOf("Mong Tong"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "Fairchild First", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Sweet Fairchild", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Mia 1", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Leung Bang", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Bosworth No. 3", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Galaxy", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Alba", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Hew", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "N.A.N.S.I.", aliases = setOf("Nansi"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Reliance", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Tree Farm", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Yullatin", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Ziemen", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Velipala", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Singapore",
+            aliases = setOf("Ceylon Jack", "Singapore Jack"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "Panruti Selection", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Thanjavur Jack", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Burliar 1", aliases = setOf("Burliar-1"), phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "PLR 1",
+            aliases = setOf("PLR.1", "Palur 1", "Palur.1 Jack"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("jackfruit", "PPI 1", aliases = setOf("PPI.1"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "PLR (J) 2", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Gulabi", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Rudrakshi", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Hazari", phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Champa", aliases = setOf("Champaka", "Champa Jack"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Siddu", aliases = setOf("Siddujack"), phase = BloomPhase.MID),
+        CultivarBloomProfile("jackfruit", "Shankara", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Muttom Varikka",
+            aliases = setOf("Muttam Varikka", "Muttomvarikka"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "jackfruit",
+            "Sindhoor",
+            aliases = setOf("Sindoor", "Sindhoora Varikka"),
             phase = BloomPhase.MID
         )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
