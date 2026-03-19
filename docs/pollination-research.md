@@ -21,7 +21,12 @@ This note backs the first OrchardDex pollination metadata pass:
    - These extra cultivars should be treated as easier to revise later than the Cal Poly-backed entries.
    - Used for: Asunta 6, Cosmic Charlie, Edgar's Baby, Fruit Punch, Georges White, Maria Rosa, Medusa, Moroccan Red, Neon, Thai Dragon, Townsend Pink, Tricia, Voodoo Child, White Sapphire, Yellow Thai.
    - Two user-requested entries were added conservatively with unresolved pollination status still marked unknown: Dennis Pale Pink and NOID Lowe's variety.
-4. **Cultivar timing notes for dragon fruit**
+4. **Focused Asunta-series sources**
+   - Dragons Alley Nursery pages were used for explicit self-sterile / cross-pollination-required status on Asunta 1, Asunta 2, Asunta 3, and Asunta 4.
+   - Tasty Dragons product/detail pages were used for the numbered/named follow-on hybrids and classifications shown as `CROSS`: Asunta 5 Paco, Asunta 5 Patricia, Asunta 5 Starburst, Asunta 5 Ventura, and Asunta 6 / Wild Berry Skittles.
+   - Tasty Dragons category pages plus the Exotic Fruits and Vegetables naming note were used for Asunta 5 Sunset Sherbet, which is also circulated as `Asunta 5 Edgar`.
+   - The Exotic Fruits and Vegetables note also claims the official Asunta 5 Paco may circulate under `La Palma` or `Kevin`; OrchardDex accepts those as low-confidence compatibility aliases, not as stronger botanical proof.
+5. **Cultivar timing notes for dragon fruit**
    - UF/IFAS HS303 remains the main source for the species-level warm-climate bloom season used by the app.
    - Cultivar pages often mention flowering windows like "during summertime" or "2 to 3 flower cycles starting in June," but they do not provide consistent USDA-zone-normalized bloom tables.
    - OrchardDex therefore keeps dragon fruit on the shared species-level, zone-adjusted bloom window for now, while cultivar entries mainly add pollination metadata and aliases.
@@ -69,5 +74,5 @@ This note backs the first OrchardDex pollination metadata pass:
 This pass is intentionally conservative.
 - Where extension sources were broad but not cultivar-specific, OrchardDex uses species defaults.
 - Where cultivar-level claims came only from nursery/community material, those entries should be considered provisional and easy to revise.
-- User-entered compatibility aliases were added sparingly. Example: `Asunta 6 (Paco)` is accepted as an alias to match the current orchard list, even though grower sources commonly distinguish Asunta 6 from Asunta 5 Paco.
+- User-entered compatibility aliases were added sparingly. A previous temporary alias that conflated `Asunta 6` with `Paco` was removed after correction. OrchardDex now keeps `Asunta 5 Paco` and `Asunta 6` distinct.
 - Pollination compatibility can still depend on bloom overlap, ploidy, and local conditions even when two cultivars are both present in the catalog.

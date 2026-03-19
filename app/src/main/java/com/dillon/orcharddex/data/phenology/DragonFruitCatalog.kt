@@ -3,9 +3,38 @@ package com.dillon.orcharddex.data.phenology
 internal object DragonFruitCatalog {
     val cultivarProfiles = listOf(
         dragonFruit("American Beauty", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        dragonFruit("Asunta 1", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        dragonFruit("Asunta 2", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        dragonFruit("Asunta 3", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        dragonFruit("Asunta 4", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        dragonFruit(
+            "Asunta 5 Paco",
+            aliases = setOf("A5 Paco", "Asunta 5 Kevin", "Asunta 5 La Palma", "Kevin", "La Palma"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        dragonFruit(
+            "Asunta 5 Patricia",
+            aliases = setOf("A5 Patricia", "A5 Patrecia", "Asunta 5 Patrecia"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        dragonFruit(
+            "Asunta 5 Starburst",
+            aliases = setOf("A5 Starburst"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        dragonFruit(
+            "Asunta 5 Sunset Sherbet",
+            aliases = setOf("A5 Sunset Sherbet", "Asunta 5 Edgar", "Sunset Sherbet", "Sunset Sherbert"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        dragonFruit(
+            "Asunta 5 Ventura",
+            aliases = setOf("A5 Ventura"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
         dragonFruit(
             "Asunta 6",
-            aliases = setOf("A6", "Wild Berry Skittles", "Asunta 6 (Paco)"),
+            aliases = setOf("A6", "Wild Berry Skittles", "Asunta 6 Wild Berry Skittles"),
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
         ),
         dragonFruit("AX", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
@@ -46,10 +75,7 @@ internal object DragonFruitCatalog {
         ),
         dragonFruit("La Verne", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
         dragonFruit("Lisa", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
-        dragonFruit(
-            "Maria Rosa",
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
-        ),
+        dragonFruit("Maria Rosa", pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
         dragonFruit(
             "Medusa",
             aliases = setOf("Jellyfish"),

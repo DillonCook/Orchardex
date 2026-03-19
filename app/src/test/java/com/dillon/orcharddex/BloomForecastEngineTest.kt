@@ -35,6 +35,12 @@ class BloomForecastEngineTest {
 
         assertThat(dragonFruitCultivars.keys).containsAtLeast(
             "American Beauty",
+            "Asunta 1",
+            "Asunta 5 Paco",
+            "Asunta 5 Patricia",
+            "Asunta 5 Starburst",
+            "Asunta 5 Sunset Sherbet",
+            "Asunta 5 Ventura",
             "Asunta 6",
             "AX",
             "Cosmic Charlie",
@@ -50,6 +56,10 @@ class BloomForecastEngineTest {
         )
         assertThat(dragonFruitCultivars.getValue("American Beauty").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(dragonFruitCultivars.getValue("Asunta 1").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(dragonFruitCultivars.getValue("Asunta 5 Paco").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(dragonFruitCultivars.getValue("AX").pollinationRequirement)
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(dragonFruitCultivars.getValue("Townsend Pink").pollinationRequirement)
@@ -75,11 +85,15 @@ class BloomForecastEngineTest {
     fun resolveCultivarAutocomplete_matchesDragonFruitAliases() {
         val cometMatch = BloomForecastEngine.resolveCultivarAutocomplete("Haley's Comet", "Dragon fruit")
         val thaiMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Red", "Dragon fruit")
-        val asuntaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Asunta 6 (Paco)", "Dragon fruit")
+        val asunta5Match = BloomForecastEngine.resolveCultivarAutocomplete("La Palma", "Dragon fruit")
+        val asunta5RenameMatch = BloomForecastEngine.resolveCultivarAutocomplete("Asunta 5 Edgar", "Dragon fruit")
+        val asunta6Match = BloomForecastEngine.resolveCultivarAutocomplete("Wild Berry Skittles", "Dragon fruit")
 
         assertThat(cometMatch?.cultivar).isEqualTo("Halley's Comet")
         assertThat(thaiMatch?.cultivar).isEqualTo("Thai Dragon")
-        assertThat(asuntaMatch?.cultivar).isEqualTo("Asunta 6")
+        assertThat(asunta5Match?.cultivar).isEqualTo("Asunta 5 Paco")
+        assertThat(asunta5RenameMatch?.cultivar).isEqualTo("Asunta 5 Sunset Sherbet")
+        assertThat(asunta6Match?.cultivar).isEqualTo("Asunta 6")
     }
 
     @Test
@@ -88,6 +102,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Sugar Dragon"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Asunta 5 Paco"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Asunta 5 Edgar"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Asunta 6"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "AX"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Townsend Pink"))
