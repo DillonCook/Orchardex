@@ -17,9 +17,14 @@ This note backs the first OrchardDex pollination metadata pass:
    - https://edis.ifas.ufl.edu/publication/HS303
    - Used for the species-level bloom season baseline in warm climates and the general warning that some cultivars are self-incompatible and benefit from hand/cross-pollination.
 3. **Supplemental cultivar spot checks (provisional / nursery-grade, not extension-grade)**
-   - Spicy Exotics search results and similar cultivar pages were used only to extend the dragon fruit list beyond the Cal Poly page when there was a reasonably clear pollination claim.
+   - Spicy Exotics, Tasty Dragons, Dragons Alley Nursery, and similar specialist grower pages were used only to extend the dragon fruit list beyond the Cal Poly page when there was a reasonably clear pollination claim.
    - These extra cultivars should be treated as easier to revise later than the Cal Poly-backed entries.
-   - Used for: Cosmic Charlie, Neon, Voodoo Child, Yellow Thai.
+   - Used for: Asunta 6, Cosmic Charlie, Edgar's Baby, Fruit Punch, Georges White, Maria Rosa, Medusa, Moroccan Red, Neon, Thai Dragon, Townsend Pink, Tricia, Voodoo Child, White Sapphire, Yellow Thai.
+   - Two user-requested entries were added conservatively with unresolved pollination status still marked unknown: Dennis Pale Pink and NOID Lowe's variety.
+4. **Cultivar timing notes for dragon fruit**
+   - UF/IFAS HS303 remains the main source for the species-level warm-climate bloom season used by the app.
+   - Cultivar pages often mention flowering windows like "during summertime" or "2 to 3 flower cycles starting in June," but they do not provide consistent USDA-zone-normalized bloom tables.
+   - OrchardDex therefore keeps dragon fruit on the shared species-level, zone-adjusted bloom window for now, while cultivar entries mainly add pollination metadata and aliases.
 
 ### General fruit pollination defaults
 1. **Penn State Extension — Pollination Requirements for Various Fruits and Nuts**
@@ -64,4 +69,5 @@ This note backs the first OrchardDex pollination metadata pass:
 This pass is intentionally conservative.
 - Where extension sources were broad but not cultivar-specific, OrchardDex uses species defaults.
 - Where cultivar-level claims came only from nursery/community material, those entries should be considered provisional and easy to revise.
+- User-entered compatibility aliases were added sparingly. Example: `Asunta 6 (Paco)` is accepted as an alias to match the current orchard list, even though grower sources commonly distinguish Asunta 6 from Asunta 5 Paco.
 - Pollination compatibility can still depend on bloom overlap, ploidy, and local conditions even when two cultivars are both present in the catalog.

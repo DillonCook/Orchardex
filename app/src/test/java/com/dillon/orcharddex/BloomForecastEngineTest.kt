@@ -35,9 +35,16 @@ class BloomForecastEngineTest {
 
         assertThat(dragonFruitCultivars.keys).containsAtLeast(
             "American Beauty",
+            "Asunta 6",
             "AX",
             "Cosmic Charlie",
+            "Edgar's Baby",
+            "Fruit Punch",
+            "Medusa",
             "Sugar Dragon",
+            "Thai Dragon",
+            "Townsend Pink",
+            "Tricia",
             "Vietnamese White",
             "Voodoo Child"
         )
@@ -45,6 +52,14 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(dragonFruitCultivars.getValue("AX").pollinationRequirement)
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(dragonFruitCultivars.getValue("Townsend Pink").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(dragonFruitCultivars.getValue("Tricia").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(dragonFruitCultivars.getValue("Fruit Punch").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(dragonFruitCultivars.getValue("Dennis Pale Pink").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.UNKNOWN)
     }
 
     @Test
@@ -57,6 +72,17 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesDragonFruitAliases() {
+        val cometMatch = BloomForecastEngine.resolveCultivarAutocomplete("Haley's Comet", "Dragon fruit")
+        val thaiMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Red", "Dragon fruit")
+        val asuntaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Asunta 6 (Paco)", "Dragon fruit")
+
+        assertThat(cometMatch?.cultivar).isEqualTo("Halley's Comet")
+        assertThat(thaiMatch?.cultivar).isEqualTo("Thai Dragon")
+        assertThat(asuntaMatch?.cultivar).isEqualTo("Asunta 6")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -64,6 +90,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "AX"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Townsend Pink"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Fruit Punch"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Dragon Fruit", "Dennis Pale Pink"))
+            .isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Golden Delicious"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Apple", "Honeycrisp"))
