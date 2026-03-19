@@ -295,6 +295,31 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesWhiteSapoteSeedSetAndPollinationMetadata() {
+        val whiteSapoteCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "White Sapote" }
+            .associateBy { it.cultivar }
+
+        assertThat(whiteSapoteCultivars.keys).containsAtLeast(
+            "Blumenthal",
+            "Dade",
+            "Denzler",
+            "Golden",
+            "Lemon Gold",
+            "Reinecke Commercial",
+            "Suebelle",
+            "Vernon",
+            "Yellow"
+        )
+        assertThat(whiteSapoteCultivars.getValue("Vernon").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(whiteSapoteCultivars.getValue("Blumenthal").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(whiteSapoteCultivars.getValue("Suebelle").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -432,6 +457,20 @@ class BloomForecastEngineTest {
         assertThat(calimanMatch?.cultivar).isEqualTo("UENF/Caliman 01")
     }
 
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesWhiteSapoteAliases() {
+        val goldenMatch = BloomForecastEngine.resolveCultivarAutocomplete("Max Golden", "White sapote")
+        val denzlerMatch = BloomForecastEngine.resolveCultivarAutocomplete("Densler", "Casimiroa edulis")
+        val reineckeMatch = BloomForecastEngine.resolveCultivarAutocomplete("Reinikie", "Zapote blanco")
+        val suebelleMatch = BloomForecastEngine.resolveCultivarAutocomplete("Hubbell", "Casimiroa")
+
+        assertThat(goldenMatch?.cultivar).isEqualTo("Golden")
+        assertThat(denzlerMatch?.cultivar).isEqualTo("Denzler")
+        assertThat(reineckeMatch?.cultivar).isEqualTo("Reinecke Commercial")
+        assertThat(suebelleMatch?.cultivar).isEqualTo("Suebelle")
+    }
+
     @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
@@ -522,6 +561,14 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Carica papaya", "Pusa Dwarf"))
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Mamão", "Golden")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("White sapote"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Casimiroa edulis", "Vernon"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Zapote blanco", "Reinikie"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Casimiroa", "Hubbell"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
     }
 
     @Test
@@ -888,6 +935,49 @@ class BloomForecastEngineTest {
         )
 
         assertThat(windows).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesWhiteSapotePrimaryBloomWindow() {
+        val whiteSapoteTree = TreeEntity(
+            id = "white-sapote-1",
+            orchardName = "Home",
+            sectionName = "Subtropics",
+            nickname = null,
+            species = "Zapote blanco",
+            cultivar = "Vernon",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val novemberWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(whiteSapoteTree),
+            yearMonth = YearMonth.of(2026, 11),
+            zoneCode = "10b"
+        )
+        val julyWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(whiteSapoteTree),
+            yearMonth = YearMonth.of(2026, 7),
+            zoneCode = "10b"
+        )
+
+        assertThat(novemberWindow).hasSize(1)
+        assertThat(novemberWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 11, 15))
+        assertThat(julyWindow).isEmpty()
     }
 
     @Test

@@ -287,6 +287,15 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
+        SpeciesBloomProfile(
+            "white sapote",
+            setOf("white sapote", "casimiroa edulis", "zapote blanco", "casimiroa"),
+            "10b",
+            11,
+            15,
+            170,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
         SpeciesBloomProfile(
             "papaya",
@@ -1167,7 +1176,34 @@ object BloomForecastEngine {
         papaya("Arka Prabhath", aliases = setOf("Arka Prabhat"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         papaya("Golden"),
         papaya("Calimosa"),
-        papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01"))
+        papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01")),
+        whiteSapote(
+            "Blumenthal",
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        whiteSapote("Dade"),
+        whiteSapote("Denzler", aliases = setOf("Densler")),
+        whiteSapote("Golden", aliases = setOf("Max Golden")),
+        whiteSapote("Homestead"),
+        whiteSapote(
+            "Lemon Gold",
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        whiteSapote("McDill"),
+        whiteSapote("Pike"),
+        whiteSapote(
+            "Reinecke Commercial",
+            aliases = setOf("Reinekie", "Reinikie", "Reinikie Commercial", "Reineke Commercial"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        whiteSapote("Smathers"),
+        whiteSapote(
+            "Suebelle",
+            aliases = setOf("Hubbell"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        whiteSapote("Vernon", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        whiteSapote("Yellow", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION)
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private fun passionFruit(
@@ -1189,6 +1225,18 @@ object BloomForecastEngine {
         pollinationRequirement: PollinationRequirement? = null
     ) = CultivarBloomProfile(
         speciesKey = "papaya",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun whiteSapote(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "white sapote",
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
