@@ -73,6 +73,37 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesStarFruitSeedSetAndPollinationMetadata() {
+        val starFruitCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Star Fruit" }
+            .associateBy { it.cultivar }
+
+        assertThat(starFruitCultivars.keys).containsAtLeast(
+            "Arkin",
+            "Golden Star",
+            "Fwang Tung",
+            "Kary",
+            "Sri Kembangan",
+            "B-10",
+            "B-17",
+            "Tean Ma",
+            "Mih Tao",
+            "Thai Knight",
+            "Wheeler"
+        )
+        assertThat(starFruitCultivars.getValue("Arkin").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(starFruitCultivars.getValue("Golden Star").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(starFruitCultivars.getValue("B-10").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(starFruitCultivars.getValue("Mih Tao").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+        assertThat(starFruitCultivars.getValue("Kajang").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -94,6 +125,19 @@ class BloomForecastEngineTest {
         assertThat(asunta5Match?.cultivar).isEqualTo("Asunta 5 Paco")
         assertThat(asunta5RenameMatch?.cultivar).isEqualTo("Asunta 5 Sunset Sherbet")
         assertThat(asunta6Match?.cultivar).isEqualTo("Asunta 6")
+    }
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesStarFruitAliases() {
+        val kariMatch = BloomForecastEngine.resolveCultivarAutocomplete("Kari", "Star fruit")
+        val sriMatch = BloomForecastEngine.resolveCultivarAutocomplete("Sri Kambangan", "Star fruit")
+        val teanMaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Team Ma", "Carambola")
+        val b17Match = BloomForecastEngine.resolveCultivarAutocomplete("Belimbing Madu", "Star fruit")
+
+        assertThat(kariMatch?.cultivar).isEqualTo("Kary")
+        assertThat(sriMatch?.cultivar).isEqualTo("Sri Kembangan")
+        assertThat(teanMaMatch?.cultivar).isEqualTo("Tean Ma")
+        assertThat(b17Match?.cultivar).isEqualTo("B-17")
     }
 
     @Test
@@ -126,6 +170,57 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Fay Zee Siu"))
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Carambola"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Arkin"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Belimbing Madu"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Mei Tao"))
+            .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+    }
+
+    @Test
+    fun predictMonth_usesStarFruitPrimaryBloomWindow() {
+        val starFruitTree = TreeEntity(
+            id = "star-fruit-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Carambola",
+            cultivar = "Arkin",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(starFruitTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val septemberWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(starFruitTree),
+            yearMonth = YearMonth.of(2026, 9),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 15))
+        assertThat(septemberWindow).isEmpty()
     }
 
     @Test

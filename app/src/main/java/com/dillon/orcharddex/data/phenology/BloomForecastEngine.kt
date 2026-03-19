@@ -173,6 +173,15 @@ object BloomForecastEngine {
             20,
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
+        SpeciesBloomProfile(
+            "star fruit",
+            setOf("star fruit", "starfruit", "carambola", "averrhoa carambola"),
+            "10b",
+            4,
+            15,
+            50,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -408,6 +417,128 @@ object BloomForecastEngine {
             aliases = setOf("Fay Zee Siu", "Feizixiao"),
             phase = BloomPhase.MID,
             pollinationRequirement = PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Arkin",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Golden Star",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Fwang Tung",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Kary",
+            aliases = setOf("Kari"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Kajang",
+            aliases = setOf("Kaiang"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Sri Kembangan",
+            aliases = setOf("Sri Kambangan"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("star fruit", "Lara", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-10",
+            aliases = setOf("B10"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-17",
+            aliases = setOf("B17", "Belimbing Madu"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-16",
+            aliases = setOf("B16"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-2",
+            aliases = setOf("B2"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-1",
+            aliases = setOf("B1"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "B-11",
+            aliases = setOf("B11", "Chan Yong I"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Hew-1",
+            aliases = setOf("Hew #1"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("star fruit", "Demak", phase = BloomPhase.MID),
+        CultivarBloomProfile("star fruit", "Dah Pon", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "star fruit",
+            "Tean Ma",
+            aliases = setOf("Team Ma", "Tean-Ma"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Mih Tao",
+            aliases = setOf("Mei Tao", "Mih-Tao"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY
+        ),
+        CultivarBloomProfile(
+            "star fruit",
+            "Cheng Chui",
+            aliases = setOf("Cheng Tsey", "Chun Choi"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("star fruit", "Newcomb", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "star fruit",
+            "Star King",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile("star fruit", "Thayer", phase = BloomPhase.MID),
+        CultivarBloomProfile("star fruit", "Maha", phase = BloomPhase.MID),
+        CultivarBloomProfile("star fruit", "Thai Knight", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "star fruit",
+            "Wheeler",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
