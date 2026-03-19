@@ -156,6 +156,29 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesTamarindSeedSetAndPollinationMetadata() {
+        val tamarindCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Tamarind" }
+            .associateBy { it.cultivar }
+
+        assertThat(tamarindCultivars.keys).containsAtLeast(
+            "Manila Sweet",
+            "Makham Waan",
+            "PKM-1",
+            "Prathisthan",
+            "T-263",
+            "Sichomphu",
+            "Nam Phueng",
+            "Aglibut Sweet",
+            "PSAU Sour 2"
+        )
+        assertThat(tamarindCultivars.getValue("Manila Sweet").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(tamarindCultivars.getValue("Sichomphu").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -219,6 +242,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesTamarindAliases() {
+        val pkmMatch = BloomForecastEngine.resolveCultivarAutocomplete("Periyakulam 1", "Tamarind")
+        val t263Match = BloomForecastEngine.resolveCultivarAutocomplete("T 263", "Tamarindo")
+        val sichomphuMatch = BloomForecastEngine.resolveCultivarAutocomplete("Sri Chompoo", "Tamarindus indica")
+        val namPhuengMatch = BloomForecastEngine.resolveCultivarAutocomplete("Namphueng", "Makham")
+
+        assertThat(pkmMatch?.cultivar).isEqualTo("PKM-1")
+        assertThat(t263Match?.cultivar).isEqualTo("T-263")
+        assertThat(sichomphuMatch?.cultivar).isEqualTo("Sichomphu")
+        assertThat(namPhuengMatch?.cultivar).isEqualTo("Nam Phueng")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -270,6 +306,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Artocarpus heterophyllus", "Nansi"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Tamarind"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Tamarindo", "Periyakulam 1"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Tamarindus indica", "Namphueng"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
     }
 
     @Test
@@ -399,6 +441,49 @@ class BloomForecastEngineTest {
         assertThat(februaryWindow).hasSize(1)
         assertThat(februaryWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 1, 20))
         assertThat(julyWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesTamarindPrimaryBloomWindow() {
+        val tamarindTree = TreeEntity(
+            id = "tamarind-1",
+            orchardName = "Home",
+            sectionName = "Legumes",
+            nickname = null,
+            species = "Tamarindo",
+            cultivar = "Manila Sweet",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val juneWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(tamarindTree),
+            yearMonth = YearMonth.of(2026, 6),
+            zoneCode = "10b"
+        )
+        val octoberWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(tamarindTree),
+            yearMonth = YearMonth.of(2026, 10),
+            zoneCode = "10b"
+        )
+
+        assertThat(juneWindow).hasSize(1)
+        assertThat(juneWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 5, 15))
+        assertThat(octoberWindow).isEmpty()
     }
 
     @Test

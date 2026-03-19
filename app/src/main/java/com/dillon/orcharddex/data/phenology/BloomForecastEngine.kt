@@ -201,6 +201,15 @@ object BloomForecastEngine {
             55,
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
+        SpeciesBloomProfile(
+            "tamarind",
+            setOf("tamarind", "tamarindo", "tamarindus indica", "imli", "ambli", "chinch", "sampalok", "makham", "makham waan"),
+            "10b",
+            5,
+            15,
+            100,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -714,7 +723,92 @@ object BloomForecastEngine {
             "Sindhoor",
             aliases = setOf("Sindoor", "Sindhoora Varikka"),
             phase = BloomPhase.MID
-        )
+        ),
+        CultivarBloomProfile("tamarind", "Manila Sweet", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "Makham Waan", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "tamarind",
+            "PKM-1",
+            aliases = setOf("PKM 1", "Periyakulam 1"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("tamarind", "Urigam", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "tamarind",
+            "Prathisthan",
+            aliases = setOf("Pratishthan"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("tamarind", "Goma Prateek", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "Ajanta", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "tamarind",
+            "T-263",
+            aliases = setOf("Tamarind 263", "T 263"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("tamarind", "Hasanur", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "Tumkur", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "DTS-1", aliases = setOf("DTS 1"), phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "Yogeshwari", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "tamarind",
+            "Sichomphu",
+            aliases = setOf("Si Chomphu", "Sri Chompoo", "Si Chompoo"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Khandee",
+            aliases = setOf("Khantee", "Kantee"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Prakai Thong",
+            aliases = setOf("Prakaithong"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("tamarind", "Fak Dap", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "Wan Lon", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "tamarind",
+            "Sithong",
+            aliases = setOf("Si Thong"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Sithong Bao",
+            aliases = setOf("Si Thong Bao"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Nam Phueng",
+            aliases = setOf("Nam Pheung", "Namphueng"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Inthaphalam",
+            aliases = setOf("Intapalum", "Intapalam"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Mun Jong",
+            aliases = setOf("Muen Chong", "Munjong"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "tamarind",
+            "Saeng Athit",
+            aliases = setOf("Saengathit"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("tamarind", "Aglibut Sweet", phase = BloomPhase.MID),
+        CultivarBloomProfile("tamarind", "PSAU Sour 2", phase = BloomPhase.MID)
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private val regionalBloomOverrides = listOf(
