@@ -269,6 +269,32 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesPapayaSeedSetAndPollinationMetadata() {
+        val papayaCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Papaya" }
+            .associateBy { it.cultivar }
+
+        assertThat(papayaCultivars.keys).containsAtLeast(
+            "Kapoho Solo",
+            "Sunrise Solo",
+            "Improved Sunrise Solo 72/12",
+            "Tainung No. 1",
+            "Red Lady 786",
+            "Pusa Nanha",
+            "CO.3",
+            "Arka Surya",
+            "Golden",
+            "UENF/Caliman 01"
+        )
+        assertThat(papayaCultivars.getValue("Kapoho Solo").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(papayaCultivars.getValue("Pusa Nanha").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(papayaCultivars.getValue("Golden").pollinationRequirement)
+            .isNull()
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -392,6 +418,20 @@ class BloomForecastEngineTest {
         assertThat(uenfMatch?.cultivar).isEqualTo("UENF Rio Dourado")
     }
 
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesPapayaAliases() {
+        val sunriseMatch = BloomForecastEngine.resolveCultivarAutocomplete("Sunrise", "Papaya")
+        val sunUpMatch = BloomForecastEngine.resolveCultivarAutocomplete("UH SunUp", "Carica papaya")
+        val arkaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Arka Prabhat", "Lechosa")
+        val calimanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Caliman 01", "Mamão")
+
+        assertThat(sunriseMatch?.cultivar).isEqualTo("Sunrise Solo")
+        assertThat(sunUpMatch?.cultivar).isEqualTo("SunUp")
+        assertThat(arkaMatch?.cultivar).isEqualTo("Arka Prabhath")
+        assertThat(calimanMatch?.cultivar).isEqualTo("UENF/Caliman 01")
+    }
+
     @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
@@ -476,6 +516,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Maracuja azedo", "BRS OV1"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Papaya")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Papaya", "Kapoho Solo"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Carica papaya", "Pusa Dwarf"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mamão", "Golden")).isNull()
     }
 
     @Test
@@ -809,6 +855,42 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun predictMonth_skipsAutomaticPapayaForecasts() {
+        val papayaTree = TreeEntity(
+            id = "papaya-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Papaya",
+            cultivar = "Kapoho Solo",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(papayaTree),
+            yearMonth = YearMonth.of(2026, 6),
+            zoneCode = "10b"
+        )
+
+        assertThat(windows).isEmpty()
+    }
+
+    @Test
     fun predictMonth_usesRegionalLycheeOverrides() {
         val lycheeTree = TreeEntity(
             id = "lychee-1",
@@ -1028,6 +1110,48 @@ class BloomForecastEngineTest {
         assertThat(everbearing.single().treeId).isEqualTo("jamaican-cherry-1")
         assertThat(everbearing.single().treeLabel).isEqualTo("Canopy (Yellow-fruited form)")
         assertThat(everbearing.single().speciesLabel).isEqualTo("Panama berry • Yellow-fruited form")
+        assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
+    }
+
+    @Test
+    fun everbearingPlants_returnsTrackedPapayaForSeparateDashboardListing() {
+        val papayaTree = TreeEntity(
+            id = "papaya-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = "Main",
+            species = "Papaya",
+            cultivar = "Kapoho Solo",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val passionFruitTree = papayaTree.copy(
+            id = "passion-fruit-1",
+            species = "Passion fruit",
+            cultivar = "Possum Purple",
+            nickname = null
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(papayaTree, passionFruitTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("papaya-1")
+        assertThat(everbearing.single().treeLabel).isEqualTo("Main (Kapoho Solo)")
+        assertThat(everbearing.single().speciesLabel).isEqualTo("Papaya • Kapoho Solo")
         assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
     }
 }

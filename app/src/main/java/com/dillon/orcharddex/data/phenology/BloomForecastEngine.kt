@@ -288,7 +288,16 @@ object BloomForecastEngine {
         ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
-        SpeciesBloomProfile("papaya", setOf("papaya"), "10b", 4, 1, 90)
+        SpeciesBloomProfile(
+            "papaya",
+            setOf("papaya", "carica papaya", "mamão", "mamao", "lechosa"),
+            "10b",
+            4,
+            1,
+            90,
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            pollinationRequirement = PollinationRequirement.UNKNOWN
+        )
     ) + BananaBloomCatalog.speciesProfiles + CitrusBloomCatalog.speciesProfiles
 
     // The first catalog is phase-based so it can scale to thousands of cultivars by adding rows,
@@ -1098,7 +1107,67 @@ object BloomForecastEngine {
             "Round Yellow",
             aliases = setOf("Redondo Amarelo"),
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        )
+        ),
+        papaya("Kapoho Solo", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya(
+            "Sunrise Solo",
+            aliases = setOf("Sunrise"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        papaya(
+            "Improved Sunrise Solo 72/12",
+            aliases = setOf("Sunrise Solo 72/12"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        papaya("Waimanalo", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Sunset", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Rainbow", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("SunUp", aliases = setOf("UH SunUp"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya(
+            "Tainung No. 1",
+            aliases = setOf("Tainung 1", "Tainung No.1"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        papaya(
+            "Tainung No. 2",
+            aliases = setOf("Tainung 2", "Tainung No.2"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        papaya(
+            "Known You No. 1",
+            aliases = setOf("Known You 1", "Known-You 1")
+        ),
+        papaya(
+            "Known You No. 2",
+            aliases = setOf("Known You 2", "Known-You 2")
+        ),
+        papaya(
+            "Red Lady 786",
+            aliases = setOf("Red Lady", "786"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        papaya("Maradol", aliases = setOf("Maradol Roja")),
+        papaya("Caribbean Red"),
+        papaya("Eksotika", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Pusa Delicious", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Pusa Majesty", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Pusa Nanha", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("Pusa Dwarf", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("Ranchi Dwarf", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("Washington", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("Honey Dew", aliases = setOf("Honeydew"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Coorg Honey Dew", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("CO.2", aliases = setOf("CO 2"), pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("CO.3", aliases = setOf("CO 3"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("CO.5", aliases = setOf("CO 5"), pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("CO.6", aliases = setOf("CO 6"), pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        papaya("CO.7", aliases = setOf("CO 7"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("CO.8", aliases = setOf("CO 8"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Arka Surya", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Arka Prabhath", aliases = setOf("Arka Prabhat"), pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        papaya("Golden"),
+        papaya("Calimosa"),
+        papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01"))
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private fun passionFruit(
@@ -1111,6 +1180,18 @@ object BloomForecastEngine {
         aliases = aliases,
         phase = BloomPhase.MID,
         catalogSpeciesLabel = "Passion Fruit",
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun papaya(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "papaya",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
         pollinationRequirement = pollinationRequirement
     )
 
