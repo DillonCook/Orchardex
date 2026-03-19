@@ -227,6 +227,22 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesJamaicanCherryLightSeedSet() {
+        val jamaicanCherryCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Jamaican Cherry" }
+            .associateBy { it.cultivar }
+
+        assertThat(jamaicanCherryCultivars.keys).containsExactly(
+            "Standard red-fruited type",
+            "Yellow-fruited form"
+        )
+        assertThat(jamaicanCherryCultivars.getValue("Standard red-fruited type").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(jamaicanCherryCultivars.getValue("Yellow-fruited form").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -329,6 +345,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesJamaicanCherryAliases() {
+        val yellowMatch = BloomForecastEngine.resolveCultivarAutocomplete("Yellow Panama Berry", "Jamaican cherry")
+        val yellowTreeMatch = BloomForecastEngine.resolveCultivarAutocomplete("Yellow Strawberry Tree", "Panama berry")
+
+        assertThat(yellowMatch?.cultivar).isEqualTo("Yellow-fruited form")
+        assertThat(yellowTreeMatch?.cultivar).isEqualTo("Yellow-fruited form")
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -398,6 +423,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Malpighia emarginata", "Olivier"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Jamaican cherry"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Panama berry", "Yellow Panama Berry"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Muntingia calabura", "Standard red-fruited type"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
     @Test
@@ -652,6 +683,42 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun predictMonth_skipsAutomaticJamaicanCherryForecasts() {
+        val jamaicanCherryTree = TreeEntity(
+            id = "jamaican-cherry-1",
+            orchardName = "Home",
+            sectionName = "Tropics",
+            nickname = null,
+            species = "Panama berry",
+            cultivar = "Standard red-fruited type",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(jamaicanCherryTree),
+            yearMonth = YearMonth.of(2026, 6),
+            zoneCode = "10b"
+        )
+
+        assertThat(windows).isEmpty()
+    }
+
+    @Test
     fun predictMonth_usesRegionalLycheeOverrides() {
         val lycheeTree = TreeEntity(
             id = "lychee-1",
@@ -829,6 +896,48 @@ class BloomForecastEngineTest {
         assertThat(everbearing.single().treeId).isEqualTo("acerola-1")
         assertThat(everbearing.single().treeLabel).isEqualTo("Ruby (Florida Sweet)")
         assertThat(everbearing.single().speciesLabel).isEqualTo("Acerola • Florida Sweet")
+        assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
+    }
+
+    @Test
+    fun everbearingPlants_returnsTrackedJamaicanCherryForSeparateDashboardListing() {
+        val jamaicanCherryTree = TreeEntity(
+            id = "jamaican-cherry-1",
+            orchardName = "Home",
+            sectionName = "Bird grove",
+            nickname = "Canopy",
+            species = "Panama berry",
+            cultivar = "Yellow-fruited form",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val pineappleTree = jamaicanCherryTree.copy(
+            id = "pineapple-1",
+            species = "Pineapple",
+            cultivar = "Sugarloaf",
+            nickname = null
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(jamaicanCherryTree, pineappleTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("jamaican-cherry-1")
+        assertThat(everbearing.single().treeLabel).isEqualTo("Canopy (Yellow-fruited form)")
+        assertThat(everbearing.single().speciesLabel).isEqualTo("Panama berry • Yellow-fruited form")
         assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
     }
 }

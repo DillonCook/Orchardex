@@ -237,6 +237,26 @@ object BloomForecastEngine {
             forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
+        SpeciesBloomProfile(
+            "jamaican cherry",
+            setOf(
+                "jamaican cherry",
+                "jamaica cherry",
+                "panama berry",
+                "strawberry tree",
+                "cotton candy berry",
+                "singapore cherry",
+                "jam fruit tree",
+                "calabura",
+                "muntingia calabura"
+            ),
+            "10b",
+            3,
+            1,
+            240,
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -937,7 +957,23 @@ object BloomForecastEngine {
         CultivarBloomProfile("barbados cherry", "Waldy-CATI 30", aliases = setOf("Waldy CATI 30"), phase = BloomPhase.MID),
         CultivarBloomProfile("barbados cherry", "UEL 3 - Dominga", aliases = setOf("UEL3 Dominga"), phase = BloomPhase.MID),
         CultivarBloomProfile("barbados cherry", "UEL 4 - Ligia", aliases = setOf("UEL4 Ligia"), phase = BloomPhase.MID),
-        CultivarBloomProfile("barbados cherry", "UEL 5 - Natalia", aliases = setOf("UEL5 Natalia"), phase = BloomPhase.MID)
+        CultivarBloomProfile("barbados cherry", "UEL 5 - Natalia", aliases = setOf("UEL5 Natalia"), phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "jamaican cherry",
+            "Standard red-fruited type",
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "jamaican cherry",
+            "Yellow-fruited form",
+            aliases = setOf(
+                "Yellow Jamaica Cherry",
+                "Yellow Jamaican Cherry",
+                "Yellow Panama Berry",
+                "Yellow Strawberry Tree"
+            ),
+            phase = BloomPhase.MID
+        )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private val regionalBloomOverrides = listOf(
