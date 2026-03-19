@@ -182,6 +182,15 @@ object BloomForecastEngine {
             50,
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
+        SpeciesBloomProfile(
+            "sugar apple",
+            setOf("sugar apple", "sweetsop", "sweet sop", "annona squamosa", "sitaphal"),
+            "10b",
+            3,
+            15,
+            95,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
         SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
         SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("passionfruit", setOf("passionfruit", "passion fruit"), "10a", 4, 15, 40),
@@ -539,6 +548,85 @@ object BloomForecastEngine {
             "Wheeler",
             phase = BloomPhase.MID,
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Lessard Thai",
+            aliases = setOf("Thai Lessard"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Kampong Mauve", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Purple or Red", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Cuban Seedless",
+            aliases = setOf("Seedless Cuban"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Brazilian Seedless",
+            aliases = setOf("Brazilian seedless"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile("sugar apple", "Thai Seedless", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "LeahReese", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Na Dai", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Balanagar",
+            aliases = setOf("Balangar"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Kakarlapahad", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Washington", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Mammoth",
+            aliases = setOf("A squamosa var mammoth"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Red", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Red-speckled",
+            aliases = setOf("Red Speckled"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Crimson", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Yellow", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "White-stemmed",
+            aliases = setOf("White Stemmed"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Barbados", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "British Guiana", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Red Sitaphal", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Raidurg", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "APK-1",
+            aliases = setOf("APK1"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Barbados Seedlings", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Washington 07005", phase = BloomPhase.MID),
+        CultivarBloomProfile("sugar apple", "Washington 98797", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "NMK-1 Golden",
+            aliases = setOf("NMK-1"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile("sugar apple", "Beni Mazar", phase = BloomPhase.MID),
+        CultivarBloomProfile(
+            "sugar apple",
+            "Abd El Razik",
+            aliases = setOf("Abd E1 Razik"),
+            phase = BloomPhase.MID
         )
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 

@@ -104,6 +104,31 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesSugarAppleSeedSetAndPollinationMetadata() {
+        val sugarAppleCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Sugar Apple" }
+            .associateBy { it.cultivar }
+
+        assertThat(sugarAppleCultivars.keys).containsAtLeast(
+            "Lessard Thai",
+            "Kampong Mauve",
+            "Brazilian Seedless",
+            "Thai Seedless",
+            "Mammoth",
+            "APK-1",
+            "NMK-1 Golden",
+            "Beni Mazar",
+            "Abd El Razik"
+        )
+        assertThat(sugarAppleCultivars.getValue("Brazilian Seedless").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(sugarAppleCultivars.getValue("Lessard Thai").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(sugarAppleCultivars.getValue("Kampong Mauve").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -138,6 +163,19 @@ class BloomForecastEngineTest {
         assertThat(sriMatch?.cultivar).isEqualTo("Sri Kembangan")
         assertThat(teanMaMatch?.cultivar).isEqualTo("Tean Ma")
         assertThat(b17Match?.cultivar).isEqualTo("B-17")
+    }
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
+        val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
+        val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
+        val balangarMatch = BloomForecastEngine.resolveCultivarAutocomplete("Balangar", "Annona squamosa")
+        val apkMatch = BloomForecastEngine.resolveCultivarAutocomplete("APK1", "Sugar apple")
+
+        assertThat(lessardMatch?.cultivar).isEqualTo("Lessard Thai")
+        assertThat(cubanMatch?.cultivar).isEqualTo("Cuban Seedless")
+        assertThat(balangarMatch?.cultivar).isEqualTo("Balanagar")
+        assertThat(apkMatch?.cultivar).isEqualTo("APK-1")
     }
 
     @Test
@@ -178,6 +216,12 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Mei Tao"))
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Annona squamosa"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Sugar apple", "Brazilian seedless"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Sweetsop", "Seedless Cuban"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -221,6 +265,49 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow).hasSize(1)
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 15))
         assertThat(septemberWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesSugarApplePrimaryBloomWindow() {
+        val sugarAppleTree = TreeEntity(
+            id = "sugar-apple-1",
+            orchardName = "Home",
+            sectionName = "Annona row",
+            nickname = null,
+            species = "Sweetsop",
+            cultivar = "Lessard Thai",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(sugarAppleTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val augustWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(sugarAppleTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 3, 15))
+        assertThat(augustWindow).isEmpty()
     }
 
     @Test
