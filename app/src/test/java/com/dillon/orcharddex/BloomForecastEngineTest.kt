@@ -61,6 +61,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesAbiu() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Abiu")
+    }
+
+    @Test
     fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
         val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
         val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
@@ -68,6 +75,8 @@ class BloomForecastEngineTest {
         val guanabanaSuggestions = BloomForecastEngine.speciesAutocompleteOptions("guanabana")
         val genipSuggestions = BloomForecastEngine.speciesAutocompleteOptions("genip")
         val spanishLimeSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spanish lime")
+        val abioSuggestions = BloomForecastEngine.speciesAutocompleteOptions("abio")
+        val caimitoAmarilloSuggestions = BloomForecastEngine.speciesAutocompleteOptions("caimito amarillo")
 
         assertThat(starAppleSuggestions).contains("Caimito (star apple)")
         assertThat(scientificSuggestions).contains("Coconut")
@@ -75,6 +84,8 @@ class BloomForecastEngineTest {
         assertThat(guanabanaSuggestions).contains("Soursop")
         assertThat(genipSuggestions).contains("Mamoncillo")
         assertThat(spanishLimeSuggestions).contains("Mamoncillo")
+        assertThat(abioSuggestions).contains("Abiu")
+        assertThat(caimitoAmarilloSuggestions).contains("Abiu")
     }
 
     @Test
@@ -89,10 +100,16 @@ class BloomForecastEngineTest {
             .isEqualTo("Soursop")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Melicocca bijuga"))
             .isEqualTo("Mamoncillo")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Pouteria caimito"))
+            .isEqualTo("Abiu")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Achras caimito"))
+            .isEqualTo("Abiu")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("mamoncillo chino"))
             .isEqualTo("Longan")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("lime")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("genipa")).isNull()
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("caimito"))
+            .isEqualTo("Caimito (star apple)")
     }
 
     @Test
@@ -218,6 +235,20 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(mamoncilloCultivars.getValue("Large").pollinationRequirement)
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesAbiuCultivarsAndPollinationMetadata() {
+        val abiuCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Abiu" }
+            .associateBy { it.cultivar }
+
+        assertThat(abiuCultivars.keys).containsExactly(
+            "Gray",
+            "Z-2"
+        )
+        assertThat(abiuCultivars.getValue("Gray").pollinationRequirement).isNull()
+        assertThat(abiuCultivars.getValue("Z-2").pollinationRequirement).isNull()
     }
 
     @Test
@@ -756,6 +787,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesAbiuAliases() {
+        val grayMatch = BloomForecastEngine.resolveCultivarAutocomplete("Gray", "Abiu")
+        val z2Match = BloomForecastEngine.resolveCultivarAutocomplete("Z2", "Pouteria caimito")
+
+        assertThat(grayMatch?.cultivar).isEqualTo("Gray")
+        assertThat(z2Match?.cultivar).isEqualTo("Z-2")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -987,10 +1027,17 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Chrysophyllum cainito", "Haitian Star"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
-        assertThat(BloomForecastEngine.pollinationRequirementFor("Achras caimito", "Blanco Star"))
-            .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesAbiuSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Abiu")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Pouteria caimito")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Achras caimito")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Abio", "Gray")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lucuma caimito", "Z2")).isNull()
     }
 
     @Test
@@ -1429,6 +1476,50 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
         assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(julyWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesAbiuPrimaryBloomWindow() {
+        val abiuTree = TreeEntity(
+            id = "abiu-1",
+            orchardName = "Home",
+            sectionName = "Sapotaceae",
+            nickname = null,
+            species = "Pouteria caimito",
+            cultivar = "Gray",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val mayWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(abiuTree),
+            yearMonth = YearMonth.of(2026, 5),
+            zoneCode = "10b"
+        )
+        val septemberWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(abiuTree),
+            yearMonth = YearMonth.of(2026, 9),
+            zoneCode = "10b"
+        )
+
+        assertThat(mayWindow).hasSize(1)
+        assertThat(mayWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 5, 1))
+        assertThat(mayWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(septemberWindow).isEmpty()
     }
 
     @Test

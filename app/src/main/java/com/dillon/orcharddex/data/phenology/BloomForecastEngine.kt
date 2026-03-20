@@ -252,6 +252,27 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile(
+            "abiu",
+            setOf(
+                "abiu",
+                "abio",
+                "abieiro",
+                "caimito amarillo",
+                "caimo",
+                "madura verde",
+                "luma",
+                "pouteria caimito",
+                "lucuma caimito",
+                "achras caimito"
+            ),
+            "10b",
+            5,
+            1,
+            92,
+            pollinationRequirement = PollinationRequirement.UNKNOWN,
+            catalogSpeciesLabel = "Abiu"
+        ),
+        SpeciesBloomProfile(
             "caimito",
             setOf(
                 "caimito",
@@ -260,8 +281,7 @@ object BloomForecastEngine {
                 "cainito",
                 "golden-leaf tree",
                 "golden leaf tree",
-                "chrysophyllum cainito",
-                "achras caimito"
+                "chrysophyllum cainito"
             ),
             "10b",
             8,
@@ -852,6 +872,8 @@ object BloomForecastEngine {
             aliases = setOf("Whitman's Fiberless", "Whitman"),
             phase = BloomPhase.MID
         ),
+        abiu("Gray"),
+        abiu("Z-2", aliases = setOf("Z2")),
         caimito(
             "Haitian Star",
             aliases = setOf("Haitian Star Apple"),
@@ -1702,6 +1724,19 @@ object BloomForecastEngine {
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun abiu(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "abiu",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Abiu",
         pollinationRequirement = pollinationRequirement
     )
 
