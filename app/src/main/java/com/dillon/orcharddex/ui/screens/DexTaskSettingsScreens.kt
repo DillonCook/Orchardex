@@ -171,12 +171,12 @@ fun DexScreen(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Wishlist") {
-                    Text("Keep target cultivars separate from owned plants, then convert them once you acquire one.")
+                SectionCard("Plant library") {
+                    Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -186,6 +186,19 @@ fun DexScreen(
                             Text(if (wishlistExpanded) "Hide wishlist" else "View wishlist")
                         }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        OutlinedTextField(
+                            value = search,
+                            onValueChange = { search = it },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Search plants or cultivars") }
+                        )
+                        OutlinedButton(onClick = { filtersVisible = true }) { Text("Filters") }
+                    }
+                    buildDexFilterSummary(speciesFilter, statusFilter, plantTypeFilter, sort)?.let {
+                        Text(it, style = MaterialTheme.typography.bodySmall)
+                    }
+                    Text("${filteredPlants.size} plants shown", style = MaterialTheme.typography.bodySmall)
                     if (wishlistExpanded) {
                         if (dex.wishlistEntries.isEmpty()) {
                             Text("No wishlist entries yet.")
@@ -216,24 +229,6 @@ fun DexScreen(
                             }
                         }
                     }
-                }
-            }
-            item {
-                SectionCard("Plant library") {
-                    Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                        OutlinedTextField(
-                            value = search,
-                            onValueChange = { search = it },
-                            modifier = Modifier.weight(1f),
-                            label = { Text("Search plants or cultivars") }
-                        )
-                        OutlinedButton(onClick = { filtersVisible = true }) { Text("Filters") }
-                    }
-                    buildDexFilterSummary(speciesFilter, statusFilter, plantTypeFilter, sort)?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text("${filteredPlants.size} plants shown", style = MaterialTheme.typography.bodySmall)
                 }
             }
             if (filteredPlants.isEmpty()) {
