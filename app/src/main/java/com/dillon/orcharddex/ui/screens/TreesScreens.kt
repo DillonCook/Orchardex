@@ -269,8 +269,16 @@ fun TreeFormScreen(
             .distinctBy(::normalizeAutocomplete)
             .sortedBy(String::lowercase)
     }
-    val speciesSuggestions = remember(state.species, speciesCatalog) {
+    val builtInSpeciesSuggestions = remember(state.species) {
+        BloomForecastEngine.speciesAutocompleteOptions(state.species)
+    }
+    val orchardSpeciesSuggestions = remember(state.species, speciesCatalog) {
         autocompleteSpeciesOptions(state.species, speciesCatalog)
+    }
+    val speciesSuggestions = remember(builtInSpeciesSuggestions, orchardSpeciesSuggestions) {
+        (builtInSpeciesSuggestions + orchardSpeciesSuggestions)
+            .distinctBy(::normalizeAutocomplete)
+            .take(8)
     }
     val builtInCultivarSuggestions = remember(state.cultivar, state.species) {
         BloomForecastEngine.cultivarAutocompleteOptions(state.cultivar, state.species)
@@ -325,9 +333,10 @@ fun TreeFormScreen(
                     value = state.species,
                     onValueChange = { input ->
                         suppressSpeciesAutocomplete = false
-                        val exactSpecies = speciesCatalog.firstOrNull {
-                            normalizeAutocomplete(it) == normalizeAutocomplete(input)
-                        }
+                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
+                            ?: speciesCatalog.firstOrNull {
+                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
+                            }
                         viewModel.update { copy(species = exactSpecies ?: input) }
                     },
                     modifier = Modifier
@@ -590,7 +599,7 @@ fun TreeFormScreen(
 }
 
 @Composable
-private fun SpeciesAutocompleteCard(
+internal fun SpeciesAutocompleteCard(
     query: String,
     suggestions: List<String>,
     onSelected: (String) -> Unit
@@ -609,7 +618,7 @@ private fun SpeciesAutocompleteCard(
 }
 
 @Composable
-private fun CultivarAutocompleteCard(
+internal fun CultivarAutocompleteCard(
     query: String,
     suggestions: List<CultivarAutocompleteOption>,
     onSelected: (CultivarAutocompleteOption) -> Unit
@@ -694,7 +703,7 @@ private fun createTreeCaptureUri(context: android.content.Context): Uri {
     )
 }
 
-private fun autocompleteSpeciesOptions(
+internal fun autocompleteSpeciesOptions(
     query: String,
     options: List<String>,
     limit: Int = 8
@@ -714,7 +723,7 @@ private fun autocompleteSpeciesOptions(
         .take(limit)
 }
 
-private fun existingCultivarAutocompleteOptions(
+internal fun existingCultivarAutocompleteOptions(
     query: String,
     speciesQuery: String,
     trees: List<TreeEntity>,
@@ -742,7 +751,7 @@ private fun existingCultivarAutocompleteOptions(
         .take(limit)
 }
 
-private fun resolveExistingCultivarAutocomplete(
+internal fun resolveExistingCultivarAutocomplete(
     query: String,
     trees: List<TreeEntity>
 ): CultivarAutocompleteOption? {
@@ -776,7 +785,7 @@ private fun autocompleteMatchScore(query: String, candidate: String): Int? = whe
     else -> null
 }
 
-private fun normalizeAutocomplete(value: String): String = value
+internal fun normalizeAutocomplete(value: String): String = value
     .trim()
     .lowercase()
     .replace("&", "and")

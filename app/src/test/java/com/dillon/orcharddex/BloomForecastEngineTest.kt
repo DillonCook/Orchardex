@@ -47,6 +47,27 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
+        val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
+        val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
+        val hybridSuggestions = BloomForecastEngine.speciesAutocompleteOptions("annona x atemoya")
+
+        assertThat(starAppleSuggestions).contains("Caimito (star apple)")
+        assertThat(scientificSuggestions).contains("Coconut")
+        assertThat(hybridSuggestions).contains("Atemoya")
+    }
+
+    @Test
+    fun resolveSpeciesAutocomplete_canonicalizesAliasesAndScientificNames() {
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("star apple"))
+            .isEqualTo("Caimito (star apple)")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("cocos nucifera"))
+            .isEqualTo("Coconut")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("annona x atemoya"))
+            .isEqualTo("Atemoya")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesLonganCultivarsAndPollinationMetadata() {
         val longanCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Longan" }
@@ -619,6 +640,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_disambiguatesMammothBySpeciesQuery() {
+        val atemoyaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Mammoth", "Atemoya")
+        val sugarAppleMatch = BloomForecastEngine.resolveCultivarAutocomplete("Mammoth", "Sugar apple")
+        val globalMatch = BloomForecastEngine.resolveCultivarAutocomplete("Mammoth")
+
+        assertThat(atemoyaMatch?.species).isEqualTo("Atemoya")
+        assertThat(atemoyaMatch?.cultivar).isEqualTo("Pink Mammoth")
+        assertThat(sugarAppleMatch?.species).isEqualTo("Sugar Apple")
+        assertThat(sugarAppleMatch?.cultivar).isEqualTo("Mammoth")
+        assertThat(globalMatch).isNull()
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesCaimitoAliases() {
         val haitianMatch = BloomForecastEngine.resolveCultivarAutocomplete("Haitian Star Apple", "Caimito (star apple)")
         val blancoMatch = BloomForecastEngine.resolveCultivarAutocomplete("Blanco Star", "Star apple")
@@ -723,6 +757,18 @@ class BloomForecastEngineTest {
         assertThat(uenfMatch?.cultivar).isEqualTo("UENF Rio Dourado")
     }
 
+    @Test
+    fun resolveCultivarAutocomplete_disambiguatesWhitmanBySpeciesQuery() {
+        val passionFruitMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Lilikoi")
+        val greenSapoteMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Green sapote")
+        val globalMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman")
+
+        assertThat(passionFruitMatch?.species).isEqualTo("Passion Fruit")
+        assertThat(passionFruitMatch?.cultivar).isEqualTo("Whitman Yellow")
+        assertThat(greenSapoteMatch?.species).isEqualTo("Green Sapote")
+        assertThat(greenSapoteMatch?.cultivar).isEqualTo("Whitman")
+        assertThat(globalMatch).isNull()
+    }
 
     @Test
     fun resolveCultivarAutocomplete_matchesPapayaAliases() {

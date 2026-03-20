@@ -87,6 +87,11 @@ data class CultivarAutocompleteOption(
     val pollinationRequirement: PollinationRequirement? = null
 )
 
+data class SpeciesAutocompleteOption(
+    val species: String,
+    val aliases: List<String> = emptyList()
+)
+
 data class EverbearingPlant(
     val treeId: String,
     val treeLabel: String,
@@ -1708,6 +1713,11 @@ object BloomForecastEngine {
         val speciesScore: Int
     )
 
+    private data class ScoredSpeciesOption(
+        val option: SpeciesAutocompleteOption,
+        val score: Int
+    )
+
     private val citrusSpeciesKeys = CitrusBloomCatalog.speciesProfiles
         .map(SpeciesBloomProfile::key)
         .toSet() - "citrus"
@@ -1715,8 +1725,22 @@ object BloomForecastEngine {
     private val speciesByKey = speciesProfiles.associateBy(SpeciesBloomProfile::key)
 
     private val speciesByAlias = speciesProfiles.flatMap { profile ->
-        (profile.aliases + profile.key).map { alias -> normalize(alias) to profile }
+        (profile.aliases + profile.key + profile.catalogSpeciesLabel.toCatalogDisplayLabel())
+            .map { alias -> normalize(alias) to profile }
     }.toMap()
+
+    private val speciesAutocompleteCatalog = speciesProfiles
+        .map { profile ->
+            val species = profile.catalogSpeciesLabel.toCatalogDisplayLabel()
+            SpeciesAutocompleteOption(
+                species = species,
+                aliases = (profile.aliases + profile.key + profile.catalogSpeciesLabel)
+                    .filterNot { normalize(it) == normalize(species) }
+                    .distinctBy(::normalize)
+                    .sortedBy(String::lowercase)
+            )
+        }
+        .distinctBy { option -> normalize(option.species) }
 
     private val cultivarAutocompleteCatalog = cultivarProfiles
         .map { profile ->
@@ -1736,6 +1760,44 @@ object BloomForecastEngine {
 
     fun supportedZoneLabels(): List<String> = UsdaZoneCatalog.zones.map(UsdaZoneDefinition::label)
 
+    fun speciesAutocompleteOptions(
+        query: String,
+        limit: Int = 8
+    ): List<String> {
+        val normalizedQuery = normalize(query)
+        if (normalizedQuery.isBlank()) return emptyList()
+        return speciesAutocompleteCatalog
+            .mapNotNull { option ->
+                val score = sequenceOf(option.species, *option.aliases.toTypedArray())
+                    .map { matchScore(normalizedQuery, normalize(it)) }
+                    .filterNotNull()
+                    .maxOrNull()
+                    ?: return@mapNotNull null
+                ScoredSpeciesOption(option = option, score = score)
+            }
+            .sortedWith(
+                compareByDescending<ScoredSpeciesOption> { it.score }
+                    .thenBy { it.option.species.lowercase() }
+            )
+            .map { it.option.species }
+            .distinctBy(::normalize)
+            .take(limit)
+    }
+
+    fun resolveSpeciesAutocomplete(query: String): String? {
+        val normalizedQuery = normalize(query)
+        if (normalizedQuery.isBlank()) return null
+        val exactMatches = speciesAutocompleteCatalog.filter { option ->
+            normalize(option.species) == normalizedQuery ||
+                option.aliases.any { normalize(it) == normalizedQuery }
+        }
+        if (exactMatches.isEmpty()) return null
+        return exactMatches
+            .map(SpeciesAutocompleteOption::species)
+            .distinctBy(::normalize)
+            .singleOrNull()
+    }
+
     fun zoneCodeFromLabel(label: String): String = UsdaZoneCatalog.zones
         .firstOrNull { it.label == label }
         ?.code
@@ -1746,7 +1808,7 @@ object BloomForecastEngine {
     fun effectiveZoneCode(code: String?): String = UsdaZoneCatalog.resolve(code).code
 
     fun supportedSpeciesCatalog(): List<String> = (
-        speciesProfiles.map { it.catalogSpeciesLabel.toCatalogDisplayLabel() } + cultivarAutocompleteCatalog.map(CultivarAutocompleteOption::species)
+        speciesAutocompleteCatalog.map(SpeciesAutocompleteOption::species) + cultivarAutocompleteCatalog.map(CultivarAutocompleteOption::species)
         )
         .distinctBy(::normalize)
         .sortedBy(String::lowercase)
@@ -1808,14 +1870,27 @@ object BloomForecastEngine {
     ): CultivarAutocompleteOption? {
         val normalizedQuery = normalize(query)
         if (normalizedQuery.isBlank()) return null
-        val exactMatches = cultivarAutocompleteCatalog.filter { option ->
-            normalize(option.cultivar) == normalizedQuery ||
-                option.aliases.any { normalize(it) == normalizedQuery }
-        }
-        if (exactMatches.isEmpty()) return null
-        return exactMatches
+        val exactMatches = cultivarAutocompleteCatalog
+            .filter { option ->
+                normalize(option.cultivar) == normalizedQuery ||
+                    option.aliases.any { normalize(it) == normalizedQuery }
+            }
             .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
-            .singleOrNull()
+        if (exactMatches.isEmpty()) return null
+
+        val speciesProfile = resolveSpeciesProfile(speciesQuery)
+        if (speciesProfile != null) {
+            val scopedMatches = exactMatches.filter { option ->
+                resolveSpeciesProfile(option.species)?.let { optionSpecies ->
+                    speciesCompatible(speciesProfile, optionSpecies.key)
+                } == true
+            }
+            if (scopedMatches.size == 1) {
+                return scopedMatches.single()
+            }
+        }
+
+        return exactMatches.singleOrNull()
     }
 
     fun everbearingPlants(trees: List<TreeEntity>): List<EverbearingPlant> = trees.mapNotNull { tree ->
@@ -1918,8 +1993,11 @@ object BloomForecastEngine {
         }
     }
 
-    private fun TreeEntity.speciesProfile(): SpeciesBloomProfile? {
-        val normalizedSpecies = normalize(species)
+    private fun TreeEntity.speciesProfile(): SpeciesBloomProfile? = resolveSpeciesProfile(species)
+
+    private fun resolveSpeciesProfile(speciesInput: String?): SpeciesBloomProfile? {
+        val normalizedSpecies = normalize(speciesInput.orEmpty())
+        if (normalizedSpecies.isBlank()) return null
         return speciesByAlias[normalizedSpecies]
             ?: speciesByAlias.entries.firstOrNull { normalizedSpecies.contains(it.key) }?.value
     }
@@ -1940,6 +2018,13 @@ object BloomForecastEngine {
     private fun speciesMatchScore(query: String?, species: String): Int {
         val normalizedQuery = normalize(query.orEmpty())
         if (normalizedQuery.isBlank()) return 0
+
+        val queryProfile = resolveSpeciesProfile(query)
+        val speciesProfile = resolveSpeciesProfile(species)
+        if (queryProfile != null && speciesProfile != null && speciesCompatible(queryProfile, speciesProfile.key)) {
+            return 4
+        }
+
         val normalizedSpecies = normalize(species)
         return when {
             normalizedSpecies == normalizedQuery -> 3

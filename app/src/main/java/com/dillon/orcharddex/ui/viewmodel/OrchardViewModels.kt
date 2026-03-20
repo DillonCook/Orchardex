@@ -18,8 +18,8 @@ import com.dillon.orcharddex.backup.BackupValidation
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.model.ActivityKind
-import com.dillon.orcharddex.data.model.CommonSpeciesSuggestions
 import com.dillon.orcharddex.data.model.EventInput
+import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.HarvestInput
@@ -41,6 +41,7 @@ import com.dillon.orcharddex.ui.epochToLocalTime
 import com.dillon.orcharddex.ui.localDateAtStartOfDay
 import com.dillon.orcharddex.ui.localDateWithTime
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -90,11 +91,18 @@ class TreesViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
-    val species = repository.observeSpeciesNames().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        CommonSpeciesSuggestions
-    )
+    val species = repository.observeSpeciesNames()
+        .map { observedSpecies ->
+            (observedSpecies + BloomForecastEngine.supportedSpeciesCatalog())
+                .filter(String::isNotBlank)
+                .distinctBy { it.trim().lowercase() }
+                .sortedBy(String::lowercase)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            BloomForecastEngine.supportedSpeciesCatalog()
+        )
     val cultivars = repository.observeCultivarNames().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),

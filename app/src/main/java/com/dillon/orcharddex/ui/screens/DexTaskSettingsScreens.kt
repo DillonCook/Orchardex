@@ -55,6 +55,7 @@ import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
+import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.OrchardRegionCatalog
 import com.dillon.orcharddex.data.preferences.AppThemeMode
@@ -656,13 +657,98 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
 @Composable
 private fun WishlistEntryDialog(viewModel: DexViewModel) {
     if (!viewModel.addDialogVisible) return
+
+    val knownTrees by viewModel.trees.collectAsStateWithLifecycle()
+    var suppressSpeciesAutocomplete by remember { mutableStateOf(false) }
+    var suppressCultivarAutocomplete by remember { mutableStateOf(false) }
+
+    val treeEntities = remember(knownTrees) { knownTrees.map { it.tree } }
+    val supportedSpecies = remember { BloomForecastEngine.supportedSpeciesCatalog() }
+    val speciesCatalog = remember(treeEntities, supportedSpecies) {
+        (treeEntities.map(TreeEntity::species) + supportedSpecies)
+            .filter(String::isNotBlank)
+            .distinctBy(::normalizeAutocomplete)
+            .sortedBy(String::lowercase)
+    }
+    val builtInSpeciesSuggestions = remember(viewModel.addSpecies) {
+        BloomForecastEngine.speciesAutocompleteOptions(viewModel.addSpecies)
+    }
+    val orchardSpeciesSuggestions = remember(viewModel.addSpecies, speciesCatalog) {
+        autocompleteSpeciesOptions(viewModel.addSpecies, speciesCatalog)
+    }
+    val speciesSuggestions = remember(builtInSpeciesSuggestions, orchardSpeciesSuggestions) {
+        (builtInSpeciesSuggestions + orchardSpeciesSuggestions)
+            .distinctBy(::normalizeAutocomplete)
+            .take(8)
+    }
+    val builtInCultivarSuggestions = remember(viewModel.addCultivar, viewModel.addSpecies) {
+        BloomForecastEngine.cultivarAutocompleteOptions(viewModel.addCultivar, viewModel.addSpecies)
+    }
+    val orchardCultivarSuggestions = remember(viewModel.addCultivar, viewModel.addSpecies, treeEntities) {
+        existingCultivarAutocompleteOptions(viewModel.addCultivar, viewModel.addSpecies, treeEntities)
+    }
+    val cultivarSuggestions = remember(builtInCultivarSuggestions, orchardCultivarSuggestions) {
+        (builtInCultivarSuggestions + orchardCultivarSuggestions)
+            .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
+            .take(8)
+    }
+
     AlertDialog(
         onDismissRequest = viewModel::hideAddDialog,
         title = { Text("Add wishlist cultivar") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                OutlinedTextField(value = viewModel.addSpecies, onValueChange = { viewModel.addSpecies = it }, label = { Text("Species") })
-                OutlinedTextField(value = viewModel.addCultivar, onValueChange = { viewModel.addCultivar = it }, label = { Text("Cultivar") })
+                OutlinedTextField(
+                    value = viewModel.addSpecies,
+                    onValueChange = { input ->
+                        suppressSpeciesAutocomplete = false
+                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
+                            ?: speciesCatalog.firstOrNull {
+                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
+                            }
+                        viewModel.addSpecies = exactSpecies ?: input
+                    },
+                    label = { Text("Species") }
+                )
+                if (!suppressSpeciesAutocomplete) {
+                    SpeciesAutocompleteCard(
+                        query = viewModel.addSpecies,
+                        suggestions = speciesSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            viewModel.addSpecies = suggestion
+                        }
+                    )
+                }
+                OutlinedTextField(
+                    value = viewModel.addCultivar,
+                    onValueChange = { input ->
+                        suppressCultivarAutocomplete = false
+                        val exactMatch = BloomForecastEngine.resolveCultivarAutocomplete(input, viewModel.addSpecies)
+                            ?: resolveExistingCultivarAutocomplete(input, treeEntities)
+                        if (exactMatch != null) {
+                            suppressSpeciesAutocomplete = true
+                            suppressCultivarAutocomplete = true
+                            viewModel.addSpecies = exactMatch.species
+                            viewModel.addCultivar = exactMatch.cultivar
+                        } else {
+                            viewModel.addCultivar = input
+                        }
+                    },
+                    label = { Text("Cultivar") }
+                )
+                if (!suppressCultivarAutocomplete) {
+                    CultivarAutocompleteCard(
+                        query = viewModel.addCultivar,
+                        suggestions = cultivarSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            suppressCultivarAutocomplete = true
+                            viewModel.addSpecies = suggestion.species
+                            viewModel.addCultivar = suggestion.cultivar
+                        }
+                    )
+                }
                 OutlinedTextField(value = viewModel.addNotes, onValueChange = { viewModel.addNotes = it }, label = { Text("Notes") })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     com.dillon.orcharddex.data.model.WishlistPriority.entries.forEach { priority ->
