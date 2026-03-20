@@ -54,16 +54,27 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesMamoncillo() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Mamoncillo")
+    }
+
+    @Test
     fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
         val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
         val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
         val hybridSuggestions = BloomForecastEngine.speciesAutocompleteOptions("annona x atemoya")
         val guanabanaSuggestions = BloomForecastEngine.speciesAutocompleteOptions("guanabana")
+        val genipSuggestions = BloomForecastEngine.speciesAutocompleteOptions("genip")
+        val spanishLimeSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spanish lime")
 
         assertThat(starAppleSuggestions).contains("Caimito (star apple)")
         assertThat(scientificSuggestions).contains("Coconut")
         assertThat(hybridSuggestions).contains("Atemoya")
         assertThat(guanabanaSuggestions).contains("Soursop")
+        assertThat(genipSuggestions).contains("Mamoncillo")
+        assertThat(spanishLimeSuggestions).contains("Mamoncillo")
     }
 
     @Test
@@ -76,6 +87,12 @@ class BloomForecastEngineTest {
             .isEqualTo("Atemoya")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("guanabana"))
             .isEqualTo("Soursop")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Melicocca bijuga"))
+            .isEqualTo("Mamoncillo")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("mamoncillo chino"))
+            .isEqualTo("Longan")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("lime")).isNull()
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("genipa")).isNull()
     }
 
     @Test
@@ -182,6 +199,25 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(soursopCultivars.getValue("Whitman Fiberless").pollinationRequirement)
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesMamoncilloCultivarsAndPollinationMetadata() {
+        val mamoncilloCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Mamoncillo" }
+            .associateBy { it.cultivar }
+
+        assertThat(mamoncilloCultivars.keys).containsExactly(
+            "Montgomery",
+            "Jose Pabon",
+            "Large"
+        )
+        assertThat(mamoncilloCultivars.getValue("Montgomery").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(mamoncilloCultivars.getValue("Jose Pabon").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(mamoncilloCultivars.getValue("Large").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
     }
 
     @Test
@@ -711,6 +747,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesMamoncilloAliases() {
+        val josePabonMatch = BloomForecastEngine.resolveCultivarAutocomplete("José Pabón", "Mamoncillo")
+        val largeMatch = BloomForecastEngine.resolveCultivarAutocomplete("Large", "Spanish lime")
+
+        assertThat(josePabonMatch?.cultivar).isEqualTo("Jose Pabon")
+        assertThat(largeMatch?.cultivar).isEqualTo("Large")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -977,6 +1022,20 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Graviola", "Sweet guanabana"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesMamoncilloSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mamoncillo"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Genip"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Melicoccus bijugatus", "José Pabón"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Spanish lime", "Montgomery"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mamoncillo chino", "Petch Sakorn"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
     }
 
     @Test
@@ -1326,6 +1385,50 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
         assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(augustWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesMamoncilloPrimaryBloomWindow() {
+        val mamoncilloTree = TreeEntity(
+            id = "mamoncillo-1",
+            orchardName = "Home",
+            sectionName = "Sapindaceae",
+            nickname = null,
+            species = "Melicoccus bijugatus",
+            cultivar = "Montgomery",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mamoncilloTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val julyWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mamoncilloTree),
+            yearMonth = YearMonth.of(2026, 7),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(julyWindow).isEmpty()
     }
 
     @Test

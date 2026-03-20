@@ -200,6 +200,26 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         SpeciesBloomProfile(
+            "mamoncillo",
+            setOf(
+                "mamoncillo",
+                "genip",
+                "ginep",
+                "guenepa",
+                "guinep",
+                "quenepa",
+                "quenepe",
+                "spanish lime",
+                "melicoccus bijugatus",
+                "melicocca bijuga"
+            ),
+            "10b",
+            4,
+            1,
+            61,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        SpeciesBloomProfile(
             "atemoya",
             setOf(
                 "atemoya",
@@ -755,6 +775,25 @@ object BloomForecastEngine {
             aliases = setOf("Petch Sakorn"),
             phase = BloomPhase.LATE,
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "mamoncillo",
+            "Montgomery",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "mamoncillo",
+            "Jose Pabon",
+            aliases = setOf("José Pabón"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        CultivarBloomProfile(
+            "mamoncillo",
+            "Large",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
         ),
         CultivarBloomProfile(
             "atemoya",
