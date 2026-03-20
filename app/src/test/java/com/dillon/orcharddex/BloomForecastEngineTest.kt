@@ -68,6 +68,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesAmbarellaJunePlum() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Ambarella (June plum)")
+    }
+
+    @Test
     fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
         val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
         val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
@@ -77,6 +84,9 @@ class BloomForecastEngineTest {
         val spanishLimeSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spanish lime")
         val abioSuggestions = BloomForecastEngine.speciesAutocompleteOptions("abio")
         val caimitoAmarilloSuggestions = BloomForecastEngine.speciesAutocompleteOptions("caimito amarillo")
+        val junePlumSuggestions = BloomForecastEngine.speciesAutocompleteOptions("june plum")
+        val spondiasDulcisSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spondias dulcis")
+        val spondiasCythereaSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spondias cytherea")
 
         assertThat(starAppleSuggestions).contains("Caimito (star apple)")
         assertThat(scientificSuggestions).contains("Coconut")
@@ -86,6 +96,9 @@ class BloomForecastEngineTest {
         assertThat(spanishLimeSuggestions).contains("Mamoncillo")
         assertThat(abioSuggestions).contains("Abiu")
         assertThat(caimitoAmarilloSuggestions).contains("Abiu")
+        assertThat(junePlumSuggestions).contains("Ambarella (June plum)")
+        assertThat(spondiasDulcisSuggestions).contains("Ambarella (June plum)")
+        assertThat(spondiasCythereaSuggestions).contains("Ambarella (June plum)")
     }
 
     @Test
@@ -104,10 +117,19 @@ class BloomForecastEngineTest {
             .isEqualTo("Abiu")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Achras caimito"))
             .isEqualTo("Abiu")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("June plum"))
+            .isEqualTo("Ambarella (June plum)")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Spondias dulcis"))
+            .isEqualTo("Ambarella (June plum)")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Spondias cytherea"))
+            .isEqualTo("Ambarella (June plum)")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("mamoncillo chino"))
             .isEqualTo("Longan")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("lime")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("genipa")).isNull()
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("jocote")).isNull()
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("yellow mombin")).isNull()
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("spondias")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("caimito"))
             .isEqualTo("Caimito (star apple)")
     }
@@ -1041,6 +1063,14 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun pollinationRequirementFor_resolvesAmbarellaSpeciesDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Ambarella (June plum)")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("June plum")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Spondias dulcis")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Spondias cytherea")).isNull()
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCoconutSpeciesAndCultivarDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut palm")).isNull()
@@ -1520,6 +1550,50 @@ class BloomForecastEngineTest {
         assertThat(mayWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 5, 1))
         assertThat(mayWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(septemberWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesAmbarellaPrimaryBloomWindow() {
+        val ambarellaTree = TreeEntity(
+            id = "ambarella-1",
+            orchardName = "Home",
+            sectionName = "Spondias",
+            nickname = null,
+            species = "Spondias dulcis",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(ambarellaTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val augustWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(ambarellaTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("species baseline")
+        assertThat(augustWindow).isEmpty()
     }
 
     @Test

@@ -273,6 +273,23 @@ object BloomForecastEngine {
             catalogSpeciesLabel = "Abiu"
         ),
         SpeciesBloomProfile(
+            "ambarella",
+            setOf(
+                "ambarella",
+                "june plum",
+                "juneplum",
+                "otaheite apple",
+                "spondias dulcis",
+                "spondias cytherea"
+            ),
+            "10b",
+            4,
+            1,
+            92,
+            pollinationRequirement = PollinationRequirement.UNKNOWN,
+            catalogSpeciesLabel = "Ambarella (June plum)"
+        ),
+        SpeciesBloomProfile(
             "caimito",
             setOf(
                 "caimito",
