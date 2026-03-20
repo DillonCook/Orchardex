@@ -46,6 +46,7 @@ data class HarvestInput(
     val quantityUnit: String,
     val qualityRating: Int = 3,
     val firstFruit: Boolean = false,
+    val verified: Boolean = false,
     val notes: String = "",
     val photoUri: Uri? = null
 )

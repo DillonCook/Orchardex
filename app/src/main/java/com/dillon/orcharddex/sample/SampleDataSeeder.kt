@@ -155,6 +155,7 @@ class SampleDataSeeder {
         quantityUnit = unit,
         qualityRating = quality,
         firstFruit = firstFruit,
+        verified = true,
         notes = notes,
         photoPath = null,
         createdAt = System.currentTimeMillis()

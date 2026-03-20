@@ -318,6 +318,13 @@ private enum class ReminderFilterTab(val label: String) {
     COMPLETED("Completed")
 }
 
+private enum class TaskBoardStat(val label: String) {
+    OPEN("Open"),
+    OVERDUE("Overdue"),
+    DUE_IN_7_DAYS("Due in 7 days"),
+    DONE_OR_PAUSED("Done or paused")
+}
+
 @Composable
 fun TasksScreen(
     viewModel: ReminderListViewModel,
@@ -330,6 +337,7 @@ fun TasksScreen(
     var treeFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var speciesFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var completeReminderId by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedTaskBoardStat by rememberSaveable { mutableStateOf<TaskBoardStat?>(null) }
 
     val now = System.currentTimeMillis()
     val dueSoonCutoff = now + 7L * 24 * 60 * 60 * 1000
@@ -373,6 +381,20 @@ fun TasksScreen(
         )
     }
 
+    selectedTaskBoardStat?.let { stat ->
+        TaskBoardDetailDialog(
+            stat = stat,
+            reminders = reminders,
+            now = now,
+            dueSoonCutoff = dueSoonCutoff,
+            onDismiss = { selectedTaskBoardStat = null },
+            onOpenReminder = { reminderId ->
+                selectedTaskBoardStat = null
+                onEditReminder(reminderId)
+            }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(onClick = onAddReminder, shape = RoundedCornerShape(16.dp)) {
@@ -389,10 +411,10 @@ fun TasksScreen(
                 SectionCard("Task board") {
                     Text("Scan overdue tasks first, then work through the next 7 days.")
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatCard("Open", reminders.count { it.reminder.completedAt == null && it.reminder.enabled }.toString())
-                        StatCard("Overdue", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt < now }.toString())
-                        StatCard("Due in 7 days", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt in now..dueSoonCutoff }.toString())
-                        StatCard("Done or paused", reminders.count { it.reminder.completedAt != null || !it.reminder.enabled }.toString())
+                        StatCard("Open", reminders.count { it.reminder.completedAt == null && it.reminder.enabled }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.OPEN })
+                        StatCard("Overdue", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt < now }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.OVERDUE })
+                        StatCard("Due in 7 days", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt in now..dueSoonCutoff }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.DUE_IN_7_DAYS })
+                        StatCard("Done or paused", reminders.count { it.reminder.completedAt != null || !it.reminder.enabled }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.DONE_OR_PAUSED })
                     }
                 }
             }
@@ -427,6 +449,75 @@ fun TasksScreen(
             }
         }
     }
+}
+
+@Composable
+private fun TaskBoardDetailDialog(
+    stat: TaskBoardStat,
+    reminders: List<com.dillon.orcharddex.data.model.ReminderListItem>,
+    now: Long,
+    dueSoonCutoff: Long,
+    onDismiss: () -> Unit,
+    onOpenReminder: (String) -> Unit
+) {
+    val matchingItems = reminders.filter { stat.matches(it.reminder, now, dueSoonCutoff) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stat.label) },
+        text = {
+            if (matchingItems.isEmpty()) {
+                Text(stat.emptyMessage())
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(matchingItems, key = { it.reminder.id }) { item ->
+                        TaskBoardDetailRow(item = item, onClick = { onOpenReminder(item.reminder.id) })
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
+@Composable
+private fun TaskBoardDetailRow(
+    item: com.dillon.orcharddex.data.model.ReminderListItem,
+    onClick: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(item.reminder.title, style = MaterialTheme.typography.titleMedium)
+            Text(item.treeLabel ?: "General orchard", style = MaterialTheme.typography.bodySmall)
+            Text(item.reminder.dueLine(), style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+private fun TaskBoardStat.matches(reminder: ReminderEntity, now: Long, dueSoonCutoff: Long): Boolean = when (this) {
+    TaskBoardStat.OPEN -> reminder.completedAt == null && reminder.enabled
+    TaskBoardStat.OVERDUE -> reminder.completedAt == null && reminder.enabled && reminder.dueAt < now
+    TaskBoardStat.DUE_IN_7_DAYS -> reminder.completedAt == null && reminder.enabled && reminder.dueAt in now..dueSoonCutoff
+    TaskBoardStat.DONE_OR_PAUSED -> reminder.completedAt != null || !reminder.enabled
+}
+
+private fun TaskBoardStat.emptyMessage(): String = when (this) {
+    TaskBoardStat.OPEN -> "No open tasks right now."
+    TaskBoardStat.OVERDUE -> "No overdue tasks right now."
+    TaskBoardStat.DUE_IN_7_DAYS -> "Nothing due in the next 7 days."
+    TaskBoardStat.DONE_OR_PAUSED -> "No done or paused tasks yet."
 }
 
 @Composable

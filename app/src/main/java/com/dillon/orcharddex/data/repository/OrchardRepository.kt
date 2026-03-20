@@ -476,6 +476,7 @@ class OrchardRepository(
                 quantityUnit = input.quantityUnit.trim(),
                 qualityRating = input.qualityRating,
                 firstFruit = input.firstFruit,
+                verified = input.verified,
                 notes = input.notes.trim(),
                 photoPath = photoPath,
                 createdAt = System.currentTimeMillis()
@@ -717,6 +718,7 @@ class OrchardRepository(
                         quantityUnit = harvest.quantityUnit,
                         qualityRating = harvest.qualityRating,
                         firstFruit = harvest.firstFruit,
+                        verified = harvest.verified,
                         photoPath = harvest.photoPath
                     )
                 }
@@ -761,6 +763,7 @@ private fun buildHarvestPreview(harvest: HarvestEntity): String = listOfNotNull(
     "${harvest.quantityValue.trimmed()} ${harvest.quantityUnit}".trim(),
     "Quality ${harvest.qualityRating}/5",
     "First fruit".takeIf { harvest.firstFruit },
+    if (harvest.verified) "Verified received" else "Awaiting verification",
     harvest.notes.takeIf(String::isNotBlank)
 ).joinToString(" - ")
 

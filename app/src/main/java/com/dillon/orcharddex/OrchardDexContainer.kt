@@ -18,7 +18,7 @@ class OrchardDexContainer(context: Context) {
         OrchardDexDatabase::class.java,
         OrchardDexDatabase.DB_NAME
     )
-        .addMigrations(OrchardDexDatabase.MIGRATION_1_2)
+        .addMigrations(OrchardDexDatabase.MIGRATION_1_2, OrchardDexDatabase.MIGRATION_2_3)
         .fallbackToDestructiveMigration()
         .build()
 

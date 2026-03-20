@@ -320,6 +320,11 @@ fun HarvestFormScreen(
             onClick = { viewModel.update { copy(firstFruit = !state.firstFruit) } },
             label = { Text("First fruit") }
         )
+        FilterChip(
+            selected = state.verified,
+            onClick = { viewModel.update { copy(verified = !state.verified) } },
+            label = { Text("Harvest received / verified") }
+        )
         OutlinedTextField(
             value = state.notes,
             onValueChange = { viewModel.update { copy(notes = it) } },

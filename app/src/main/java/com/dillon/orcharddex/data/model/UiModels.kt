@@ -54,6 +54,7 @@ data class HistoryEntryModel(
     val cost: Double? = null,
     val qualityRating: Int? = null,
     val firstFruit: Boolean = false,
+    val verified: Boolean = false,
     val photoPath: String? = null
 )
 

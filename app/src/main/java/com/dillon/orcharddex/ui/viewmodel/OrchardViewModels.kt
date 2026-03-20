@@ -437,6 +437,7 @@ data class HarvestFormState(
     val quantityUnit: String = "fruit",
     val qualityRating: Int = 3,
     val firstFruit: Boolean = false,
+    val verified: Boolean = false,
     val notes: String = "",
     val photoUri: Uri? = null,
     val isSaving: Boolean = false,
@@ -478,6 +479,7 @@ class HarvestFormViewModel(
                     quantityUnit = state.quantityUnit,
                     qualityRating = state.qualityRating,
                     firstFruit = state.firstFruit,
+                    verified = state.verified,
                     notes = state.notes,
                     photoUri = state.photoUri
                 )

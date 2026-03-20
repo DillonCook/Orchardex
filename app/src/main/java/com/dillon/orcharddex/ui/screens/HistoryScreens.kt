@@ -80,6 +80,7 @@ fun HistoryScreen(
     var search by rememberSaveable { mutableStateOf("") }
     var quickFilter by rememberSaveable { mutableStateOf(HistoryQuickFilter.ALL) }
     var addMenuVisible by rememberSaveable { mutableStateOf(false) }
+    var showSeasonalTrackerDialog by rememberSaveable { mutableStateOf(false) }
 
     val filteredHistory = remember(history, search, quickFilter) {
         val query = search.trim().lowercase()
@@ -90,7 +91,14 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         filteredHistory.groupBy { it.date.monthBucketLabel() }.toList()
     }
-    val totalHarvests = remember(history) { history.count { it.kind == ActivityKind.HARVEST } }
+    val currentSeasonYear = remember { java.time.Year.now().value }
+    val seasonalVerifiedHarvests = remember(history, currentSeasonYear) {
+        history.filter { entry ->
+            entry.kind == ActivityKind.HARVEST &&
+                entry.verified &&
+                Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year == currentSeasonYear
+        }
+    }
 
     if (addMenuVisible) {
         AlertDialog(
@@ -126,6 +134,38 @@ fun HistoryScreen(
         )
     }
 
+    if (showSeasonalTrackerDialog) {
+        AlertDialog(
+            onDismissRequest = { showSeasonalTrackerDialog = false },
+            title = { Text("Seasonal harvest tracker") },
+            text = {
+                if (seasonalVerifiedHarvests.isEmpty()) {
+                    Text("No verified harvests logged for the current calendar year.")
+                } else {
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(seasonalVerifiedHarvests, key = { it.id }) { entry ->
+                            SeasonalHarvestRow(
+                                entry = entry,
+                                onClick = {
+                                    showSeasonalTrackerDialog = false
+                                    onEntryClick(entry.kind, entry.id)
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSeasonalTrackerDialog = false }) {
+                    Text("Close")
+                }
+            }
+        )
+    }
+
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
@@ -145,12 +185,17 @@ fun HistoryScreen(
             item {
                 SectionCard("Harvests") {
                     Text(
-                        text = "Total seasonal harvests logged across all tracked plants.",
+                        text = "Verified harvests received this calendar year across all tracked plants.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     com.dillon.orcharddex.ui.components.StatCard(
-                        label = "Seasonal harvests logged",
-                        value = totalHarvests.toString()
+                        label = "Seasonal harvest tracker",
+                        value = seasonalVerifiedHarvests.size.toString(),
+                        onClick = { showSeasonalTrackerDialog = true }
+                    )
+                    Text(
+                        text = "Tap to review verified harvests in the current calendar year.",
+                        style = MaterialTheme.typography.bodySmall
                     )
                 }
             }
@@ -269,6 +314,9 @@ fun HistoryDetailScreen(
                             }
                             historyEntry.cost?.let { CompactFact("Cost", "$${it.displayAmount()}") }
                             historyEntry.qualityRating?.let { CompactFact("Quality", "$it/5") }
+                            if (historyEntry.kind == ActivityKind.HARVEST) {
+                                CompactFact("Verified", if (historyEntry.verified) "Yes" else "No")
+                            }
                             CompactFact("Species", historyEntry.species)
                             CompactFact("Cultivar", historyEntry.cultivar)
                             if (historyEntry.firstFruit) {
@@ -384,6 +432,28 @@ private fun HistoryRow(
     }
 }
 
+@Composable
+private fun SeasonalHarvestRow(
+    entry: HistoryEntryModel,
+    onClick: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(entry.treeLabel, style = MaterialTheme.typography.titleMedium)
+            Text(entry.species, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(entry.preview, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
 private fun HistoryQuickFilter.matches(entry: HistoryEntryModel): Boolean = when (this) {
     HistoryQuickFilter.ALL -> true
     HistoryQuickFilter.EVENTS -> entry.kind == ActivityKind.EVENT
@@ -434,6 +504,9 @@ private fun HistoryEntryModel.rowMetaLine(): String = buildString {
     }
     if (firstFruit) {
         append(" - first fruit")
+    }
+    if (kind == ActivityKind.HARVEST) {
+        append(if (verified) " - verified" else " - unverified")
     }
 }
 

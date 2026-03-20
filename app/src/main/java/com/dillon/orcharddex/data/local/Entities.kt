@@ -119,6 +119,7 @@ data class HarvestEntity(
     val quantityUnit: String,
     val qualityRating: Int,
     val firstFruit: Boolean,
+    val verified: Boolean = true,
     val notes: String,
     val photoPath: String?,
     val createdAt: Long
