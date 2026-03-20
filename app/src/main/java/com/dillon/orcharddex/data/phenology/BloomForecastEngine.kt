@@ -290,6 +290,27 @@ object BloomForecastEngine {
         ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile(
+            "canistel",
+            setOf(
+                "canistel",
+                "eggfruit",
+                "egg fruit",
+                "egg-fruit",
+                "yellow sapote",
+                "zapote amarillo",
+                "pouteria campechiana",
+                "lucuma campechiana",
+                "lucuma nervosa",
+                "pouteria campechiana var nervosa",
+                "pouteria campechiana var palmeri"
+            ),
+            "10b",
+            1,
+            15,
+            165,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        SpeciesBloomProfile(
             "black sapote",
             setOf(
                 "black sapote",
@@ -1236,6 +1257,15 @@ object BloomForecastEngine {
         papaya("Golden"),
         papaya("Calimosa"),
         papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01")),
+        canistel("Bruce"),
+        canistel("Fairchild #1", aliases = setOf("Fairchild 1")),
+        canistel("Fairchild #2", aliases = setOf("Fairchild 2")),
+        canistel("Fitzpatrick"),
+        canistel("Keisau"),
+        canistel("Oro"),
+        canistel("Trompo"),
+        canistel("TREC 9680", aliases = setOf("TREC9680")),
+        canistel("TREC 9681", aliases = setOf("TREC9681")),
         blackSapote("Merida", aliases = setOf("Reineke", "Reinecke")),
         blackSapote("Bernicker", aliases = setOf("Bernecker")),
         blackSapote("Mossman"),
@@ -1311,6 +1341,18 @@ object BloomForecastEngine {
         pollinationRequirement: PollinationRequirement? = null
     ) = CultivarBloomProfile(
         speciesKey = "papaya",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun canistel(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "canistel",
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,

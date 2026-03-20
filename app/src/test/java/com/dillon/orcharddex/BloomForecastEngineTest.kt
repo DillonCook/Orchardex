@@ -350,6 +350,29 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesCanistelSeedSetAndPollinationMetadata() {
+        val canistelCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Canistel" }
+            .associateBy { it.cultivar }
+
+        assertThat(canistelCultivars.keys).containsAtLeast(
+            "Bruce",
+            "Fairchild #1",
+            "Fairchild #2",
+            "Fitzpatrick",
+            "Keisau",
+            "Oro",
+            "Trompo",
+            "TREC 9680",
+            "TREC 9681"
+        )
+        assertThat(canistelCultivars.getValue("Bruce").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(canistelCultivars.getValue("TREC 9680").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesBlackSapoteSeedSetAndPollinationMetadata() {
         val blackSapoteCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Black Sapote" }
@@ -554,6 +577,20 @@ class BloomForecastEngineTest {
 
 
     @Test
+    fun resolveCultivarAutocomplete_matchesCanistelAliases() {
+        val fairchildOneMatch = BloomForecastEngine.resolveCultivarAutocomplete("Fairchild 1", "Eggfruit")
+        val fairchildTwoMatch = BloomForecastEngine.resolveCultivarAutocomplete("Fairchild 2", "Pouteria campechiana")
+        val trecMatch = BloomForecastEngine.resolveCultivarAutocomplete("TREC9680", "Lucuma nervosa")
+        val bruceMatch = BloomForecastEngine.resolveCultivarAutocomplete("Bruce", "Zapote amarillo")
+
+        assertThat(fairchildOneMatch?.cultivar).isEqualTo("Fairchild #1")
+        assertThat(fairchildTwoMatch?.cultivar).isEqualTo("Fairchild #2")
+        assertThat(trecMatch?.cultivar).isEqualTo("TREC 9680")
+        assertThat(bruceMatch?.cultivar).isEqualTo("Bruce")
+    }
+
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBlackSapoteAliases() {
         val meridaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Reineke", "Black sapote")
         val reineckeMatch = BloomForecastEngine.resolveCultivarAutocomplete("Reinecke", "Diospyros nigra")
@@ -681,6 +718,14 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Sugar cane")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Saccharum spp.", "Yellow Gal")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Sugarcane (cultivated hybrid complex)", "CP01-1372")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Canistel"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Eggfruit", "Fairchild 1"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Pouteria campechiana", "Bruce"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lucuma nervosa", "TREC9681"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Black sapote"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Diospyros nigra", "Reineke"))
@@ -1099,6 +1144,49 @@ class BloomForecastEngineTest {
         )
 
         assertThat(windows).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesCanistelPrimaryBloomWindow() {
+        val canistelTree = TreeEntity(
+            id = "canistel-1",
+            orchardName = "Home",
+            sectionName = "Sapotes",
+            nickname = null,
+            species = "Eggfruit",
+            cultivar = "Bruce",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val februaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(canistelTree),
+            yearMonth = YearMonth.of(2026, 2),
+            zoneCode = "10b"
+        )
+        val julyWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(canistelTree),
+            yearMonth = YearMonth.of(2026, 7),
+            zoneCode = "10b"
+        )
+
+        assertThat(februaryWindow).hasSize(1)
+        assertThat(februaryWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 1, 15))
+        assertThat(julyWindow).isEmpty()
     }
 
     @Test
