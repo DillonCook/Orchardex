@@ -371,6 +371,22 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesGreenSapoteSparseSeedSet() {
+        val greenSapoteCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Green Sapote" }
+            .associateBy { it.cultivar }
+
+        assertThat(greenSapoteCultivars.keys).containsExactly(
+            "UF/TREC selection",
+            "Whitman"
+        )
+        assertThat(greenSapoteCultivars.getValue("UF/TREC selection").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(greenSapoteCultivars.getValue("Whitman").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -550,6 +566,20 @@ class BloomForecastEngineTest {
         assertThat(lateMatch?.cultivar).isEqualTo("Ricks Late")
     }
 
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesGreenSapoteAliases() {
+        val selectionMatch = BloomForecastEngine.resolveCultivarAutocomplete("UF/TREC selection", "Green sapote")
+        val whitmanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Pouteria viridis")
+        val calocarpumMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Calocarpum viride")
+        val injertoMatch = BloomForecastEngine.resolveCultivarAutocomplete("UF/TREC selection", "Zapote injerto")
+
+        assertThat(selectionMatch?.cultivar).isEqualTo("UF/TREC selection")
+        assertThat(whitmanMatch?.cultivar).isEqualTo("Whitman")
+        assertThat(calocarpumMatch?.cultivar).isEqualTo("Whitman")
+        assertThat(injertoMatch?.cultivar).isEqualTo("UF/TREC selection")
+    }
+
     @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
@@ -659,6 +689,14 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Diospyros digyna", "Superb"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Green sapote"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Pouteria viridis", "UF/TREC selection"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Calocarpum viride", "Whitman"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Injerto", "Whitman"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
     @Test
@@ -1104,6 +1142,49 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow).hasSize(1)
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 3, 15))
         assertThat(februaryWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesGreenSapotePrimaryBloomWindow() {
+        val greenSapoteTree = TreeEntity(
+            id = "green-sapote-1",
+            orchardName = "Home",
+            sectionName = "Sapotes",
+            nickname = null,
+            species = "Calocarpum viride",
+            cultivar = "UF/TREC selection",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val marchWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(greenSapoteTree),
+            yearMonth = YearMonth.of(2026, 3),
+            zoneCode = "10b"
+        )
+        val januaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(greenSapoteTree),
+            yearMonth = YearMonth.of(2026, 1),
+            zoneCode = "10b"
+        )
+
+        assertThat(marchWindow).hasSize(1)
+        assertThat(marchWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 15))
+        assertThat(januaryWindow).isEmpty()
     }
 
     @Test

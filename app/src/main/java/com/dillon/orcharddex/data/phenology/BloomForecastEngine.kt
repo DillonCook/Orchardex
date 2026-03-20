@@ -309,6 +309,26 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile(
+            "green sapote",
+            setOf(
+                "green sapote",
+                "pouteria viridis",
+                "calocarpum viride",
+                "achradelpha viridis",
+                "injerto",
+                "injerto verde",
+                "raxtul",
+                "zapote injerto",
+                "white faisan",
+                "red faisan"
+            ),
+            "10b",
+            2,
+            15,
+            75,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        SpeciesBloomProfile(
             "white sapote",
             setOf("white sapote", "casimiroa edulis", "zapote blanco", "casimiroa"),
             "10b",
@@ -1223,6 +1243,8 @@ object BloomForecastEngine {
         blackSapote("Ricks Late", aliases = setOf("Rick's Late")),
         blackSapote("Superb"),
         blackSapote("Cocktail"),
+        greenSapote("UF/TREC selection"),
+        greenSapote("Whitman"),
         whiteSapote(
             "Blumenthal",
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
@@ -1301,6 +1323,18 @@ object BloomForecastEngine {
         pollinationRequirement: PollinationRequirement? = null
     ) = CultivarBloomProfile(
         speciesKey = "black sapote",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun greenSapote(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "green sapote",
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
