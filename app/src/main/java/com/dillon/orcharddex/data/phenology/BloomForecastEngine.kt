@@ -1,6 +1,7 @@
 package com.dillon.orcharddex.data.phenology
 
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import java.time.LocalDate
@@ -2139,6 +2140,28 @@ object BloomForecastEngine {
         .distinctBy { normalize(it.species) }
         .sortedBy { it.species.lowercase() }
 
+    fun catalogBloomTimingLabelFor(
+        speciesInput: String,
+        cultivarInput: String = ""
+    ): String? {
+        val speciesProfile = resolveSpeciesProfile(speciesInput) ?: return null
+        val cultivarMatch = matchCultivarProfile(speciesProfile, cultivarInput)
+        val phase = cultivarMatch?.phase ?: speciesProfile.defaultPhase
+        return when (speciesProfile.forecastBehavior) {
+            BloomForecastBehavior.WINDOW -> {
+                val startDate = LocalDate.of(2026, speciesProfile.startMonth, speciesProfile.startDay)
+                    .plusDays(phase.startOffsetDays.toLong())
+                val endDate = startDate.plusDays(speciesProfile.durationDays)
+                "Catalog default · USDA ${speciesProfile.referenceZoneCode.uppercase()} · ${startDate.format(catalogMonthDayFormatter)}–${endDate.format(catalogMonthDayFormatter)}"
+            }
+            BloomForecastBehavior.MANUAL_ONLY -> "Catalog default · Continuous / repeat-bearing"
+            BloomForecastBehavior.SUPPRESSED -> "Catalog default · No automatic bloom-season forecast"
+        }
+    }
+
+    fun customBloomTimingSummaryLabel(tree: TreeEntity): String? = tree.customBloomWindowForYear(2026)
+        ?.let { window -> "${window.startDate.format(catalogMonthDayFormatter)}–${window.endDate.format(catalogMonthDayFormatter)}" }
+
     fun pollinationRequirementFor(
         speciesInput: String,
         cultivarInput: String = ""
@@ -2209,6 +2232,9 @@ object BloomForecastEngine {
     }
 
     fun everbearingPlants(trees: List<TreeEntity>): List<EverbearingPlant> = trees.mapNotNull { tree ->
+        if (tree.bloomTimingMode == BloomTimingMode.CUSTOM) {
+            return@mapNotNull null
+        }
         val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
         if (profileMatch.profile.forecastBehavior != BloomForecastBehavior.MANUAL_ONLY) {
             return@mapNotNull null
@@ -2222,35 +2248,37 @@ object BloomForecastEngine {
     }.sortedWith(compareBy({ it.speciesLabel.lowercase() }, { it.treeLabel.lowercase() }))
 
     fun plantBloomCountdownLabel(tree: TreeEntity, zoneCode: String?): String? {
+        val today = LocalDate.now()
+        val currentMonth = YearMonth.from(today)
+        val nextWindow = generateSequence(0L) { it + 1 }
+            .take(18)
+            .mapNotNull { offset ->
+                predictMonth(
+                    trees = listOf(tree),
+                    yearMonth = currentMonth.plusMonths(offset),
+                    zoneCode = zoneCode,
+                    orchardRegionCode = null
+                ).firstOrNull()
+            }
+            .firstOrNull { window -> !window.endDate.isBefore(today) }
+
+        if (nextWindow != null) {
+            return if (!today.isBefore(nextWindow.startDate) && !today.isAfter(nextWindow.endDate)) {
+                "Now"
+            } else {
+                "${java.time.temporal.ChronoUnit.DAYS.between(today, nextWindow.startDate)}d"
+            }
+        }
+
+        if (tree.bloomTimingMode == BloomTimingMode.CUSTOM) {
+            return "Unknown"
+        }
+
         val profileMatch = tree.resolveProfileMatch() ?: return null
         return when (profileMatch.profile.forecastBehavior) {
             BloomForecastBehavior.SUPPRESSED -> null
             BloomForecastBehavior.MANUAL_ONLY -> "Ongoing"
-            BloomForecastBehavior.WINDOW -> {
-                if (zoneCode.isNullOrBlank()) {
-                    return "Unknown"
-                }
-                val today = LocalDate.now()
-                val currentMonth = YearMonth.from(today)
-                val nextWindow = generateSequence(0L) { it + 1 }
-                    .take(18)
-                    .mapNotNull { offset ->
-                        predictMonth(
-                            trees = listOf(tree),
-                            yearMonth = currentMonth.plusMonths(offset),
-                            zoneCode = zoneCode,
-                            orchardRegionCode = null
-                        ).firstOrNull()
-                    }
-                    .firstOrNull { window -> !window.endDate.isBefore(today) }
-                    ?: return "Unknown"
-
-                if (!today.isBefore(nextWindow.startDate) && !today.isAfter(nextWindow.endDate)) {
-                    "Now"
-                } else {
-                    "${java.time.temporal.ChronoUnit.DAYS.between(today, nextWindow.startDate)}d"
-                }
-            }
+            BloomForecastBehavior.WINDOW -> "Unknown"
         }
     }
 
@@ -2262,6 +2290,8 @@ object BloomForecastEngine {
     ): List<PredictedBloomWindow> {
         val targetZone = UsdaZoneCatalog.resolve(zoneCode)
         return trees.mapNotNull { tree ->
+            tree.customBloomWindowForMonth(yearMonth)?.let { return@mapNotNull it }
+
             val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
             val speciesProfile = profileMatch.profile.withRegionalOverride(orchardRegionCode)
             if (speciesProfile.forecastBehavior != BloomForecastBehavior.WINDOW) {
@@ -2323,6 +2353,28 @@ object BloomForecastEngine {
             endDate = endDate,
             phase = phase,
             sourceLabel = if (cultivarMatched) "cultivar-adjusted" else "species baseline"
+        )
+    }
+
+    private fun TreeEntity.customBloomWindowForMonth(yearMonth: YearMonth): PredictedBloomWindow? =
+        sequenceOf(yearMonth.year - 1, yearMonth.year, yearMonth.year + 1)
+            .mapNotNull { year -> customBloomWindowForYear(year) }
+            .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
+
+    private fun TreeEntity.customBloomWindowForYear(year: Int): PredictedBloomWindow? {
+        if (bloomTimingMode != BloomTimingMode.CUSTOM) return null
+        val month = customBloomStartMonth ?: return null
+        val day = customBloomStartDay ?: return null
+        val duration = customBloomDurationDays?.takeIf { it > 0 } ?: return null
+        val startDate = runCatching { LocalDate.of(year, month, day) }.getOrNull() ?: return null
+        return PredictedBloomWindow(
+            treeId = id,
+            treeLabel = displayName(),
+            speciesLabel = speciesCultivarLabel(species, cultivar),
+            startDate = startDate,
+            endDate = startDate.plusDays(duration.toLong()),
+            phase = BloomPhase.MID,
+            sourceLabel = "custom"
         )
     }
 

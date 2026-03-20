@@ -23,6 +23,10 @@ data class TreeInput(
     val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
+    val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val customBloomStartMonth: Int? = null,
+    val customBloomStartDay: Int? = null,
+    val customBloomDurationDays: Int? = null,
     val quantity: Int = 1,
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: List<String> = emptyList()

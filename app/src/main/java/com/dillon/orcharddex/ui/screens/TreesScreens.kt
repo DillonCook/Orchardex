@@ -53,6 +53,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
@@ -296,6 +297,9 @@ fun TreeFormScreen(
     }
     val pollinationRequirement = remember(state.species, state.cultivar) {
         BloomForecastEngine.pollinationRequirementFor(state.species, state.cultivar)
+    }
+    val autoBloomTimingLabel = remember(state.species, state.cultivar) {
+        BloomForecastEngine.catalogBloomTimingLabelFor(state.species, state.cultivar)
     }
 
     LazyColumn(
@@ -564,6 +568,96 @@ fun TreeFormScreen(
                             )
                         }
                     }
+                    Text(
+                        text = "Bloom timing",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Auto uses cultivar dates if known, otherwise species defaults. Custom stays on this plant only.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.bloomTimingMode == BloomTimingMode.AUTO,
+                            onClick = {
+                                viewModel.update {
+                                    copy(
+                                        bloomTimingMode = BloomTimingMode.AUTO,
+                                        customBloomStartMonth = "",
+                                        customBloomStartDay = "",
+                                        customBloomDurationDays = ""
+                                    )
+                                }
+                            },
+                            label = { Text("Auto") }
+                        )
+                        FilterChip(
+                            selected = state.bloomTimingMode == BloomTimingMode.CUSTOM,
+                            onClick = { viewModel.update { copy(bloomTimingMode = BloomTimingMode.CUSTOM) } },
+                            label = { Text("Custom") }
+                        )
+                    }
+                    if (state.bloomTimingMode == BloomTimingMode.AUTO) {
+                        Text(
+                            text = autoBloomTimingLabel ?: "No catalog bloom timing found yet. Switch to Custom if this plant needs a local override.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = state.customBloomStartMonth,
+                                onValueChange = { input ->
+                                    if (input.all(Char::isDigit)) {
+                                        viewModel.update { copy(customBloomStartMonth = input) }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Start month") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            OutlinedTextField(
+                                value = state.customBloomStartDay,
+                                onValueChange = { input ->
+                                    if (input.all(Char::isDigit)) {
+                                        viewModel.update { copy(customBloomStartDay = input) }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Start day") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        }
+                        OutlinedTextField(
+                            value = state.customBloomDurationDays,
+                            onValueChange = { input ->
+                                if (input.all(Char::isDigit)) {
+                                    viewModel.update { copy(customBloomDurationDays = input) }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Duration days") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Text(
+                            text = "Use this when the catalog timing is off locally or this cultivar is missing from the catalog.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.update {
+                                    copy(
+                                        bloomTimingMode = BloomTimingMode.AUTO,
+                                        customBloomStartMonth = "",
+                                        customBloomStartDay = "",
+                                        customBloomDurationDays = ""
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Reset to catalog")
+                        }
+                    }
                     OutlinedTextField(
                         value = state.tags,
                         onValueChange = { viewModel.update { copy(tags = it) } },
@@ -806,7 +900,11 @@ private fun com.dillon.orcharddex.ui.viewmodel.TreeFormState.hasAdvancedFieldVal
         irrigationNote.isNotBlank() ||
         status != TreeStatus.ACTIVE ||
         tags.isNotBlank() ||
-        notes.isNotBlank()
+        notes.isNotBlank() ||
+        bloomTimingMode != com.dillon.orcharddex.data.model.BloomTimingMode.AUTO ||
+        customBloomStartMonth.isNotBlank() ||
+        customBloomStartDay.isNotBlank() ||
+        customBloomDurationDays.isNotBlank()
 
 internal fun previewCultivarAliases(
     query: String,
@@ -853,6 +951,9 @@ fun TreeDetailScreen(
     }
     val pollinationRequirement = remember(item.tree.species, item.tree.cultivar) {
         BloomForecastEngine.pollinationRequirementFor(item.tree.species, item.tree.cultivar)
+    }
+    val customBloomTimingSummary = remember(item.tree) {
+        BloomForecastEngine.customBloomTimingSummaryLabel(item.tree)
     }
 
     if (viewModel.confirmDelete) {
@@ -984,6 +1085,14 @@ fun TreeDetailScreen(
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
                     CompactFact("Source", item.tree.source.orEmpty())
                     CompactFact("Pollination", pollinationRequirement?.label.orEmpty())
+                    CompactFact("Bloom dates", "Custom".takeIf { customBloomTimingSummary != null }.orEmpty())
+                }
+                customBloomTimingSummary?.let {
+                    Text(
+                        text = "Custom bloom window: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 LocalPhotoStrip(
                     existingPaths = item.photos.map { photo ->

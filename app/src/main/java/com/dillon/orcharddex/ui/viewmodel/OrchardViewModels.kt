@@ -18,6 +18,7 @@ import com.dillon.orcharddex.backup.BackupValidation
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.model.ActivityKind
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventInput
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.model.EventType
@@ -173,6 +174,10 @@ data class TreeFormState(
     val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
+    val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val customBloomStartMonth: String = "",
+    val customBloomStartDay: String = "",
+    val customBloomDurationDays: String = "",
     val quantity: String = "1",
     val existingPhotos: List<TreePhotoEntity> = emptyList(),
     val newPhotoUris: List<Uri> = emptyList(),
@@ -221,6 +226,10 @@ class TreeFormViewModel(
                         hasFruitedBefore = it.tree.hasFruitedBefore,
                         notes = it.tree.notes,
                         tags = it.tree.tags,
+                        bloomTimingMode = it.tree.bloomTimingMode,
+                        customBloomStartMonth = it.tree.customBloomStartMonth?.toString().orEmpty(),
+                        customBloomStartDay = it.tree.customBloomStartDay?.toString().orEmpty(),
+                        customBloomDurationDays = it.tree.customBloomDurationDays?.toString().orEmpty(),
                         existingPhotos = it.photos,
                         isLoading = false
                     )
@@ -262,6 +271,18 @@ class TreeFormViewModel(
             state = state.copy(errorMessage = "Quantity must be at least 1.")
             return
         }
+        val customBloomStartMonth = state.customBloomStartMonth.toIntOrNull()
+        val customBloomStartDay = state.customBloomStartDay.toIntOrNull()
+        val customBloomDurationDays = state.customBloomDurationDays.toIntOrNull()
+        if (state.bloomTimingMode == BloomTimingMode.CUSTOM) {
+            val customStartDateValid = runCatching {
+                java.time.LocalDate.of(2024, customBloomStartMonth ?: 0, customBloomStartDay ?: 0)
+            }.isSuccess
+            if (!customStartDateValid || customBloomDurationDays == null || customBloomDurationDays <= 0) {
+                state = state.copy(errorMessage = "Custom bloom timing needs a valid start month/day and duration.")
+                return
+            }
+        }
         viewModelScope.launch {
             state = state.copy(isSaving = true, errorMessage = null)
             val savedTreeId = repository.saveTree(
@@ -286,6 +307,10 @@ class TreeFormViewModel(
                     hasFruitedBefore = state.hasFruitedBefore,
                     notes = state.notes,
                     tags = state.tags,
+                    bloomTimingMode = state.bloomTimingMode,
+                    customBloomStartMonth = customBloomStartMonth,
+                    customBloomStartDay = customBloomStartDay,
+                    customBloomDurationDays = customBloomDurationDays,
                     quantity = quantity,
                     newPhotoUris = state.newPhotoUris,
                     removedPhotoIds = state.removedPhotoIds.toList()

@@ -26,6 +26,12 @@ enum class FrostSensitivityLevel {
 }
 
 @Serializable
+enum class BloomTimingMode {
+    AUTO,
+    CUSTOM
+}
+
+@Serializable
 enum class EventType {
     PLANTED,
     REPOTTED,

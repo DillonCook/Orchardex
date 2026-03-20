@@ -1,6 +1,7 @@
 package com.dillon.orcharddex.data.local
 
 import androidx.room.TypeConverter
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.LeadTimeMode
@@ -27,6 +28,12 @@ class Converters {
 
     @TypeConverter
     fun toFrostSensitivity(value: String): FrostSensitivityLevel = FrostSensitivityLevel.valueOf(value)
+
+    @TypeConverter
+    fun fromBloomTimingMode(value: BloomTimingMode): String = value.name
+
+    @TypeConverter
+    fun toBloomTimingMode(value: String): BloomTimingMode = BloomTimingMode.valueOf(value)
 
     @TypeConverter
     fun fromEventType(value: EventType): String = value.name

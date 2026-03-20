@@ -6,6 +6,7 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.LeadTimeMode
@@ -46,6 +47,10 @@ data class TreeEntity(
     val hasFruitedBefore: Boolean = false,
     val notes: String,
     val tags: String,
+    val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val customBloomStartMonth: Int? = null,
+    val customBloomStartDay: Int? = null,
+    val customBloomDurationDays: Int? = null,
     val createdAt: Long,
     val updatedAt: Long
 )

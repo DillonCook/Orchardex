@@ -621,6 +621,10 @@ class OrchardRepository(
         hasFruitedBefore = input.hasFruitedBefore,
         notes = input.notes.trim(),
         tags = input.tags.trim(),
+        bloomTimingMode = input.bloomTimingMode,
+        customBloomStartMonth = input.customBloomStartMonth,
+        customBloomStartDay = input.customBloomStartDay,
+        customBloomDurationDays = input.customBloomDurationDays,
         createdAt = existing?.createdAt ?: timestamp,
         updatedAt = timestamp
     )
