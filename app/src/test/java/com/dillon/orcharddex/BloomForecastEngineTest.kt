@@ -33,6 +33,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesCaimitoStarApple() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Caimito (star apple)")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesLonganCultivarsAndPollinationMetadata() {
         val longanCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Longan" }
@@ -70,6 +77,22 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(atemoyaCultivars.getValue("African Pride").pollinationRequirement)
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesCaimitoCultivarsAndPollinationMetadata() {
+        val caimitoCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Caimito (star apple)" }
+            .associateBy { it.cultivar }
+
+        assertThat(caimitoCultivars.keys).containsExactly(
+            "Haitian Star",
+            "Blanco Star"
+        )
+        assertThat(caimitoCultivars.getValue("Haitian Star").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(caimitoCultivars.getValue("Blanco Star").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
     @Test
@@ -557,6 +580,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesCaimitoAliases() {
+        val haitianMatch = BloomForecastEngine.resolveCultivarAutocomplete("Haitian Star Apple", "Caimito (star apple)")
+        val blancoMatch = BloomForecastEngine.resolveCultivarAutocomplete("Blanco Star", "Star apple")
+
+        assertThat(haitianMatch?.cultivar).isEqualTo("Haitian Star")
+        assertThat(blancoMatch?.cultivar).isEqualTo("Blanco Star")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -761,6 +793,22 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Annona atemoya", "Geffner"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesCaimitoSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Caimito (star apple)"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star apple"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cainito"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Chrysophyllum cainito", "Haitian Star"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Achras caimito", "Blanco Star"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -986,6 +1034,50 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
         assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(augustWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesCaimitoPrimaryBloomWindow() {
+        val caimitoTree = TreeEntity(
+            id = "caimito-1",
+            orchardName = "Home",
+            sectionName = "Sapotes",
+            nickname = null,
+            species = "Chrysophyllum cainito",
+            cultivar = "Haitian Star",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val augustWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(caimitoTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+        val januaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(caimitoTree),
+            yearMonth = YearMonth.of(2026, 1),
+            zoneCode = "10b"
+        )
+
+        assertThat(augustWindow).hasSize(1)
+        assertThat(augustWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 8, 1))
+        assertThat(augustWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(januaryWindow).isEmpty()
     }
 
     @Test

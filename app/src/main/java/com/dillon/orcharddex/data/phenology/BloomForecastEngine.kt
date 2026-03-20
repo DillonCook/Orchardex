@@ -210,6 +210,25 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile(
+            "caimito",
+            setOf(
+                "caimito",
+                "star apple",
+                "starapple",
+                "cainito",
+                "golden-leaf tree",
+                "golden leaf tree",
+                "chrysophyllum cainito",
+                "achras caimito"
+            ),
+            "10b",
+            8,
+            1,
+            92,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            catalogSpeciesLabel = "Caimito (star apple)"
+        ),
+        SpeciesBloomProfile(
             "star fruit",
             setOf("star fruit", "starfruit", "carambola", "averrhoa carambola"),
             "10b",
@@ -732,6 +751,15 @@ object BloomForecastEngine {
             "atemoya",
             "Priestly",
             phase = BloomPhase.MID
+        ),
+        caimito(
+            "Haitian Star",
+            aliases = setOf("Haitian Star Apple"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        caimito(
+            "Blanco Star",
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         CultivarBloomProfile(
             "star fruit",
@@ -1547,6 +1575,19 @@ object BloomForecastEngine {
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun caimito(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "caimito",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Caimito (star apple)",
         pollinationRequirement = pollinationRequirement
     )
 
