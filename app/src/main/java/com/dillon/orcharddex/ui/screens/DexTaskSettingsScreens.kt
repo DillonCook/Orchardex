@@ -52,6 +52,7 @@ import com.dillon.orcharddex.BuildConfig
 import com.dillon.orcharddex.data.local.ReminderEntity
 import com.dillon.orcharddex.data.model.DexCultivarEntry
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.phenology.CatalogSpeciesReferenceEntry
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.TreeListItem
@@ -71,7 +72,6 @@ import com.dillon.orcharddex.ui.viewmodel.DexViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 import java.io.File
-import java.time.LocalDate
 
 private enum class DexPlantSortOption(val label: String) {
     UPDATED("Updated"),
@@ -645,16 +645,14 @@ private fun ReminderCard(
 }
 
 @Composable
-fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
+fun SettingsScreen(
+    viewModel: SettingsViewModel,
+    onPrivacy: () -> Unit,
+    onOpenCatalog: () -> Unit
+) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
-    val supportedCultivarCatalog = remember {
-        BloomForecastEngine.supportedCultivarCatalog()
-            .groupBy { it.species }
-            .toList()
-            .sortedBy { it.first.lowercase() }
-    }
     var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
     }
@@ -764,28 +762,13 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
             }
         }
         item {
-            SectionCard("Bloom & pollination catalog") {
-                Text("${supportedCultivarCatalog.sumOf { it.second.size }} cataloged cultivars currently supported.")
-                Text("Species | cultivars", style = MaterialTheme.typography.bodySmall)
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    supportedCultivarCatalog.forEach { (species, cultivars) ->
-                        Text(
-                            "$species | ${cultivars.joinToString(", ") { entry ->
-                                val cultivarLabel = if (entry.aliases.isEmpty()) {
-                                    entry.cultivar
-                                } else {
-                                    "${entry.cultivar} (${entry.aliases.joinToString("/")})"
-                                }
-                                val pollinationLabel = entry.pollinationRequirement?.label
-                                if (pollinationLabel == null) {
-                                    cultivarLabel
-                                } else {
-                                    "$cultivarLabel — $pollinationLabel"
-                                }
-                            }}",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
+            SectionCard("Catalog") {
+                Text("Open the reference-grade plant catalog for bloom timing, fertility grading, and cultivar notes.")
+                OutlinedButton(
+                    onClick = onOpenCatalog,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open plant catalog")
                 }
             }
         }
@@ -795,6 +778,130 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
                 Text("Local-only app. No account, analytics, ads, or cloud sync.")
                 TextButton(onClick = onPrivacy) { Text("Privacy policy") }
                 if (viewModel.busy) Text("Working...")
+            }
+        }
+    }
+}
+
+@Composable
+fun CatalogScreen() {
+    val catalog = remember { BloomForecastEngine.supportedSpeciesReferenceCatalog() }
+    var search by rememberSaveable { mutableStateOf("") }
+    val filteredCatalog = remember(catalog, search) {
+        val query = search.trim().lowercase()
+        if (query.isBlank()) {
+            catalog
+        } else {
+            catalog.filter { entry ->
+                listOf(
+                    entry.species,
+                    entry.fertilityLabel,
+                    entry.usdaBloomTimingLabel,
+                    entry.aliases.joinToString(" "),
+                    entry.cultivars.joinToString(" ") { cultivar ->
+                        buildString {
+                            append(cultivar.cultivar)
+                            if (cultivar.aliases.isNotEmpty()) append(" ${cultivar.aliases.joinToString(" ")}")
+                            cultivar.fertilityLabel?.let { append(" $it") }
+                        }
+                    }
+                ).any { value -> value.lowercase().contains(query) }
+            }
+        }
+    }
+
+    LazyColumn(
+        contentPadding = PaddingValues(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        item {
+            SectionCard("Plant catalog") {
+                Text("Species-first reference cards for USDA bloom timing, fertility grading, cultivars, and aliases.")
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = { search = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search species or cultivars") }
+                )
+                Text(
+                    text = "${filteredCatalog.size} species • ${filteredCatalog.sumOf { it.cultivars.size }} cultivars shown",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+        if (filteredCatalog.isEmpty()) {
+            item {
+                EmptyStateCard(
+                    title = "No catalog matches",
+                    message = "Try a different species, cultivar, alias, or fertility term."
+                )
+            }
+        } else {
+            items(filteredCatalog, key = { it.species }) { entry ->
+                CatalogSpeciesCard(entry)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CatalogSpeciesCard(entry: CatalogSpeciesReferenceEntry) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(entry.species, style = MaterialTheme.typography.titleLarge)
+                if (entry.aliases.isNotEmpty()) {
+                    Text(
+                        text = "Aliases: ${entry.aliases.joinToString(", ")}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactFact("USDA bloom timing", entry.usdaBloomTimingLabel)
+                CompactFact("Fertility", entry.fertilityLabel)
+                CompactFact("Cultivars", entry.cultivars.size.toString())
+            }
+            if (entry.cultivars.isEmpty()) {
+                Text(
+                    text = "Species-level reference only for now.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Cultivars", style = MaterialTheme.typography.titleMedium)
+                    entry.cultivars.forEach { cultivar ->
+                        OutlinedCard(shape = RoundedCornerShape(18.dp)) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(cultivar.cultivar, style = MaterialTheme.typography.titleSmall)
+                                cultivar.fertilityLabel?.let {
+                                    Text(it, style = MaterialTheme.typography.bodySmall)
+                                }
+                                if (cultivar.aliases.isNotEmpty()) {
+                                    Text(
+                                        text = "Aliases: ${cultivar.aliases.joinToString(", ")}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }

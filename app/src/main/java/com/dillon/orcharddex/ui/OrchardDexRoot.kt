@@ -41,6 +41,7 @@ import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.ui.navigation.BottomDestination
 import com.dillon.orcharddex.ui.navigation.OrchardRoutes
 import com.dillon.orcharddex.ui.components.SelectionField
+import com.dillon.orcharddex.ui.screens.CatalogScreen
 import com.dillon.orcharddex.ui.screens.DashboardScreen
 import com.dillon.orcharddex.ui.screens.DexScreen
 import com.dillon.orcharddex.ui.screens.EventFormScreen
@@ -206,7 +207,8 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             composable(BottomDestination.Settings.route) {
                 SettingsScreen(
                     viewModel = settingsViewModel,
-                    onPrivacy = { navController.navigate(OrchardRoutes.PRIVACY) }
+                    onPrivacy = { navController.navigate(OrchardRoutes.PRIVACY) },
+                    onOpenCatalog = { navController.navigate(OrchardRoutes.CATALOG) }
                 )
             }
             composable(
@@ -320,6 +322,9 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             composable(OrchardRoutes.PRIVACY) {
                 PrivacyScreen()
             }
+            composable(OrchardRoutes.CATALOG) {
+                CatalogScreen()
+            }
         }
     }
 }
@@ -337,5 +342,6 @@ private fun String.titleForRoute(orchardName: String): String = when {
     startsWith("harvestForm") -> "Add harvest"
     startsWith("reminderForm") -> "Reminder"
     startsWith("privacy") -> "Privacy"
+    startsWith("catalog") -> "Plant Catalog"
     else -> "OrchardDex"
 }

@@ -34,6 +34,7 @@ object OrchardRoutes {
     const val REMINDER_FORM = "reminderForm?$TREE_ID_ARG={$TREE_ID_ARG}&$REMINDER_ID_ARG={$REMINDER_ID_ARG}"
     const val HISTORY_DETAIL = "historyDetail/{$HISTORY_KIND_ARG}/{$HISTORY_ENTRY_ID_ARG}"
     const val PRIVACY = "privacy"
+    const val CATALOG = "catalog"
 
     fun treeDetail(treeId: String) = "treeDetail/$treeId"
     fun treeForm(treeId: String? = null) = "treeForm?$TREE_ID_ARG=${treeId.orEmpty()}"

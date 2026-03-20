@@ -5,6 +5,7 @@ import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.format.DateTimeFormatter
 
 enum class BloomPhase(val label: String, val startOffsetDays: Int) {
     EARLY("Early", -10),
@@ -80,6 +81,20 @@ data class SupportedCultivarCatalogEntry(
     val pollinationRequirement: PollinationRequirement? = null
 )
 
+data class CatalogCultivarReferenceEntry(
+    val cultivar: String,
+    val aliases: List<String> = emptyList(),
+    val fertilityLabel: String? = null
+)
+
+data class CatalogSpeciesReferenceEntry(
+    val species: String,
+    val aliases: List<String> = emptyList(),
+    val usdaBloomTimingLabel: String,
+    val fertilityLabel: String,
+    val cultivars: List<CatalogCultivarReferenceEntry> = emptyList()
+)
+
 data class CultivarAutocompleteOption(
     val species: String,
     val cultivar: String,
@@ -100,6 +115,8 @@ data class EverbearingPlant(
 )
 
 object BloomForecastEngine {
+    private val catalogMonthDayFormatter = DateTimeFormatter.ofPattern("MMM d")
+
     private val speciesProfiles = listOf(
         SpeciesBloomProfile(
             "apple",
@@ -2076,6 +2093,32 @@ object BloomForecastEngine {
         }
         .sortedWith(compareBy({ it.species.lowercase() }, { it.cultivar.lowercase() }))
 
+    fun supportedSpeciesReferenceCatalog(): List<CatalogSpeciesReferenceEntry> = speciesProfiles
+        .map { profile ->
+            val speciesLabel = profile.catalogSpeciesLabel.toCatalogDisplayLabel()
+            CatalogSpeciesReferenceEntry(
+                species = speciesLabel,
+                aliases = (profile.aliases + profile.key + profile.catalogSpeciesLabel)
+                    .filterNot { normalize(it) == normalize(speciesLabel) }
+                    .distinctBy(::normalize)
+                    .sortedBy(String::lowercase),
+                usdaBloomTimingLabel = profile.catalogUsdaBloomTimingLabel(),
+                fertilityLabel = profile.pollinationRequirement.label,
+                cultivars = cultivarAutocompleteCatalog
+                    .filter { normalize(it.species) == normalize(speciesLabel) }
+                    .sortedBy(CultivarAutocompleteOption::cultivar)
+                    .map { cultivar ->
+                        CatalogCultivarReferenceEntry(
+                            cultivar = cultivar.cultivar,
+                            aliases = cultivar.aliases.sortedBy(String::lowercase),
+                            fertilityLabel = cultivar.pollinationRequirement?.label
+                        )
+                    }
+            )
+        }
+        .distinctBy { normalize(it.species) }
+        .sortedBy { it.species.lowercase() }
+
     fun pollinationRequirementFor(
         speciesInput: String,
         cultivarInput: String = ""
@@ -2211,6 +2254,19 @@ object BloomForecastEngine {
                 .map { bloomWindowForYear(tree, speciesProfile, phase, shiftDays, profileMatch.cultivarMatched, it) }
                 .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
         }.sortedBy(PredictedBloomWindow::startDate)
+    }
+
+    private fun SpeciesBloomProfile.catalogUsdaBloomTimingLabel(): String {
+        val zoneCode = referenceZoneCode.uppercase()
+        return when (forecastBehavior) {
+            BloomForecastBehavior.WINDOW -> {
+                val startDate = LocalDate.of(2026, startMonth, startDay)
+                val endDate = startDate.plusDays(durationDays)
+                "USDA $zoneCode · ${startDate.format(catalogMonthDayFormatter)}–${endDate.format(catalogMonthDayFormatter)}"
+            }
+            BloomForecastBehavior.MANUAL_ONLY -> "USDA $zoneCode · Continuous / repeat-bearing"
+            BloomForecastBehavior.SUPPRESSED -> "USDA $zoneCode · No automatic bloom-season forecast"
+        }
     }
 
     private fun SpeciesBloomProfile.withRegionalOverride(orchardRegionCode: String?): SpeciesBloomProfile {
