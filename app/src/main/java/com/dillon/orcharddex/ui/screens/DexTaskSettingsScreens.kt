@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,6 +29,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -69,6 +71,9 @@ import com.dillon.orcharddex.ui.viewmodel.DexViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 import java.io.File
+import java.time.LocalDate
+import java.time.YearMonth
+import java.time.temporal.ChronoUnit
 
 private enum class DexPlantSortOption(val label: String) {
     UPDATED("Updated"),
@@ -80,6 +85,7 @@ private enum class DexPlantSortOption(val label: String) {
 @Composable
 fun DexScreen(
     viewModel: DexViewModel,
+    usdaZone: String,
     onAddTree: () -> Unit,
     onTreeClick: (String) -> Unit
 ) {
@@ -236,7 +242,11 @@ fun DexScreen(
                 item { EmptyStateCard("No plants found", "Try a different search, clear filters, or add a plant.") }
             } else {
                 items(filteredPlants, key = { it.tree.id }) { item ->
-                    DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
+                    DexPlantCard(
+                        item = item,
+                        usdaZone = usdaZone,
+                        onClick = { onTreeClick(item.tree.id) }
+                    )
                 }
             }
 
@@ -267,40 +277,152 @@ private fun DexCultivarCard(entry: DexCultivarEntry, onClick: (() -> Unit)?) {
 }
 
 @Composable
-private fun DexPlantCard(item: TreeListItem, onClick: () -> Unit) {
+private fun DexPlantCard(
+    item: TreeListItem,
+    usdaZone: String,
+    onClick: () -> Unit
+) {
     val context = LocalContext.current
     val title = item.tree.dexPrimaryTitle()
     val subtitle = item.tree.dexSecondaryTitle()
+    val supportingLine = item.tree.dexSupportingLine()
     val thumbnailLabel = item.tree.cultivar.takeIf(String::isNotBlank)?.take(2)
         ?: item.tree.species.take(2)
+    val nextBloomLabel = remember(item.tree, usdaZone) {
+        item.tree.nextBloomCountdownLabel(usdaZone)
+    }
 
-    OutlinedCard(modifier = Modifier.fillMaxWidth().clickable(onClick = onClick), shape = RoundedCornerShape(18.dp)) {
+    OutlinedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp)
+    ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.padding(14.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(modifier = Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier.size(84.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 if (item.mainPhotoPath != null) {
                     AsyncImage(
                         model = File(context.filesDir, "photos/${item.mainPhotoPath}"),
                         contentDescription = "Plant photo",
                         contentScale = ContentScale.Crop,
-                        modifier = Modifier.size(56.dp)
+                        modifier = Modifier
+                            .size(84.dp)
+                            .clip(RoundedCornerShape(20.dp))
                     )
                 } else {
-                    Text(thumbnailLabel.uppercase())
+                    Surface(
+                        modifier = Modifier.size(84.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        tonalElevation = 2.dp,
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                    ) {
+                        Box(contentAlignment = Alignment.Center) {
+                            Text(
+                                text = thumbnailLabel.uppercase(),
+                                style = MaterialTheme.typography.titleLarge
+                            )
+                        }
+                    }
                 }
             }
-            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
                 subtitle?.let {
-                    Text(it, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                supportingLine?.let {
+                    Text(
+                        text = it,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Next bloom",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    tonalElevation = 1.dp
+                ) {
+                    Text(
+                        text = nextBloomLabel,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                    )
                 }
             }
         }
     }
 }
+
+private fun TreeEntity.nextBloomCountdownLabel(usdaZone: String): String {
+    if (BloomForecastEngine.everbearingPlants(listOf(this)).isNotEmpty()) {
+        return "Ongoing"
+    }
+    if (usdaZone.isBlank()) {
+        return "Unknown"
+    }
+
+    val today = LocalDate.now()
+    val currentMonth = YearMonth.from(today)
+    val nextWindow = generateSequence(0L) { it + 1 }
+        .take(18)
+        .mapNotNull { offset ->
+            BloomForecastEngine.predictMonth(
+                trees = listOf(this),
+                yearMonth = currentMonth.plusMonths(offset),
+                zoneCode = usdaZone,
+                orchardRegionCode = null
+            ).firstOrNull()
+        }
+        .firstOrNull { window -> !window.endDate.isBefore(today) }
+        ?: return "Unknown"
+
+    return if (!today.isBefore(nextWindow.startDate) && !today.isAfter(nextWindow.endDate)) {
+        "Now"
+    } else {
+        "${ChronoUnit.DAYS.between(today, nextWindow.startDate)}d"
+    }
+}
+
+private fun TreeEntity.dexSupportingLine(): String? = listOfNotNull(
+    sectionName.takeIf(String::isNotBlank),
+    when (status) {
+        TreeStatus.ACTIVE -> null
+        else -> status.name.lowercase().replace('_', ' ')
+    }
+).joinToString(" • ").takeIf(String::isNotBlank)
 
 private fun com.dillon.orcharddex.data.local.TreeEntity.dexPrimaryTitle(): String = cultivar
     .trim()

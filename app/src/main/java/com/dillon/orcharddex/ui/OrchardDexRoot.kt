@@ -189,6 +189,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             composable(BottomDestination.Dex.route) {
                 DexScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    usdaZone = settings.usdaZone,
                     onAddTree = { navController.navigate(OrchardRoutes.treeForm()) },
                     onTreeClick = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
                 )
