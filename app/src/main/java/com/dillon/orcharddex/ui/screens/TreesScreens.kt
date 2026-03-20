@@ -19,8 +19,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -28,7 +26,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -945,7 +942,6 @@ fun TreeDetailScreen(
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
-    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
     val item = detail ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Tree not found.")
     }
@@ -970,57 +966,6 @@ fun TreeDetailScreen(
                 TextButton(onClick = viewModel::dismissDeleteConfirmation) {
                     Text("Cancel")
                 }
-            }
-        )
-    }
-
-    if (addMenuVisible) {
-        AlertDialog(
-            onDismissRequest = { addMenuVisible = false },
-            title = { Text("Plant actions") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddEvent(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add event") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddHarvest(item.tree.id)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("add_harvest")
-                    ) { Text("Add harvest") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddReminder(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add reminder") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add photo") }
-                    OutlinedButton(
-                        onClick = {
-                            addMenuVisible = false
-                            onEditTree(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Edit plant") }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { addMenuVisible = false }) { Text("Close") }
             }
         )
     }
@@ -1055,22 +1000,33 @@ fun TreeDetailScreen(
         }.toSortedMap(compareByDescending { it })
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { addMenuVisible = true },
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("tree_actions")
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "Plant actions")
-            }
-        }
-    ) { innerPadding ->
+    Scaffold { innerPadding ->
         LazyColumn(
             modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+        item {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TreeActionButton(label = "Add event", onClick = { onAddEvent(item.tree.id) })
+                TreeActionButton(
+                    label = "Add harvest",
+                    onClick = { onAddHarvest(item.tree.id) },
+                    modifier = Modifier.testTag("add_harvest")
+                )
+                TreeActionButton(label = "Add reminder", onClick = { onAddReminder(item.tree.id) })
+                TreeActionButton(
+                    label = "Add photo",
+                    onClick = {
+                        photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                    }
+                )
+                TreeActionButton(label = "Edit plant", onClick = { onEditTree(item.tree.id) })
+            }
+        }
         item {
             SectionCard(item.tree.displayName()) {
                 Text(item.tree.speciesCultivarLabel())
@@ -1174,6 +1130,22 @@ fun TreeDetailScreen(
             }
         }
         }
+    }
+}
+
+@Composable
+private fun TreeActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(36.dp),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
     }
 }
 

@@ -42,6 +42,7 @@ import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.ReminderListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.BloomPhase
 import com.dillon.orcharddex.data.phenology.EverbearingPlant
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
@@ -505,17 +506,7 @@ private fun DashboardCalendarRow(
     ) {
         Text(item.title, style = MaterialTheme.typography.titleMedium)
         Text(
-            text = buildString {
-                append(item.kind.label)
-                if (item.subtitle.isNotBlank()) {
-                    append(" - ")
-                    append(item.subtitle)
-                }
-                if (item.detail.isNotBlank()) {
-                    append(" - ")
-                    append(item.detail)
-                }
-            },
+            text = item.supportingLine(),
             style = MaterialTheme.typography.bodySmall,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis
@@ -889,11 +880,40 @@ private fun PredictedBloomWindow.toCalendarItem(): DashboardCalendarItem = Dashb
     kind = DashboardCalendarKind.BLOOM_FORECAST,
     title = treeLabel,
     subtitle = speciesLabel,
-    detail = "${phase.label} estimate",
+    detail = phase.dashboardDetailLabel(),
     startDate = startDate,
     endDate = endDate,
     treeId = treeId
 )
+
+private fun BloomPhase.dashboardDetailLabel(): String = when (this) {
+    BloomPhase.MID -> "Peak bloom estimate"
+    else -> "${label} bloom estimate"
+}
+
+private fun DashboardCalendarItem.supportingLine(): String = buildString {
+    append(kind.label)
+    subtitle.takeUnless { it.isRedundantWith(title) }?.takeIf(String::isNotBlank)?.let {
+        append(" - ")
+        append(it)
+    }
+    if (detail.isNotBlank()) {
+        append(" - ")
+        append(detail)
+    }
+}
+
+private fun String.isRedundantWith(other: String): Boolean {
+    val words = normalizedWords()
+    val otherWords = other.normalizedWords()
+    return words.isNotEmpty() && otherWords.containsAll(words)
+}
+
+private fun String.normalizedWords(): Set<String> =
+    lowercase()
+        .split(Regex("[^a-z0-9]+"))
+        .filter(String::isNotBlank)
+        .toSet()
 
 private fun List<DashboardCalendarItem>.summaryFor(day: LocalDate): DashboardDaySummary {
     val itemsForDay = filter { it.occursOn(day) }
