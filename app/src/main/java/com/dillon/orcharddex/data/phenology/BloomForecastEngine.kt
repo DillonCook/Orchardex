@@ -177,6 +177,24 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         SpeciesBloomProfile(
+            "longan",
+            setOf(
+                "longan",
+                "lungan",
+                "dragon eye",
+                "longana",
+                "mamoncillo chino",
+                "dimocarpus longan",
+                "nephelium longan",
+                "euphoria longana"
+            ),
+            "10b",
+            2,
+            25,
+            70,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        SpeciesBloomProfile(
             "star fruit",
             setOf("star fruit", "starfruit", "carambola", "averrhoa carambola"),
             "10b",
@@ -625,6 +643,46 @@ object BloomForecastEngine {
             aliases = setOf("Fay Zee Siu", "Feizixiao"),
             phase = BloomPhase.MID,
             pollinationRequirement = PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Kohala",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Edau",
+            aliases = setOf("Daw"),
+            phase = BloomPhase.MID_LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Biew Kiew",
+            aliases = setOf("Beow Keow"),
+            phase = BloomPhase.MID_LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Chompoo I",
+            aliases = setOf("Chompoo"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Haew",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "longan",
+            "Diamond River",
+            aliases = setOf("Petch Sakorn"),
+            phase = BloomPhase.LATE,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         CultivarBloomProfile(
             "star fruit",

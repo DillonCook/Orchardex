@@ -19,6 +19,33 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesLongan() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Longan")
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesLonganCultivarsAndPollinationMetadata() {
+        val longanCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Longan" }
+            .associateBy { it.cultivar }
+
+        assertThat(longanCultivars.keys).containsAtLeast(
+            "Kohala",
+            "Edau",
+            "Biew Kiew",
+            "Chompoo I",
+            "Haew",
+            "Diamond River"
+        )
+        assertThat(longanCultivars.getValue("Kohala").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(longanCultivars.getValue("Diamond River").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesCommonBananas() {
         val bananaCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Banana" }
@@ -479,6 +506,17 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesLonganAliases() {
+        val edauMatch = BloomForecastEngine.resolveCultivarAutocomplete("Daw", "Longan")
+        val biewKiewMatch = BloomForecastEngine.resolveCultivarAutocomplete("Beow Keow", "Dimocarpus longan")
+        val diamondRiverMatch = BloomForecastEngine.resolveCultivarAutocomplete("Petch Sakorn", "Dragon eye")
+
+        assertThat(edauMatch?.cultivar).isEqualTo("Edau")
+        assertThat(biewKiewMatch?.cultivar).isEqualTo("Biew Kiew")
+        assertThat(diamondRiverMatch?.cultivar).isEqualTo("Diamond River")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -668,6 +706,16 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun pollinationRequirementFor_resolvesLonganSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Longan"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lungan", "Daw"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mamoncillo chino", "Petch Sakorn"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -802,6 +850,50 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Injerto", "Whitman"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
+    fun predictMonth_usesLonganPrimaryBloomWindow() {
+        val longanTree = TreeEntity(
+            id = "longan-1",
+            orchardName = "Home",
+            sectionName = "Sapindaceae",
+            nickname = null,
+            species = "Dragon eye",
+            cultivar = "Kohala",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(longanTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val juneWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(longanTree),
+            yearMonth = YearMonth.of(2026, 6),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 25))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(juneWindow).isEmpty()
     }
 
     @Test

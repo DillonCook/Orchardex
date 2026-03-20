@@ -72,6 +72,7 @@ val CommonSpeciesSuggestions = listOf(
     "Avocado",
     "Citrus",
     "Lychee",
+    "Longan",
     "Guava",
     "Fig",
     "Loquat",
