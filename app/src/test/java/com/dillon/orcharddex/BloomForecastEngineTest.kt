@@ -47,6 +47,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesMango() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Mango")
+    }
+
+    @Test
     fun supportedSpeciesCatalog_includesSoursop() {
         val species = BloomForecastEngine.supportedSpeciesCatalog()
 
@@ -140,6 +147,8 @@ class BloomForecastEngineTest {
             .isEqualTo("Cashew (cashew apple)")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("mamoncillo chino"))
             .isEqualTo("Longan")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Mangifera indica"))
+            .isEqualTo("Mango")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("lime")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("genipa")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("jocote")).isNull()
@@ -147,6 +156,33 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("spondias")).isNull()
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("caimito"))
             .isEqualTo("Caimito (star apple)")
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesMangoCultivarsAndAtaulfoAliases() {
+        val mangoCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Mango" }
+            .associateBy { it.cultivar }
+
+        assertThat(mangoCultivars).hasSize(51)
+        assertThat(mangoCultivars.keys).containsAtLeast(
+            "Rosigold",
+            "Glenn",
+            "Kent",
+            "Sweet Tart",
+            "Ataulfo",
+            "Southern Blush"
+        )
+        assertThat(mangoCultivars.getValue("Ataulfo").aliases).containsExactly(
+            "Champagne",
+            "Champagne mango",
+            "Honey",
+            "Honey mango"
+        )
+        assertThat(mangoCultivars.getValue("Ataulfo").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(mangoCultivars.getValue("Southern Blush").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
     @Test
@@ -783,6 +819,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesMangoAliases() {
+        val honeyMatch = BloomForecastEngine.resolveCultivarAutocomplete("Honey", "Mango")
+        val champagneMatch = BloomForecastEngine.resolveCultivarAutocomplete("Champagne mango", "Mangifera indica")
+
+        assertThat(honeyMatch?.cultivar).isEqualTo("Ataulfo")
+        assertThat(champagneMatch?.cultivar).isEqualTo("Ataulfo")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesLonganAliases() {
         val edauMatch = BloomForecastEngine.resolveCultivarAutocomplete("Daw", "Longan")
         val biewKiewMatch = BloomForecastEngine.resolveCultivarAutocomplete("Beow Keow", "Dimocarpus longan")
@@ -1197,6 +1242,16 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun pollinationRequirementFor_usesSpeciesDefaultForMangoCultivarCatalogRows() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mango"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mangifera indica", "Honey"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mango", "Southern Blush"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -1333,6 +1388,51 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Injerto", "Whitman"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
+    fun predictMonth_usesSpeciesBaselineWindowForMangoCultivars() {
+        val mangoTree = TreeEntity(
+            id = "mango-1",
+            orchardName = "Home",
+            sectionName = "Anacardiaceae",
+            nickname = null,
+            species = "Mangifera indica",
+            cultivar = "Honey",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val januaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mangoTree),
+            yearMonth = YearMonth.of(2026, 1),
+            zoneCode = "10b"
+        )
+        val mayWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mangoTree),
+            yearMonth = YearMonth.of(2026, 5),
+            zoneCode = "10b"
+        )
+
+        assertThat(januaryWindow).hasSize(1)
+        assertThat(januaryWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2025, 12, 1))
+        assertThat(januaryWindow.single().endDate).isEqualTo(java.time.LocalDate.of(2026, 4, 30))
+        assertThat(januaryWindow.single().sourceLabel).isEqualTo("species baseline")
+        assertThat(mayWindow).isEmpty()
     }
 
     @Test

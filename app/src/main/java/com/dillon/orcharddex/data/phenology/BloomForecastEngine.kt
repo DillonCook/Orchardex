@@ -171,7 +171,15 @@ object BloomForecastEngine {
         SpeciesBloomProfile("mulberry", setOf("mulberry"), "7a", 4, 15, 14),
         SpeciesBloomProfile("pomegranate", setOf("pomegranate"), "8b", 5, 8, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
         SpeciesBloomProfile("avocado", setOf("avocado"), "10a", 3, 1, 45, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
-        SpeciesBloomProfile("mango", setOf("mango"), "10b", 2, 10, 35, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile(
+            "mango",
+            setOf("mango", "mangifera indica"),
+            "10b",
+            12,
+            1,
+            150,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         SpeciesBloomProfile(
             "lychee",
             setOf("lychee"),
@@ -1689,6 +1697,75 @@ object BloomForecastEngine {
         sugarCane("CP 89-2143", aliases = setOf("CP89-2143"))
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
+    private val cultivarCatalogOnlyOptions = listOf(
+        mangoCultivar("Rosigold"),
+        mangoCultivar("Angie"),
+        mangoCultivar("Florigon"),
+        mangoCultivar("Saigon"),
+        mangoCultivar("Zill"),
+        mangoCultivar("Edward"),
+        mangoCultivar("Vallenato"),
+        mangoCultivar("Cogshall"),
+        mangoCultivar("Glenn"),
+        mangoCultivar("Nam Doc Mai"),
+        mangoCultivar("Haden"),
+        mangoCultivar("Irwin"),
+        mangoCultivar("Carrie"),
+        mangoCultivar("Julie"),
+        mangoCultivar("Van Dyke"),
+        mangoCultivar("Tommy Atkins"),
+        mangoCultivar("Lippens"),
+        mangoCultivar("Mallika"),
+        mangoCultivar("Phimsen Mun"),
+        mangoCultivar("Graham"),
+        mangoCultivar("Dot"),
+        mangoCultivar("Parvin"),
+        mangoCultivar("Duncan"),
+        mangoCultivar("Ruby"),
+        mangoCultivar("Kent"),
+        mangoCultivar("Palmer"),
+        mangoCultivar("Valencia Pride"),
+        mangoCultivar("Sensation"),
+        mangoCultivar("Rapoza"),
+        mangoCultivar("Carabao"),
+        mangoCultivar("Fairchild"),
+        mangoCultivar("Kyo Savoy"),
+        mangoCultivar("Ice Cream"),
+        mangoCultivar("Keitt"),
+        mangoCultivar("Neelum"),
+        mangoCultivar("Sweet Tart"),
+        mangoCultivar("Pickering"),
+        mangoCultivar("Coconut Cream"),
+        mangoCultivar("Lemon Zest"),
+        mangoCultivar("Fruit Punch"),
+        mangoCultivar("Orange Sherbet"),
+        mangoCultivar("Maha Chanok"),
+        mangoCultivar("Beverly"),
+        mangoCultivar("Bailey's Marvel"),
+        mangoCultivar("Honey Kiss"),
+        mangoCultivar("Pina Colada"),
+        mangoCultivar("Venus"),
+        mangoCultivar("M-4"),
+        mangoCultivar("Okrung"),
+        mangoCultivar(
+            "Ataulfo",
+            aliases = setOf("Honey", "Honey mango", "Champagne", "Champagne mango")
+        ),
+        mangoCultivar("Southern Blush")
+    )
+
+    private fun mangoCultivar(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarAutocompleteOption(
+        species = "Mango",
+        cultivar = cultivar,
+        aliases = aliases
+            .filterNot { normalize(it) == normalize(cultivar) }
+            .sortedBy(String::lowercase),
+        pollinationRequirement = PollinationRequirement.SELF_FERTILE
+    )
+
     private fun passionFruit(
         cultivar: String,
         aliases: Set<String> = emptySet(),
@@ -1916,8 +1993,8 @@ object BloomForecastEngine {
         }
         .distinctBy { option -> normalize(option.species) }
 
-    private val cultivarAutocompleteCatalog = cultivarProfiles
-        .map { profile ->
+    private val cultivarAutocompleteCatalog = (
+        cultivarProfiles.map { profile ->
             val speciesPollination = speciesByKey[profile.speciesKey]
                 ?.pollinationRequirement
                 ?.takeUnless { it == PollinationRequirement.UNKNOWN }
@@ -1929,7 +2006,8 @@ object BloomForecastEngine {
                     .sortedBy(String::lowercase),
                 pollinationRequirement = profile.pollinationRequirement ?: speciesPollination
             )
-        }
+        } + cultivarCatalogOnlyOptions
+        )
         .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
 
     fun supportedZoneLabels(): List<String> = UsdaZoneCatalog.zones.map(UsdaZoneDefinition::label)
