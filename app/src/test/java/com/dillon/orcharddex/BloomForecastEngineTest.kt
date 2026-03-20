@@ -75,6 +75,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesCashewApple() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Cashew (cashew apple)")
+    }
+
+    @Test
     fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
         val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
         val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
@@ -87,6 +94,8 @@ class BloomForecastEngineTest {
         val junePlumSuggestions = BloomForecastEngine.speciesAutocompleteOptions("june plum")
         val spondiasDulcisSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spondias dulcis")
         val spondiasCythereaSuggestions = BloomForecastEngine.speciesAutocompleteOptions("spondias cytherea")
+        val cashewAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cashew apple")
+        val anacardiumSuggestions = BloomForecastEngine.speciesAutocompleteOptions("anacardium occidentale")
 
         assertThat(starAppleSuggestions).contains("Caimito (star apple)")
         assertThat(scientificSuggestions).contains("Coconut")
@@ -99,6 +108,8 @@ class BloomForecastEngineTest {
         assertThat(junePlumSuggestions).contains("Ambarella (June plum)")
         assertThat(spondiasDulcisSuggestions).contains("Ambarella (June plum)")
         assertThat(spondiasCythereaSuggestions).contains("Ambarella (June plum)")
+        assertThat(cashewAppleSuggestions).contains("Cashew (cashew apple)")
+        assertThat(anacardiumSuggestions).contains("Cashew (cashew apple)")
     }
 
     @Test
@@ -123,6 +134,10 @@ class BloomForecastEngineTest {
             .isEqualTo("Ambarella (June plum)")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Spondias cytherea"))
             .isEqualTo("Ambarella (June plum)")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("cashew apple"))
+            .isEqualTo("Cashew (cashew apple)")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("Anacardium occidentale"))
+            .isEqualTo("Cashew (cashew apple)")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("mamoncillo chino"))
             .isEqualTo("Longan")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("lime")).isNull()
@@ -286,6 +301,22 @@ class BloomForecastEngineTest {
         )
         assertThat(lycheeCultivars.getValue("Sweetheart").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesCashewTypeLanesAndPollinationMetadata() {
+        val cashewCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Cashew (cashew apple)" }
+            .associateBy { it.cultivar }
+
+        assertThat(cashewCultivars.keys).containsExactly(
+            "Gigante / Tardio",
+            "Anão / Precoce"
+        )
+        assertThat(cashewCultivars.getValue("Gigante / Tardio").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(cashewCultivars.getValue("Anão / Precoce").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
     }
 
     @Test
@@ -843,6 +874,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesCashewTypeLanes() {
+        val giganteMatch = BloomForecastEngine.resolveCultivarAutocomplete("Gigante", "Cashew (cashew apple)")
+        val anaoMatch = BloomForecastEngine.resolveCultivarAutocomplete("Anao/Precoce", "Anacardium occidentale")
+
+        assertThat(giganteMatch?.cultivar).isEqualTo("Gigante / Tardio")
+        assertThat(anaoMatch?.cultivar).isEqualTo("Anão / Precoce")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -1095,6 +1135,20 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.pollinationRequirementFor("June plum")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Spondias dulcis")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Spondias cytherea")).isNull()
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesCashewSpeciesAndTypeDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cashew (cashew apple)"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cashew apple"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Anacardium occidentale"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cashew", "Gigante"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cashew apple", "Anao / Precoce"))
+            .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
     }
 
     @Test
@@ -1623,6 +1677,50 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
         assertThat(aprilWindow.single().sourceLabel).isEqualTo("species baseline")
         assertThat(augustWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesCashewPrimaryBloomWindow() {
+        val cashewTree = TreeEntity(
+            id = "cashew-1",
+            orchardName = "Home",
+            sectionName = "Anacardiaceae",
+            nickname = null,
+            species = "Anacardium occidentale",
+            cultivar = "Gigante / Tardio",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(cashewTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val julyWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(cashewTree),
+            yearMonth = YearMonth.of(2026, 7),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(julyWindow).isEmpty()
     }
 
     @Test

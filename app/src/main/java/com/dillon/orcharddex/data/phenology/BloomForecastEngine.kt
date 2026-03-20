@@ -290,6 +290,21 @@ object BloomForecastEngine {
             catalogSpeciesLabel = "Ambarella (June plum)"
         ),
         SpeciesBloomProfile(
+            "cashew",
+            setOf(
+                "cashew",
+                "cashew apple",
+                "cashewapple",
+                "anacardium occidentale"
+            ),
+            "10b",
+            4,
+            1,
+            60,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
+            catalogSpeciesLabel = "Cashew (cashew apple)"
+        ),
+        SpeciesBloomProfile(
             "caimito",
             setOf(
                 "caimito",
@@ -897,6 +912,14 @@ object BloomForecastEngine {
         ),
         abiu("Gray"),
         abiu("Z-2", aliases = setOf("Z2")),
+        cashew(
+            "Gigante / Tardio",
+            aliases = setOf("Gigante/Tardio", "Gigante", "Tardio")
+        ),
+        cashew(
+            "Anão / Precoce",
+            aliases = setOf("Anao / Precoce", "Anao/Precoce", "Anão/Precoce", "Anao", "Precoce")
+        ),
         caimito(
             "Haitian Star",
             aliases = setOf("Haitian Star Apple"),
@@ -1774,6 +1797,19 @@ object BloomForecastEngine {
         aliases = aliases,
         phase = BloomPhase.MID,
         catalogSpeciesLabel = "Caimito (star apple)",
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun cashew(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "cashew",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Cashew (cashew apple)",
         pollinationRequirement = pollinationRequirement
     )
 
