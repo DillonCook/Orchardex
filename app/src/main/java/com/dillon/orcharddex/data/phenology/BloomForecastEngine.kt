@@ -229,6 +229,22 @@ object BloomForecastEngine {
             catalogSpeciesLabel = "Caimito (star apple)"
         ),
         SpeciesBloomProfile(
+            "coconut",
+            setOf(
+                "coconut",
+                "coconuts",
+                "coconut palm",
+                "coconut tree",
+                "cocos nucifera"
+            ),
+            "10b",
+            1,
+            1,
+            365,
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            pollinationRequirement = PollinationRequirement.UNKNOWN
+        ),
+        SpeciesBloomProfile(
             "star fruit",
             setOf("star fruit", "starfruit", "carambola", "averrhoa carambola"),
             "10b",
@@ -761,6 +777,33 @@ object BloomForecastEngine {
             "Blanco Star",
             pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
+        coconut(
+            "Jamaican Tall",
+            aliases = setOf("Atlantic Tall", "Jamaica Tall"),
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        coconut(
+            "Panama Tall",
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        coconut("Malayan Dwarf", aliases = setOf("Dwarf Malayan")),
+        coconut("Green Malayan Dwarf", aliases = setOf("Malayan Green Dwarf")),
+        coconut(
+            "Yellow Malayan Dwarf",
+            aliases = setOf("Malayan Yellow Dwarf"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        coconut(
+            "Golden Malayan Dwarf",
+            aliases = setOf("Malayan Golden Dwarf", "Golden Malayan"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        coconut(
+            "Red Malayan Dwarf",
+            aliases = setOf("Malayan Red Dwarf"),
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
+        coconut("Maypan"),
         CultivarBloomProfile(
             "star fruit",
             "Arkin",
@@ -1588,6 +1631,19 @@ object BloomForecastEngine {
         aliases = aliases,
         phase = BloomPhase.MID,
         catalogSpeciesLabel = "Caimito (star apple)",
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun coconut(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "coconut",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Coconut",
         pollinationRequirement = pollinationRequirement
     )
 

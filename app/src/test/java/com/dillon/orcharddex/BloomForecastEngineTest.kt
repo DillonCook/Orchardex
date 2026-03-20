@@ -40,6 +40,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesCoconut() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Coconut")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesLonganCultivarsAndPollinationMetadata() {
         val longanCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Longan" }
@@ -93,6 +100,38 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(caimitoCultivars.getValue("Blanco Star").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesCoconutCultivarsAndPollinationMetadata() {
+        val coconutCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Coconut" }
+            .associateBy { it.cultivar }
+
+        assertThat(coconutCultivars.keys).containsAtLeast(
+            "Jamaican Tall",
+            "Panama Tall",
+            "Malayan Dwarf",
+            "Green Malayan Dwarf",
+            "Yellow Malayan Dwarf",
+            "Golden Malayan Dwarf",
+            "Red Malayan Dwarf",
+            "Maypan"
+        )
+        assertThat(coconutCultivars.getValue("Jamaican Tall").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(coconutCultivars.getValue("Panama Tall").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(coconutCultivars.getValue("Yellow Malayan Dwarf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(coconutCultivars.getValue("Golden Malayan Dwarf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(coconutCultivars.getValue("Red Malayan Dwarf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(coconutCultivars.getValue("Malayan Dwarf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.UNKNOWN)
+        assertThat(coconutCultivars.getValue("Maypan").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.UNKNOWN)
     }
 
     @Test
@@ -589,6 +628,15 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesCoconutAliases() {
+        val jamaicanTallMatch = BloomForecastEngine.resolveCultivarAutocomplete("Atlantic Tall", "Cocos nucifera")
+        val goldenMatch = BloomForecastEngine.resolveCultivarAutocomplete("Malayan Golden Dwarf", "Coconut palm")
+
+        assertThat(jamaicanTallMatch?.cultivar).isEqualTo("Jamaican Tall")
+        assertThat(goldenMatch?.cultivar).isEqualTo("Golden Malayan Dwarf")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -809,6 +857,25 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesCoconutSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut palm")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Cocos nucifera")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Jamaican Tall"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut tree", "Panama Tall"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Yellow Malayan Dwarf"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Golden Malayan Dwarf"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Red Malayan Dwarf"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Malayan Dwarf")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Maypan")).isNull()
     }
 
     @Test
@@ -1078,6 +1145,42 @@ class BloomForecastEngineTest {
         assertThat(augustWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 8, 1))
         assertThat(augustWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(januaryWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_skipsAutomaticCoconutForecasts() {
+        val coconutTree = TreeEntity(
+            id = "coconut-1",
+            orchardName = "Home",
+            sectionName = "Palms",
+            nickname = null,
+            species = "Coconut palm",
+            cultivar = "Maypan",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(coconutTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+
+        assertThat(windows).isEmpty()
     }
 
     @Test
@@ -1959,6 +2062,48 @@ class BloomForecastEngineTest {
         assertThat(everbearing.single().treeId).isEqualTo("papaya-1")
         assertThat(everbearing.single().treeLabel).isEqualTo("Main (Kapoho Solo)")
         assertThat(everbearing.single().speciesLabel).isEqualTo("Papaya • Kapoho Solo")
+        assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
+    }
+
+    @Test
+    fun everbearingPlants_returnsTrackedCoconutForSeparateDashboardListing() {
+        val coconutTree = TreeEntity(
+            id = "coconut-1",
+            orchardName = "Home",
+            sectionName = "Palms",
+            nickname = "South side",
+            species = "Cocos nucifera",
+            cultivar = "Maypan",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val mangoTree = coconutTree.copy(
+            id = "mango-1",
+            species = "Mango",
+            cultivar = "Kent",
+            nickname = null
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(coconutTree, mangoTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("coconut-1")
+        assertThat(everbearing.single().treeLabel).isEqualTo("South side (Maypan)")
+        assertThat(everbearing.single().speciesLabel).isEqualTo("Cocos nucifera • Maypan")
         assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
     }
 
