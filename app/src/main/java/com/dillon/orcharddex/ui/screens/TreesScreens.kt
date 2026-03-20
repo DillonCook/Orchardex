@@ -637,9 +637,10 @@ internal fun CultivarAutocompleteCard(
                         Text(
                             buildString {
                                 append(suggestion.species)
-                                if (suggestion.aliases.isNotEmpty()) {
+                                val aliasPreview = previewCultivarAliases(query, suggestion.aliases)
+                                if (aliasPreview.isNotEmpty()) {
                                     append(" | also known as ")
-                                    append(suggestion.aliases.take(2).joinToString(", "))
+                                    append(aliasPreview.joinToString(", "))
                                 }
                             },
                             style = MaterialTheme.typography.bodySmall
@@ -783,6 +784,23 @@ private fun autocompleteMatchScore(query: String, candidate: String): Int? = whe
     candidate.split(' ').any { it.startsWith(query) } -> 320
     candidate.contains(query) -> 220
     else -> null
+}
+
+internal fun previewCultivarAliases(
+    query: String,
+    aliases: List<String>,
+    limit: Int = 2
+): List<String> {
+    val normalizedQuery = normalizeAutocomplete(query)
+    val distinctAliases = aliases.distinctBy(::normalizeAutocomplete)
+    if (normalizedQuery.isBlank()) return distinctAliases.take(limit)
+    return distinctAliases
+        .sortedWith(
+            compareByDescending<String> {
+                autocompleteMatchScore(normalizedQuery, normalizeAutocomplete(it)) ?: 0
+            }.thenBy { it.lowercase() }
+        )
+        .take(limit)
 }
 
 internal fun normalizeAutocomplete(value: String): String = value
