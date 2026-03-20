@@ -254,6 +254,9 @@ fun TreeFormScreen(
     var showRootstockField by rememberSaveable(state.id, state.rootstock.isNotBlank()) {
         mutableStateOf(state.rootstock.isNotBlank())
     }
+    var showAdvancedFields by rememberSaveable(state.id) {
+        mutableStateOf(state.hasAdvancedFieldValues())
+    }
     var suppressSpeciesAutocomplete by rememberSaveable(state.id) {
         mutableStateOf(false)
     }
@@ -324,12 +327,6 @@ fun TreeFormScreen(
         item {
             SectionCard(if (state.id == null) "Add tree" else "Edit tree") {
                 OutlinedTextField(
-                    value = state.nickname,
-                    onValueChange = { viewModel.update { copy(nickname = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Nickname / label") }
-                )
-                OutlinedTextField(
                     value = state.species,
                     onValueChange = { input ->
                         suppressSpeciesAutocomplete = false
@@ -396,12 +393,6 @@ fun TreeFormScreen(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                OutlinedTextField(
-                    value = state.source,
-                    onValueChange = { viewModel.update { copy(source = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Source / nursery") }
-                )
                 if (state.id == null) {
                     OutlinedTextField(
                         value = state.quantity,
@@ -417,59 +408,10 @@ fun TreeFormScreen(
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                     )
                     Text(
-                        text = "This creates separate plant records with the same details and auto-numbers duplicate nicknames.",
+                        text = "This creates separate plant records with the same details and auto-numbers duplicate nicknames when needed.",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                if (showRootstockField) {
-                    OutlinedTextField(
-                        value = state.rootstock,
-                        onValueChange = { viewModel.update { copy(rootstock = it) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Rootstock") }
-                    )
-                    TextButton(
-                        onClick = {
-                            viewModel.update { copy(rootstock = "") }
-                            showRootstockField = false
-                        }
-                    ) {
-                        Text("Hide rootstock")
-                    }
-                } else {
-                    TextButton(onClick = { showRootstockField = true }) {
-                        Text("Add rootstock")
-                    }
-                }
-            }
-        }
-        item {
-            SectionCard("Dates & placement") {
-                if (state.purchaseDate != null) {
-                    DateField(
-                        label = "Purchase date",
-                        value = state.purchaseDate,
-                        onDateSelected = { viewModel.update { copy(purchaseDate = it) } }
-                    )
-                    OutlinedButton(
-                        onClick = { viewModel.update { copy(purchaseDate = null) } },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Clear purchase date")
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { viewModel.update { copy(purchaseDate = LocalDate.now()) } },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Set purchase date")
-                    }
-                }
-                DateField(
-                    label = "Planted date",
-                    value = state.plantedDate,
-                    onDateSelected = { viewModel.update { copy(plantedDate = it) } }
-                )
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -492,85 +434,150 @@ fun TreeFormScreen(
                         onCheckedChange = { checked -> viewModel.update { copy(hasFruitedBefore = checked) } }
                     )
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = state.plantType == PlantType.IN_GROUND,
-                        onClick = { viewModel.update { copy(plantType = PlantType.IN_GROUND) } },
-                        label = { Text("In-ground") }
-                    )
-                    FilterChip(
-                        selected = state.plantType == PlantType.CONTAINER,
-                        onClick = { viewModel.update { copy(plantType = PlantType.CONTAINER) } },
-                        label = { Text("Container") }
-                    )
-                }
-                if (state.plantType == PlantType.CONTAINER) {
-                    OutlinedTextField(
-                        value = state.containerSize,
-                        onValueChange = { viewModel.update { copy(containerSize = it) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Container size") }
-                    )
-                }
-                OutlinedTextField(
-                    value = state.sunExposure,
-                    onValueChange = { viewModel.update { copy(sunExposure = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Sun exposure") }
-                )
             }
         }
         item {
-            SectionCard("Care") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FrostSensitivityLevel.entries.forEach { level ->
+            SectionCard("Advanced") {
+                Text(
+                    text = "Optional details for labeling, dates, placement, care, and notes.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                TextButton(
+                    onClick = { showAdvancedFields = !showAdvancedFields },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showAdvancedFields) "Hide advanced fields" else "Show advanced fields")
+                }
+                if (showAdvancedFields) {
+                    OutlinedTextField(
+                        value = state.nickname,
+                        onValueChange = { viewModel.update { copy(nickname = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nickname / label (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = state.source,
+                        onValueChange = { viewModel.update { copy(source = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Source / nursery (optional)") }
+                    )
+                    if (showRootstockField) {
+                        OutlinedTextField(
+                            value = state.rootstock,
+                            onValueChange = { viewModel.update { copy(rootstock = it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Rootstock") }
+                        )
+                        TextButton(
+                            onClick = {
+                                viewModel.update { copy(rootstock = "") }
+                                showRootstockField = false
+                            }
+                        ) {
+                            Text("Hide rootstock")
+                        }
+                    } else {
+                        TextButton(onClick = { showRootstockField = true }) {
+                            Text("Add rootstock")
+                        }
+                    }
+                    if (state.purchaseDate != null) {
+                        DateField(
+                            label = "Purchase date",
+                            value = state.purchaseDate,
+                            onDateSelected = { viewModel.update { copy(purchaseDate = it) } }
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.update { copy(purchaseDate = null) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clear purchase date")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { viewModel.update { copy(purchaseDate = LocalDate.now()) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Set purchase date")
+                        }
+                    }
+                    DateField(
+                        label = "Planted date",
+                        value = state.plantedDate,
+                        onDateSelected = { viewModel.update { copy(plantedDate = it) } }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = state.frostSensitivity == level,
-                            onClick = { viewModel.update { copy(frostSensitivity = level) } },
-                            label = { Text(level.name.lowercase()) }
+                            selected = state.plantType == PlantType.IN_GROUND,
+                            onClick = { viewModel.update { copy(plantType = PlantType.IN_GROUND) } },
+                            label = { Text("In-ground") }
+                        )
+                        FilterChip(
+                            selected = state.plantType == PlantType.CONTAINER,
+                            onClick = { viewModel.update { copy(plantType = PlantType.CONTAINER) } },
+                            label = { Text("Container") }
                         )
                     }
-                }
-                if (state.frostSensitivity == FrostSensitivityLevel.CUSTOM) {
+                    if (state.plantType == PlantType.CONTAINER) {
+                        OutlinedTextField(
+                            value = state.containerSize,
+                            onValueChange = { viewModel.update { copy(containerSize = it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Container size") }
+                        )
+                    }
                     OutlinedTextField(
-                        value = state.frostSensitivityNote,
-                        onValueChange = { viewModel.update { copy(frostSensitivityNote = it) } },
+                        value = state.sunExposure,
+                        onValueChange = { viewModel.update { copy(sunExposure = it) } },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Frost sensitivity note") }
+                        label = { Text("Sun exposure") }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FrostSensitivityLevel.entries.forEach { level ->
+                            FilterChip(
+                                selected = state.frostSensitivity == level,
+                                onClick = { viewModel.update { copy(frostSensitivity = level) } },
+                                label = { Text(level.name.lowercase()) }
+                            )
+                        }
+                    }
+                    if (state.frostSensitivity == FrostSensitivityLevel.CUSTOM) {
+                        OutlinedTextField(
+                            value = state.frostSensitivityNote,
+                            onValueChange = { viewModel.update { copy(frostSensitivityNote = it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Frost sensitivity note") }
+                        )
+                    }
+                    OutlinedTextField(
+                        value = state.irrigationNote,
+                        onValueChange = { viewModel.update { copy(irrigationNote = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Irrigation note") }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TreeStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = state.status == status,
+                                onClick = { viewModel.update { copy(status = status) } },
+                                label = { Text(status.name.lowercase()) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = state.tags,
+                        onValueChange = { viewModel.update { copy(tags = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Tags") }
+                    )
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = { viewModel.update { copy(notes = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Notes") },
+                        minLines = 4
                     )
                 }
-                OutlinedTextField(
-                    value = state.irrigationNote,
-                    onValueChange = { viewModel.update { copy(irrigationNote = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Irrigation note") }
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TreeStatus.entries.forEach { status ->
-                        FilterChip(
-                            selected = state.status == status,
-                            onClick = { viewModel.update { copy(status = status) } },
-                            label = { Text(status.name.lowercase()) }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = state.tags,
-                    onValueChange = { viewModel.update { copy(tags = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Tags") }
-                )
-            }
-        }
-        item {
-            SectionCard("Notes") {
-                OutlinedTextField(
-                    value = state.notes,
-                    onValueChange = { viewModel.update { copy(notes = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Notes") },
-                    minLines = 4
-                )
             }
         }
         item {
@@ -785,6 +792,21 @@ private fun autocompleteMatchScore(query: String, candidate: String): Int? = whe
     candidate.contains(query) -> 220
     else -> null
 }
+
+private fun com.dillon.orcharddex.ui.viewmodel.TreeFormState.hasAdvancedFieldValues(): Boolean =
+    nickname.isNotBlank() ||
+        source.isNotBlank() ||
+        rootstock.isNotBlank() ||
+        purchaseDate != null ||
+        plantType != PlantType.IN_GROUND ||
+        containerSize.isNotBlank() ||
+        sunExposure.isNotBlank() ||
+        frostSensitivity != FrostSensitivityLevel.MEDIUM ||
+        frostSensitivityNote.isNotBlank() ||
+        irrigationNote.isNotBlank() ||
+        status != TreeStatus.ACTIVE ||
+        tags.isNotBlank() ||
+        notes.isNotBlank()
 
 internal fun previewCultivarAliases(
     query: String,
