@@ -290,6 +290,25 @@ object BloomForecastEngine {
         ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile(
+            "black sapote",
+            setOf(
+                "black sapote",
+                "black persimmon",
+                "zapote negro",
+                "sapote negro",
+                "zapote prieto",
+                "diospyros digyna",
+                "diospyros nigra",
+                "diospyros obtusifolia",
+                "sapota nigra"
+            ),
+            "10b",
+            3,
+            15,
+            170,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        SpeciesBloomProfile(
             "white sapote",
             setOf("white sapote", "casimiroa edulis", "zapote blanco", "casimiroa"),
             "10b",
@@ -1197,6 +1216,13 @@ object BloomForecastEngine {
         papaya("Golden"),
         papaya("Calimosa"),
         papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01")),
+        blackSapote("Merida", aliases = setOf("Reineke", "Reinecke")),
+        blackSapote("Bernicker", aliases = setOf("Bernecker")),
+        blackSapote("Mossman"),
+        blackSapote("Maher"),
+        blackSapote("Ricks Late", aliases = setOf("Rick's Late")),
+        blackSapote("Superb"),
+        blackSapote("Cocktail"),
         whiteSapote(
             "Blumenthal",
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
@@ -1263,6 +1289,18 @@ object BloomForecastEngine {
         pollinationRequirement: PollinationRequirement? = null
     ) = CultivarBloomProfile(
         speciesKey = "papaya",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun blackSapote(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "black sapote",
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
