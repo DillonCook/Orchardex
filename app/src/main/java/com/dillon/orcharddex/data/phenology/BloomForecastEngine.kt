@@ -1768,7 +1768,15 @@ object BloomForecastEngine {
             "Ataulfo",
             aliases = setOf("Honey", "Honey mango", "Champagne", "Champagne mango")
         ),
-        mangoCultivar("Southern Blush")
+        mangoCultivar("Southern Blush"),
+        blackberryCultivar("Apache"),
+        blackberryCultivar("Arapaho"),
+        blackberryCultivar("Chester", aliases = setOf("Chester Thornless")),
+        blackberryCultivar("Natchez"),
+        blackberryCultivar("Navaho"),
+        blackberryCultivar("Ouachita"),
+        blackberryCultivar("Prime-Ark Freedom", aliases = setOf("Prime Ark Freedom")),
+        blackberryCultivar("Triple Crown")
     )
 
     private fun mangoCultivar(
@@ -1776,6 +1784,18 @@ object BloomForecastEngine {
         aliases: Set<String> = emptySet()
     ) = CultivarAutocompleteOption(
         species = "Mango",
+        cultivar = cultivar,
+        aliases = aliases
+            .filterNot { normalize(it) == normalize(cultivar) }
+            .sortedBy(String::lowercase),
+        pollinationRequirement = PollinationRequirement.SELF_FERTILE
+    )
+
+    private fun blackberryCultivar(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarAutocompleteOption(
+        species = "Blackberry",
         cultivar = cultivar,
         aliases = aliases
             .filterNot { normalize(it) == normalize(cultivar) }

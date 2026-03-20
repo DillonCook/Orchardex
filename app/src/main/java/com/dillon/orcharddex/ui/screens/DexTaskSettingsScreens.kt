@@ -845,6 +845,21 @@ fun CatalogScreen() {
 }
 
 @Composable
+private fun CatalogDetailRow(label: String, value: String) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyMedium
+        )
+    }
+}
+
+@Composable
 private fun CatalogSpeciesCard(entry: CatalogSpeciesReferenceEntry) {
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
@@ -864,13 +879,18 @@ private fun CatalogSpeciesCard(entry: CatalogSpeciesReferenceEntry) {
                     )
                 }
             }
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+            Surface(
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             ) {
-                CompactFact("USDA bloom timing", entry.usdaBloomTimingLabel)
-                CompactFact("Fertility", entry.fertilityLabel)
-                CompactFact("Cultivars", entry.cultivars.size.toString())
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    CatalogDetailRow(label = "USDA bloom timing", value = entry.usdaBloomTimingLabel)
+                    CatalogDetailRow(label = "Fertility", value = entry.fertilityLabel)
+                    CatalogDetailRow(label = "Cultivars", value = entry.cultivars.size.toString())
+                }
             }
             if (entry.cultivars.isEmpty()) {
                 Text(
