@@ -12,6 +12,13 @@ import org.junit.Test
 
 class BloomForecastEngineTest {
     @Test
+    fun supportedSpeciesCatalog_includesSugarCaneHybridDisplayLabel() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Sugarcane (cultivated hybrid complex)")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesCommonBananas() {
         val bananaCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Banana" }
@@ -320,6 +327,29 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesSugarCaneGroupsAndNamedClones() {
+        val sugarCaneCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Sugarcane (cultivated hybrid complex)" }
+            .associateBy { it.cultivar }
+
+        assertThat(sugarCaneCultivars.keys).containsAtLeast(
+            "Chewing cane",
+            "Syrup cane",
+            "Crystal / commercial cane",
+            "Yellow Gal",
+            "White Transparent",
+            "Louisiana Ribbon",
+            "Green German",
+            "CP 96-1252",
+            "CP 01-1372",
+            "CP 00-1101",
+            "CP 89-2143"
+        )
+        assertThat(sugarCaneCultivars.getValue("Yellow Gal").pollinationRequirement).isNull()
+        assertThat(sugarCaneCultivars.getValue("Crystal / commercial cane").pollinationRequirement).isNull()
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBananaAliases() {
         val match = BloomForecastEngine.resolveCultivarAutocomplete("Ice Cream", "Banana")
 
@@ -471,6 +501,20 @@ class BloomForecastEngineTest {
         assertThat(suebelleMatch?.cultivar).isEqualTo("Suebelle")
     }
 
+
+    @Test
+    fun resolveCultivarAutocomplete_matchesSugarCaneAliases() {
+        val yellowGalMatch = BloomForecastEngine.resolveCultivarAutocomplete("F31-407", "Sugar cane")
+        val commercialMatch = BloomForecastEngine.resolveCultivarAutocomplete("Commercial cane", "Saccharum spp.")
+        val cloneMatch = BloomForecastEngine.resolveCultivarAutocomplete("CP01-1372", "Sugarcane (cultivated hybrid complex)")
+        val transparentMatch = BloomForecastEngine.resolveCultivarAutocomplete("White Transparent", "Saccharum officinarum")
+
+        assertThat(yellowGalMatch?.cultivar).isEqualTo("Yellow Gal")
+        assertThat(commercialMatch?.cultivar).isEqualTo("Crystal / commercial cane")
+        assertThat(cloneMatch?.cultivar).isEqualTo("CP 01-1372")
+        assertThat(transparentMatch?.cultivar).isEqualTo("White Transparent")
+    }
+
     @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
@@ -569,6 +613,9 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.NEEDS_CROSS_POLLINATION)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Casimiroa", "Hubbell"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Sugar cane")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Saccharum spp.", "Yellow Gal")).isNull()
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Sugarcane (cultivated hybrid complex)", "CP01-1372")).isNull()
     }
 
     @Test
@@ -938,6 +985,42 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun predictMonth_skipsAutomaticSugarCaneForecasts() {
+        val sugarCaneTree = TreeEntity(
+            id = "sugar-cane-1",
+            orchardName = "Home",
+            sectionName = "Canes",
+            nickname = null,
+            species = "Sugarcane (cultivated hybrid complex)",
+            cultivar = "Yellow Gal",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(sugarCaneTree),
+            yearMonth = YearMonth.of(2026, 11),
+            zoneCode = "10b"
+        )
+
+        assertThat(windows).isEmpty()
+    }
+
+    @Test
     fun predictMonth_usesWhiteSapotePrimaryBloomWindow() {
         val whiteSapoteTree = TreeEntity(
             id = "white-sapote-1",
@@ -1243,5 +1326,44 @@ class BloomForecastEngineTest {
         assertThat(everbearing.single().treeLabel).isEqualTo("Main (Kapoho Solo)")
         assertThat(everbearing.single().speciesLabel).isEqualTo("Papaya • Kapoho Solo")
         assertThat(everbearing.single().detailLabel).isEqualTo("Continuous / repeat-bearing")
+    }
+
+    @Test
+    fun everbearingPlants_skipsSugarCaneEvenWhenForecastsAreSuppressed() {
+        val sugarCaneTree = TreeEntity(
+            id = "sugar-cane-1",
+            orchardName = "Home",
+            sectionName = "Canes",
+            nickname = "North row",
+            species = "Sugar cane",
+            cultivar = "Yellow Gal",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val papayaTree = sugarCaneTree.copy(
+            id = "papaya-1",
+            species = "Papaya",
+            cultivar = "Kapoho Solo",
+            nickname = "Main"
+        )
+
+        val everbearing = BloomForecastEngine.everbearingPlants(listOf(sugarCaneTree, papayaTree))
+
+        assertThat(everbearing).hasSize(1)
+        assertThat(everbearing.single().treeId).isEqualTo("papaya-1")
     }
 }

@@ -16,7 +16,8 @@ enum class BloomPhase(val label: String, val startOffsetDays: Int) {
 
 enum class BloomForecastBehavior {
     WINDOW,
-    MANUAL_ONLY
+    MANUAL_ONLY,
+    SUPPRESSED
 }
 
 enum class PollinationRequirement(val label: String) {
@@ -39,7 +40,8 @@ data class SpeciesBloomProfile(
     val shiftDaysPerHalfZone: Long = 4,
     val defaultPhase: BloomPhase = BloomPhase.MID,
     val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW,
-    val pollinationRequirement: PollinationRequirement = PollinationRequirement.UNKNOWN
+    val pollinationRequirement: PollinationRequirement = PollinationRequirement.UNKNOWN,
+    val catalogSpeciesLabel: String = key
 )
 
 data class RegionalBloomOverride(
@@ -297,6 +299,24 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
+        SpeciesBloomProfile(
+            "saccharum spp.",
+            setOf(
+                "sugar cane",
+                "sugarcane",
+                "cane",
+                "sugarcane (cultivated hybrid complex)",
+                "saccharum spp",
+                "saccharum officinarum"
+            ),
+            "10b",
+            1,
+            1,
+            30,
+            forecastBehavior = BloomForecastBehavior.SUPPRESSED,
+            pollinationRequirement = PollinationRequirement.UNKNOWN,
+            catalogSpeciesLabel = "Sugarcane (cultivated hybrid complex)"
+        ),
         SpeciesBloomProfile(
             "papaya",
             setOf("papaya", "carica papaya", "mamão", "mamao", "lechosa"),
@@ -1203,7 +1223,25 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         whiteSapote("Vernon", pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        whiteSapote("Yellow", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION)
+        whiteSapote("Yellow", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
+        sugarCaneGroup("Chewing cane"),
+        sugarCaneGroup("Syrup cane"),
+        sugarCaneGroup(
+            "Crystal / commercial cane",
+            aliases = setOf("Commercial cane", "Crystal cane")
+        ),
+        sugarCane("Yellow Gal", aliases = setOf("F31-407", "F 31-407")),
+        sugarCane("White Transparent"),
+        sugarCane("Georgia Red"),
+        sugarCane("Home Green"),
+        sugarCane("Louisiana Ribbon"),
+        sugarCane("Louisiana Purple"),
+        sugarCane("Louisiana Striped"),
+        sugarCane("Green German"),
+        sugarCane("CP 96-1252", aliases = setOf("CP96-1252")),
+        sugarCane("CP 01-1372", aliases = setOf("CP01-1372")),
+        sugarCane("CP 00-1101", aliases = setOf("CP00-1101")),
+        sugarCane("CP 89-2143", aliases = setOf("CP89-2143"))
     ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
 
     private fun passionFruit(
@@ -1241,6 +1279,28 @@ object BloomForecastEngine {
         aliases = aliases,
         phase = BloomPhase.MID,
         pollinationRequirement = pollinationRequirement
+    )
+
+    private fun sugarCaneGroup(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarBloomProfile(
+        speciesKey = "saccharum spp.",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Sugarcane (cultivated hybrid complex)"
+    )
+
+    private fun sugarCane(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarBloomProfile(
+        speciesKey = "saccharum spp.",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        catalogSpeciesLabel = "Sugarcane (cultivated hybrid complex)"
     )
 
     private val regionalBloomOverrides = listOf(
@@ -1298,7 +1358,7 @@ object BloomForecastEngine {
                 ?.pollinationRequirement
                 ?.takeUnless { it == PollinationRequirement.UNKNOWN }
             CultivarAutocompleteOption(
-                species = profile.catalogSpeciesLabel.toDisplayLabel(),
+                species = profile.catalogSpeciesLabel.toCatalogDisplayLabel(),
                 cultivar = profile.cultivar,
                 aliases = profile.aliases
                     .filterNot { normalize(it) == normalize(profile.cultivar) }
@@ -1320,7 +1380,7 @@ object BloomForecastEngine {
     fun effectiveZoneCode(code: String?): String = UsdaZoneCatalog.resolve(code).code
 
     fun supportedSpeciesCatalog(): List<String> = (
-        speciesProfiles.map { it.key.toDisplayLabel() } + cultivarAutocompleteCatalog.map(CultivarAutocompleteOption::species)
+        speciesProfiles.map { it.catalogSpeciesLabel.toCatalogDisplayLabel() } + cultivarAutocompleteCatalog.map(CultivarAutocompleteOption::species)
         )
         .distinctBy(::normalize)
         .sortedBy(String::lowercase)
@@ -1394,7 +1454,7 @@ object BloomForecastEngine {
 
     fun everbearingPlants(trees: List<TreeEntity>): List<EverbearingPlant> = trees.mapNotNull { tree ->
         val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
-        if (profileMatch.profile.forecastBehavior == BloomForecastBehavior.WINDOW) {
+        if (profileMatch.profile.forecastBehavior != BloomForecastBehavior.MANUAL_ONLY) {
             return@mapNotNull null
         }
         EverbearingPlant(
@@ -1542,4 +1602,12 @@ object BloomForecastEngine {
     private fun String.toDisplayLabel(): String = split(' ')
         .filter(String::isNotBlank)
         .joinToString(" ") { part -> part.replaceFirstChar(Char::uppercase) }
+
+    private fun String.toCatalogDisplayLabel(): String = if (
+        any(Char::isUpperCase) || any { !it.isLetterOrDigit() && !it.isWhitespace() }
+    ) {
+        this
+    } else {
+        toDisplayLabel()
+    }
 }
