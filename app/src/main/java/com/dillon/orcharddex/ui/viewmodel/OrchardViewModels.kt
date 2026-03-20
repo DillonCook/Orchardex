@@ -712,14 +712,13 @@ class SettingsViewModel(
         }
     }
 
-    fun updateOrchardProfile(name: String, usdaZone: String, orchardRegion: String) {
+    fun updateOrchardProfile(name: String, usdaZone: String) {
         viewModelScope.launch {
             val trimmedName = name.trim()
             val normalizedZone = usdaZone.trim().lowercase()
-            val normalizedRegion = orchardRegion.trim().lowercase()
             settingsRepository.updateOrchardName(trimmedName)
             settingsRepository.updateUsdaZone(normalizedZone)
-            settingsRepository.updateOrchardRegion(normalizedRegion)
+            settingsRepository.updateOrchardRegion("")
             repository.syncOrchardName(trimmedName)
         }
     }
@@ -730,12 +729,11 @@ class SettingsViewModel(
         }
     }
 
-    fun completeOnboarding(orchardName: String, usdaZone: String, orchardRegion: String) {
+    fun completeOnboarding(orchardName: String, usdaZone: String) {
         viewModelScope.launch {
             val trimmed = orchardName.trim()
             val normalizedZone = usdaZone.trim().lowercase()
-            val normalizedRegion = orchardRegion.trim().lowercase()
-            settingsRepository.completeOnboarding(trimmed, normalizedZone, normalizedRegion)
+            settingsRepository.completeOnboarding(trimmed, normalizedZone, "")
             repository.syncOrchardName(trimmed)
         }
     }

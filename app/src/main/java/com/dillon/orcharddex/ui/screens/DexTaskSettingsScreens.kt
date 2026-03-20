@@ -49,7 +49,6 @@ import coil.compose.AsyncImage
 import com.dillon.orcharddex.BuildConfig
 import com.dillon.orcharddex.data.local.ReminderEntity
 import com.dillon.orcharddex.data.model.DexCultivarEntry
-import com.dillon.orcharddex.data.model.DexSpeciesGroup
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -57,7 +56,6 @@ import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
-import com.dillon.orcharddex.data.phenology.OrchardRegionCatalog
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
@@ -88,7 +86,7 @@ fun DexScreen(
     val dex by viewModel.dex.collectAsStateWithLifecycle()
     val plants by viewModel.trees.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
-    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
+    var wishlistExpanded by rememberSaveable { mutableStateOf(true) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
     var speciesFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var statusFilter by rememberSaveable { mutableStateOf<TreeStatus?>(null) }
@@ -96,12 +94,6 @@ fun DexScreen(
     var sort by rememberSaveable { mutableStateOf(DexPlantSortOption.UPDATED) }
 
     WishlistEntryDialog(viewModel)
-    DexAddDialog(
-        visible = addMenuVisible,
-        onDismiss = { addMenuVisible = false },
-        onAddTree = onAddTree,
-        onAddWishlist = viewModel::showAddDialog
-    )
 
     val speciesOptions = plants.map { it.tree.species }.distinct().sorted()
     val filteredPlants = remember(plants, search, speciesFilter, statusFilter, plantTypeFilter, sort) {
@@ -129,17 +121,6 @@ fun DexScreen(
             }
         )
     }
-    val filteredGroups = remember(dex.ownedGroups, search, speciesFilter) {
-        val query = search.trim().lowercase()
-        dex.ownedGroups.mapNotNull { group ->
-            if (speciesFilter != null && group.species != speciesFilter) return@mapNotNull null
-            val cultivars = group.cultivars.filter { entry ->
-                query.isBlank() || listOf(group.species, entry.species, entry.cultivar).any { it.lowercase().contains(query) }
-            }
-            if (cultivars.isEmpty()) null else DexSpeciesGroup(group.species, cultivars)
-        }
-    }
-
     if (filtersVisible) {
         AlertDialog(
             onDismissRequest = { filtersVisible = false },
@@ -179,8 +160,8 @@ fun DexScreen(
 
     Scaffold(
         floatingActionButton = {
-            FloatingActionButton(onClick = { addMenuVisible = true }, shape = RoundedCornerShape(16.dp), modifier = Modifier.testTag("add_tree")) {
-                Icon(Icons.Outlined.Add, contentDescription = "Add")
+            FloatingActionButton(onClick = onAddTree, shape = RoundedCornerShape(16.dp), modifier = Modifier.testTag("add_tree")) {
+                Icon(Icons.Outlined.Add, contentDescription = "Add plant")
             }
         }
     ) { innerPadding ->
@@ -189,6 +170,50 @@ fun DexScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                SectionCard("Wishlist") {
+                    Text("Keep target cultivars separate from owned plants, then convert them once you acquire one.")
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(onClick = viewModel::showAddDialog) { Text("Add to wishlist") }
+                        OutlinedButton(onClick = { wishlistExpanded = !wishlistExpanded }) {
+                            Text(if (wishlistExpanded) "Hide wishlist" else "View wishlist")
+                        }
+                    }
+                    if (wishlistExpanded) {
+                        if (dex.wishlistEntries.isEmpty()) {
+                            Text("No wishlist entries yet.")
+                        } else {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                dex.wishlistEntries.forEach { entry ->
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            Text("${entry.species} - ${entry.cultivar}", style = MaterialTheme.typography.titleMedium)
+                                            Text(
+                                                buildString {
+                                                    append(entry.priority.name.lowercase())
+                                                    if (entry.acquired) append(" - acquired")
+                                                    if (entry.notes.isNotBlank()) append(" - ${entry.notes}")
+                                                },
+                                                style = MaterialTheme.typography.bodySmall,
+                                                maxLines = 2,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        TextButton(onClick = { viewModel.deleteWishlist(entry.id) }) { Text("Delete") }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 SectionCard("Plant library") {
                     Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
@@ -214,54 +239,7 @@ fun DexScreen(
                     DexPlantCard(item = item, onClick = { onTreeClick(item.tree.id) })
                 }
             }
-            item {
-                SectionCard("Variety board") {
-                    if (filteredGroups.isEmpty()) {
-                        Text("No varieties match the current search or filters.")
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                            filteredGroups.forEach { group ->
-                                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                    Text(group.species, style = MaterialTheme.typography.titleMedium)
-                                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                        group.cultivars.forEach { entry ->
-                                            DexCultivarCard(entry = entry, onClick = entry.linkedTreeId?.let { id -> { onTreeClick(id) } })
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            item {
-                SectionCard("Wishlist") {
-                    if (dex.wishlistEntries.isEmpty()) {
-                        Text("No wishlist entries yet.")
-                    } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            dex.wishlistEntries.forEach { entry ->
-                                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Text("${entry.species} - ${entry.cultivar}", style = MaterialTheme.typography.titleMedium)
-                                        Text(
-                                            buildString {
-                                                append(entry.priority.name.lowercase())
-                                                if (entry.acquired) append(" - acquired")
-                                                if (entry.notes.isNotBlank()) append(" - ${entry.notes}")
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            maxLines = 2,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                    TextButton(onClick = { viewModel.deleteWishlist(entry.id) }) { Text("Delete") }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+
         }
     }
 }
@@ -488,7 +466,6 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
-    val regionOptions = remember { OrchardRegionCatalog.supportedLabels() }
     val supportedCultivarCatalog = remember {
         BloomForecastEngine.supportedCultivarCatalog()
             .groupBy { it.species }
@@ -497,9 +474,6 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
     }
     var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
-    }
-    var orchardRegionDraft by rememberSaveable(settings.orchardRegion) {
-        mutableStateOf(OrchardRegionCatalog.labelForCode(settings.orchardRegion))
     }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(viewModel::exportBackup)
@@ -547,23 +521,12 @@ fun SettingsScreen(viewModel: SettingsViewModel, onPrivacy: () -> Unit) {
                     onSelected = { usdaZoneDraft = it },
                     modifier = Modifier.fillMaxWidth()
                 )
-                SelectionField(
-                    label = "Orchard region",
-                    value = orchardRegionDraft,
-                    options = regionOptions,
-                    onSelected = { orchardRegionDraft = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "USDA zone drives bloom timing. Orchard region refines regional bloom patterns for fruits like lychee.",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text("USDA zone drives bloom timing across the orchard experience.", style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(
                     onClick = {
                         viewModel.updateOrchardProfile(
                             orchardNameDraft,
-                            if (usdaZoneDraft == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft),
-                            OrchardRegionCatalog.codeFromLabel(orchardRegionDraft)
+                            if (usdaZoneDraft == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft)
                         )
                     },
                     modifier = Modifier.fillMaxWidth()

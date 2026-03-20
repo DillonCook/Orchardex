@@ -38,7 +38,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.dillon.orcharddex.OrchardDexApp
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
-import com.dillon.orcharddex.data.phenology.OrchardRegionCatalog
 import com.dillon.orcharddex.ui.navigation.BottomDestination
 import com.dillon.orcharddex.ui.navigation.OrchardRoutes
 import com.dillon.orcharddex.ui.components.SelectionField
@@ -69,12 +68,8 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         mutableStateOf(settings.orchardName)
     }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
-    val regionOptions = remember { OrchardRegionCatalog.supportedLabels() }
     var setupUsdaZone by rememberSaveable(settings.onboardingComplete, settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
-    }
-    var setupOrchardRegion by rememberSaveable(settings.onboardingComplete, settings.orchardRegion) {
-        mutableStateOf(OrchardRegionCatalog.labelForCode(settings.orchardRegion))
     }
     val bottomDestinations = listOf(
         BottomDestination.Dashboard,
@@ -106,13 +101,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                         options = zoneOptions,
                         onSelected = { setupUsdaZone = it }
                     )
-                    SelectionField(
-                        label = "Orchard region",
-                        value = setupOrchardRegion,
-                        options = regionOptions,
-                        onSelected = { setupOrchardRegion = it }
-                    )
-                    Text("USDA zone drives bloom timing. Orchard region refines species with regional bloom patterns like lychee.")
+                    Text("USDA zone drives bloom timing across the app. You can update it later in Settings.")
                 }
             },
             confirmButton = {
@@ -120,8 +109,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                     onClick = {
                         settingsViewModel.completeOnboarding(
                             setupOrchardName,
-                            if (setupUsdaZone == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(setupUsdaZone),
-                            OrchardRegionCatalog.codeFromLabel(setupOrchardRegion)
+                            if (setupUsdaZone == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(setupUsdaZone)
                         )
                     },
                     enabled = setupOrchardName.isNotBlank()
@@ -338,7 +326,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
 private fun String.titleForRoute(orchardName: String): String = when {
     startsWith(BottomDestination.Dashboard.route) -> orchardName.ifBlank { "Dashboard" }
     startsWith(BottomDestination.Trees.route) -> "History"
-    startsWith(BottomDestination.Dex.route) -> "Dex"
+    startsWith(BottomDestination.Dex.route) -> "Plants"
     startsWith(BottomDestination.Tasks.route) -> "Tasks"
     startsWith(BottomDestination.Settings.route) -> "Settings"
     startsWith("historyDetail") -> "Log details"

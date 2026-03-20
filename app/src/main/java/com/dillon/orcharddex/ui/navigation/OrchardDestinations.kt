@@ -16,7 +16,7 @@ sealed class BottomDestination(
 ) {
     data object Dashboard : BottomDestination("dashboard", "Dashboard", Icons.Outlined.Dashboard)
     data object Trees : BottomDestination("trees", "History", Icons.Outlined.Yard)
-    data object Dex : BottomDestination("dex", "Dex", Icons.Outlined.CollectionsBookmark)
+    data object Dex : BottomDestination("dex", "Plants", Icons.Outlined.CollectionsBookmark)
     data object Tasks : BottomDestination("tasks", "Tasks", Icons.Outlined.TaskAlt)
     data object Settings : BottomDestination("settings", "Settings", Icons.Outlined.Settings)
 }
