@@ -195,6 +195,21 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
         ),
         SpeciesBloomProfile(
+            "atemoya",
+            setOf(
+                "atemoya",
+                "annona atemoya",
+                "annona x atemoya",
+                "annona cherimola x annona squamosa",
+                "annona squamosa x annona cherimola"
+            ),
+            "10b",
+            4,
+            1,
+            105,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        SpeciesBloomProfile(
             "star fruit",
             setOf("star fruit", "starfruit", "carambola", "averrhoa carambola"),
             "10b",
@@ -683,6 +698,40 @@ object BloomForecastEngine {
             aliases = setOf("Petch Sakorn"),
             phase = BloomPhase.LATE,
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "Gefner",
+            aliases = setOf("Geffner"),
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "Page",
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "African Pride",
+            aliases = setOf("Kaller"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "Bradley",
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "Pink Mammoth",
+            aliases = setOf("Mammoth", "Pinks Mammoth"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "atemoya",
+            "Priestly",
+            phase = BloomPhase.MID
         ),
         CultivarBloomProfile(
             "star fruit",

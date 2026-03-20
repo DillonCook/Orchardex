@@ -26,6 +26,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesAtemoya() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Atemoya")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesLonganCultivarsAndPollinationMetadata() {
         val longanCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Longan" }
@@ -43,6 +50,26 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(longanCultivars.getValue("Diamond River").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesAtemoyaCultivarsAndPollinationMetadata() {
+        val atemoyaCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Atemoya" }
+            .associateBy { it.cultivar }
+
+        assertThat(atemoyaCultivars.keys).containsAtLeast(
+            "Gefner",
+            "Page",
+            "African Pride",
+            "Bradley",
+            "Pink Mammoth",
+            "Priestly"
+        )
+        assertThat(atemoyaCultivars.getValue("Gefner").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(atemoyaCultivars.getValue("African Pride").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -517,6 +544,19 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesAtemoyaAliases() {
+        val gefnerMatch = BloomForecastEngine.resolveCultivarAutocomplete("Geffner", "Atemoya")
+        val africanPrideMatch = BloomForecastEngine.resolveCultivarAutocomplete("Kaller", "Annona x atemoya")
+        val mammothMatch = BloomForecastEngine.resolveCultivarAutocomplete("Mammoth", "Atemoya")
+        val pinksMammothMatch = BloomForecastEngine.resolveCultivarAutocomplete("Pinks Mammoth", "Annona cherimola x annona squamosa")
+
+        assertThat(gefnerMatch?.cultivar).isEqualTo("Gefner")
+        assertThat(africanPrideMatch?.cultivar).isEqualTo("African Pride")
+        assertThat(mammothMatch?.cultivar).isEqualTo("Pink Mammoth")
+        assertThat(pinksMammothMatch?.cultivar).isEqualTo("Pink Mammoth")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -716,6 +756,14 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun pollinationRequirementFor_resolvesAtemoyaSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Atemoya"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Annona atemoya", "Geffner"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun pollinationRequirementFor_resolvesCultivarAndSpeciesDefaults() {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Banana", "Goldfinger"))
             .isEqualTo(PollinationRequirement.POLLINATION_NOT_REQUIRED)
@@ -894,6 +942,50 @@ class BloomForecastEngineTest {
         assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 2, 25))
         assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
         assertThat(juneWindow).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesAtemoyaPrimaryBloomWindow() {
+        val atemoyaTree = TreeEntity(
+            id = "atemoya-1",
+            orchardName = "Home",
+            sectionName = "Annona row",
+            nickname = null,
+            species = "Annona x atemoya",
+            cultivar = "Gefner",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(atemoyaTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val augustWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(atemoyaTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(augustWindow).isEmpty()
     }
 
     @Test
