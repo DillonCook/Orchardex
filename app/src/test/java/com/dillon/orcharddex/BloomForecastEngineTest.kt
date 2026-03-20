@@ -47,14 +47,23 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesCatalog_includesSoursop() {
+        val species = BloomForecastEngine.supportedSpeciesCatalog()
+
+        assertThat(species).contains("Soursop")
+    }
+
+    @Test
     fun speciesAutocompleteOptions_matchAliasesButReturnCanonicalDisplayLabels() {
         val starAppleSuggestions = BloomForecastEngine.speciesAutocompleteOptions("star apple")
         val scientificSuggestions = BloomForecastEngine.speciesAutocompleteOptions("cocos nucifera")
         val hybridSuggestions = BloomForecastEngine.speciesAutocompleteOptions("annona x atemoya")
+        val guanabanaSuggestions = BloomForecastEngine.speciesAutocompleteOptions("guanabana")
 
         assertThat(starAppleSuggestions).contains("Caimito (star apple)")
         assertThat(scientificSuggestions).contains("Coconut")
         assertThat(hybridSuggestions).contains("Atemoya")
+        assertThat(guanabanaSuggestions).contains("Soursop")
     }
 
     @Test
@@ -65,6 +74,8 @@ class BloomForecastEngineTest {
             .isEqualTo("Coconut")
         assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("annona x atemoya"))
             .isEqualTo("Atemoya")
+        assertThat(BloomForecastEngine.resolveSpeciesAutocomplete("guanabana"))
+            .isEqualTo("Soursop")
     }
 
     @Test
@@ -153,6 +164,24 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.UNKNOWN)
         assertThat(coconutCultivars.getValue("Maypan").pollinationRequirement)
             .isEqualTo(PollinationRequirement.UNKNOWN)
+    }
+
+    @Test
+    fun supportedCultivarCatalog_includesSoursopCultivarsAndPollinationMetadata() {
+        val soursopCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Soursop" }
+            .associateBy { it.cultivar }
+
+        assertThat(soursopCultivars.keys).containsExactly(
+            "Sweet",
+            "Bennett",
+            "Cuban Fiberless",
+            "Whitman Fiberless"
+        )
+        assertThat(soursopCultivars.getValue("Sweet").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(soursopCultivars.getValue("Whitman Fiberless").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -671,6 +700,17 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesSoursopAliases() {
+        val sweetMatch = BloomForecastEngine.resolveCultivarAutocomplete("Sweet guanabana", "Soursop")
+        val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Cuban Fibreless", "Annona muricata")
+        val whitmanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Guanabana")
+
+        assertThat(sweetMatch?.cultivar).isEqualTo("Sweet")
+        assertThat(cubanMatch?.cultivar).isEqualTo("Cuban Fiberless")
+        assertThat(whitmanMatch?.cultivar).isEqualTo("Whitman Fiberless")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesSugarAppleAliases() {
         val lessardMatch = BloomForecastEngine.resolveCultivarAutocomplete("Thai Lessard", "Sugar apple")
         val cubanMatch = BloomForecastEngine.resolveCultivarAutocomplete("Seedless Cuban", "Sweetsop")
@@ -761,12 +801,15 @@ class BloomForecastEngineTest {
     fun resolveCultivarAutocomplete_disambiguatesWhitmanBySpeciesQuery() {
         val passionFruitMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Lilikoi")
         val greenSapoteMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Green sapote")
+        val soursopMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman", "Soursop")
         val globalMatch = BloomForecastEngine.resolveCultivarAutocomplete("Whitman")
 
         assertThat(passionFruitMatch?.species).isEqualTo("Passion Fruit")
         assertThat(passionFruitMatch?.cultivar).isEqualTo("Whitman Yellow")
         assertThat(greenSapoteMatch?.species).isEqualTo("Green Sapote")
         assertThat(greenSapoteMatch?.cultivar).isEqualTo("Whitman")
+        assertThat(soursopMatch?.species).isEqualTo("Soursop")
+        assertThat(soursopMatch?.cultivar).isEqualTo("Whitman Fiberless")
         assertThat(globalMatch).isNull()
     }
 
@@ -922,6 +965,18 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Malayan Dwarf")).isNull()
         assertThat(BloomForecastEngine.pollinationRequirementFor("Coconut", "Maypan")).isNull()
+    }
+
+    @Test
+    fun pollinationRequirementFor_resolvesSoursopSpeciesAndCultivarDefaults() {
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Soursop"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Guanabana"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Annona muricata", "Whitman"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Graviola", "Sweet guanabana"))
+            .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
     }
 
     @Test
@@ -1227,6 +1282,50 @@ class BloomForecastEngineTest {
         )
 
         assertThat(windows).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesSoursopPrimaryBloomWindow() {
+        val soursopTree = TreeEntity(
+            id = "soursop-1",
+            orchardName = "Home",
+            sectionName = "Annonas",
+            nickname = null,
+            species = "Annona muricata",
+            cultivar = "Whitman Fiberless",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val aprilWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(soursopTree),
+            yearMonth = YearMonth.of(2026, 4),
+            zoneCode = "10b"
+        )
+        val augustWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(soursopTree),
+            yearMonth = YearMonth.of(2026, 8),
+            zoneCode = "10b"
+        )
+
+        assertThat(aprilWindow).hasSize(1)
+        assertThat(aprilWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 4, 1))
+        assertThat(aprilWindow.single().sourceLabel).isEqualTo("cultivar-adjusted")
+        assertThat(augustWindow).isEmpty()
     }
 
     @Test

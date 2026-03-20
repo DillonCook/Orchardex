@@ -215,6 +215,23 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
         SpeciesBloomProfile(
+            "soursop",
+            setOf(
+                "soursop",
+                "guanabana",
+                "guanábana",
+                "graviola",
+                "annona muricata",
+                "guayabano",
+                "guyabano"
+            ),
+            "10b",
+            4,
+            1,
+            90,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+        ),
+        SpeciesBloomProfile(
             "caimito",
             setOf(
                 "caimito",
@@ -771,6 +788,29 @@ object BloomForecastEngine {
         CultivarBloomProfile(
             "atemoya",
             "Priestly",
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "soursop",
+            "Sweet",
+            aliases = setOf("Sweet soursop", "Sweet guanabana", "Guanabana dulce"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "soursop",
+            "Bennett",
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "soursop",
+            "Cuban Fiberless",
+            aliases = setOf("Cuban Fibreless", "Guanabana sin fibre"),
+            phase = BloomPhase.MID
+        ),
+        CultivarBloomProfile(
+            "soursop",
+            "Whitman Fiberless",
+            aliases = setOf("Whitman's Fiberless", "Whitman"),
             phase = BloomPhase.MID
         ),
         caimito(
