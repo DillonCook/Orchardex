@@ -373,6 +373,38 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesMameySapoteSeedSetAndPollinationMetadata() {
+        val mameySapoteCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Mamey Sapote" }
+            .associateBy { it.cultivar }
+
+        assertThat(mameySapoteCultivars.keys).containsAtLeast(
+            "Pantin",
+            "Magana",
+            "Pace",
+            "Tazumal",
+            "Mayapan",
+            "Copan",
+            "Lara",
+            "Florida",
+            "Piloto",
+            "Chenox",
+            "Abuelo",
+            "Francisco Fernandez",
+            "Flores",
+            "Viejo",
+            "Lorito",
+            "Cepeda Especial",
+            "Akil Especial",
+            "AREC No. 3"
+        )
+        assertThat(mameySapoteCultivars.getValue("Pantin").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(mameySapoteCultivars.getValue("AREC No. 3").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesBlackSapoteSeedSetAndPollinationMetadata() {
         val blackSapoteCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Black Sapote" }
@@ -591,6 +623,24 @@ class BloomForecastEngineTest {
 
 
     @Test
+    fun resolveCultivarAutocomplete_matchesMameySapoteAliases() {
+        val pantinMatch = BloomForecastEngine.resolveCultivarAutocomplete("Key West", "Mamey sapote")
+        val maganaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Magaña", "Pouteria sapota")
+        val copanMatch = BloomForecastEngine.resolveCultivarAutocomplete("AREC No. 1", "Zapote mamey")
+        val fernandezMatch = BloomForecastEngine.resolveCultivarAutocomplete("Francisco Fernancez", "Calocarpum sapota")
+        val cepedaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Cepeda Special", "Mamey colorado")
+        val akilMatch = BloomForecastEngine.resolveCultivarAutocomplete("Akil Special", "Lucuma mammosa")
+
+        assertThat(pantinMatch?.cultivar).isEqualTo("Pantin")
+        assertThat(maganaMatch?.cultivar).isEqualTo("Magana")
+        assertThat(copanMatch?.cultivar).isEqualTo("Copan")
+        assertThat(fernandezMatch?.cultivar).isEqualTo("Francisco Fernandez")
+        assertThat(cepedaMatch?.cultivar).isEqualTo("Cepeda Especial")
+        assertThat(akilMatch?.cultivar).isEqualTo("Akil Especial")
+    }
+
+
+    @Test
     fun resolveCultivarAutocomplete_matchesBlackSapoteAliases() {
         val meridaMatch = BloomForecastEngine.resolveCultivarAutocomplete("Reineke", "Black sapote")
         val reineckeMatch = BloomForecastEngine.resolveCultivarAutocomplete("Reinecke", "Diospyros nigra")
@@ -725,6 +775,16 @@ class BloomForecastEngineTest {
         assertThat(BloomForecastEngine.pollinationRequirementFor("Pouteria campechiana", "Bruce"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lucuma nervosa", "TREC9681"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Mamey sapote"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Pouteria sapota", "Key West"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Zapote colorado", "Magaña"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Calocarpum sapota", "AREC No. 2"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lucuma mammosa", "Cepeda Special"))
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Black sapote"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
@@ -1144,6 +1204,49 @@ class BloomForecastEngineTest {
         )
 
         assertThat(windows).isEmpty()
+    }
+
+    @Test
+    fun predictMonth_usesMameySapotePrimaryBloomWindow() {
+        val mameySapoteTree = TreeEntity(
+            id = "mamey-sapote-1",
+            orchardName = "Home",
+            sectionName = "Sapotes",
+            nickname = null,
+            species = "Pouteria sapota",
+            cultivar = "Pantin",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val januaryWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mameySapoteTree),
+            yearMonth = YearMonth.of(2027, 1),
+            zoneCode = "10b"
+        )
+        val mayWindow = BloomForecastEngine.predictMonth(
+            trees = listOf(mameySapoteTree),
+            yearMonth = YearMonth.of(2027, 5),
+            zoneCode = "10b"
+        )
+
+        assertThat(januaryWindow).hasSize(1)
+        assertThat(januaryWindow.single().startDate).isEqualTo(java.time.LocalDate.of(2026, 6, 1))
+        assertThat(mayWindow).isEmpty()
     }
 
     @Test

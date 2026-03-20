@@ -290,6 +290,24 @@ object BloomForecastEngine {
         ),
         SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile(
+            "mamey sapote",
+            setOf(
+                "mamey sapote",
+                "mamey colorado",
+                "zapote colorado",
+                "zapote mamey",
+                "pouteria sapota",
+                "calocarpum sapota",
+                "calocarpum mammosum",
+                "lucuma mammosa"
+            ),
+            "10b",
+            6,
+            1,
+            275,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        SpeciesBloomProfile(
             "canistel",
             setOf(
                 "canistel",
@@ -1257,6 +1275,24 @@ object BloomForecastEngine {
         papaya("Golden"),
         papaya("Calimosa"),
         papaya("UENF/Caliman 01", aliases = setOf("Caliman 01", "UENF-Caliman 01")),
+        mameySapote("Pantin", aliases = setOf("Key West")),
+        mameySapote("Magana", aliases = setOf("Magaña")),
+        mameySapote("Pace"),
+        mameySapote("Tazumal"),
+        mameySapote("Mayapan", aliases = setOf("AREC No. 2")),
+        mameySapote("Copan", aliases = setOf("AREC No. 1")),
+        mameySapote("Lara"),
+        mameySapote("Florida"),
+        mameySapote("Piloto"),
+        mameySapote("Chenox"),
+        mameySapote("Abuelo"),
+        mameySapote("Francisco Fernandez", aliases = setOf("Francisco Fernancez")),
+        mameySapote("Flores"),
+        mameySapote("Viejo"),
+        mameySapote("Lorito"),
+        mameySapote("Cepeda Especial", aliases = setOf("Cepeda Special")),
+        mameySapote("Akil Especial", aliases = setOf("Akil Special")),
+        mameySapote("AREC No. 3"),
         canistel("Bruce"),
         canistel("Fairchild #1", aliases = setOf("Fairchild 1")),
         canistel("Fairchild #2", aliases = setOf("Fairchild 2")),
@@ -1341,6 +1377,18 @@ object BloomForecastEngine {
         pollinationRequirement: PollinationRequirement? = null
     ) = CultivarBloomProfile(
         speciesKey = "papaya",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
+    )
+
+    private fun mameySapote(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "mamey sapote",
         cultivar = cultivar,
         aliases = aliases,
         phase = BloomPhase.MID,
