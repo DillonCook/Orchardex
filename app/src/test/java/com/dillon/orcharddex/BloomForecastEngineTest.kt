@@ -274,6 +274,21 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedCultivarCatalog_includesLycheeCultivarsAndPollinationMetadata() {
+        val lycheeCultivars = BloomForecastEngine.supportedCultivarCatalog()
+            .filter { it.species == "Lychee" }
+            .associateBy { it.cultivar }
+
+        assertThat(lycheeCultivars.keys).containsAtLeast(
+            "Mauritius",
+            "Fei Zi Xiao",
+            "Sweetheart"
+        )
+        assertThat(lycheeCultivars.getValue("Sweetheart").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesCommonBananas() {
         val bananaCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Banana" }
@@ -458,11 +473,14 @@ class BloomForecastEngineTest {
             "Josapine",
             "BRS Vitória",
             "Gold Barrel",
+            "White Jade",
             "Amritha"
         )
         assertThat(pineappleCultivars.getValue("MD-2").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
         assertThat(pineappleCultivars.getValue("Sugarloaf").pollinationRequirement)
+            .isEqualTo(PollinationRequirement.SELF_FERTILE)
+        assertThat(pineappleCultivars.getValue("White Jade").pollinationRequirement)
             .isEqualTo(PollinationRequirement.SELF_FERTILE)
     }
 
@@ -745,6 +763,13 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun resolveCultivarAutocomplete_matchesLycheeCultivars() {
+        val sweetheartMatch = BloomForecastEngine.resolveCultivarAutocomplete("Sweetheart", "Lychee")
+
+        assertThat(sweetheartMatch?.cultivar).isEqualTo("Sweetheart")
+    }
+
+    @Test
     fun resolveCultivarAutocomplete_matchesAtemoyaAliases() {
         val gefnerMatch = BloomForecastEngine.resolveCultivarAutocomplete("Geffner", "Atemoya")
         val africanPrideMatch = BloomForecastEngine.resolveCultivarAutocomplete("Kaller", "Annona x atemoya")
@@ -862,11 +887,13 @@ class BloomForecastEngineTest {
         val mauritiusMatch = BloomForecastEngine.resolveCultivarAutocomplete("Moris", "Piña")
         val sugarloafMatch = BloomForecastEngine.resolveCultivarAutocomplete("Kona Sugarloaf", "Ananas")
         val md2Match = BloomForecastEngine.resolveCultivarAutocomplete("Del Monte Gold", "Ananas comosus")
+        val whiteJadeMatch = BloomForecastEngine.resolveCultivarAutocomplete("White Jade", "Pineapple")
 
         assertThat(victoriaMatch?.cultivar).isEqualTo("Victoria")
         assertThat(mauritiusMatch?.cultivar).isEqualTo("Mauritius")
         assertThat(sugarloafMatch?.cultivar).isEqualTo("Sugarloaf")
         assertThat(md2Match?.cultivar).isEqualTo("MD-2")
+        assertThat(whiteJadeMatch?.cultivar).isEqualTo("White Jade")
     }
 
     @Test
@@ -1145,6 +1172,8 @@ class BloomForecastEngineTest {
             .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Fay Zee Siu"))
             .isEqualTo(PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY)
+        assertThat(BloomForecastEngine.pollinationRequirementFor("Lychee", "Sweetheart"))
+            .isEqualTo(PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Carambola"))
             .isEqualTo(PollinationRequirement.CROSS_POLLINATION_RECOMMENDED)
         assertThat(BloomForecastEngine.pollinationRequirementFor("Star fruit", "Arkin"))

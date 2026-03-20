@@ -774,6 +774,12 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.PARTIAL_SELF_INCOMPATIBILITY
         ),
         CultivarBloomProfile(
+            "lychee",
+            "Sweetheart",
+            phase = BloomPhase.MID,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        CultivarBloomProfile(
             "longan",
             "Kohala",
             phase = BloomPhase.MID,
@@ -1352,6 +1358,7 @@ object BloomForecastEngine {
         CultivarBloomProfile("pineapple", "N67-10", phase = BloomPhase.MID),
         CultivarBloomProfile("pineapple", "Soft Touch", phase = BloomPhase.MID),
         CultivarBloomProfile("pineapple", "Gold Barrel", phase = BloomPhase.MID),
+        CultivarBloomProfile("pineapple", "White Jade", phase = BloomPhase.MID),
         CultivarBloomProfile(
             "pineapple",
             "Amritha",
