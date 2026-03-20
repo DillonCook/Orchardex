@@ -72,8 +72,6 @@ import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 import java.io.File
 import java.time.LocalDate
-import java.time.YearMonth
-import java.time.temporal.ChronoUnit
 
 private enum class DexPlantSortOption(val label: String) {
     UPDATED("Updated"),
@@ -289,7 +287,7 @@ private fun DexPlantCard(
     val thumbnailLabel = item.tree.cultivar.takeIf(String::isNotBlank)?.take(2)
         ?: item.tree.species.take(2)
     val nextBloomLabel = remember(item.tree, usdaZone) {
-        item.tree.nextBloomCountdownLabel(usdaZone)
+        BloomForecastEngine.plantBloomCountdownLabel(item.tree, usdaZone)
     }
 
     OutlinedCard(
@@ -360,59 +358,31 @@ private fun DexPlantCard(
                     )
                 }
             }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Text(
-                    text = "Next bloom",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    tonalElevation = 1.dp
+            nextBloomLabel?.let { label ->
+                Column(
+                    horizontalAlignment = Alignment.End,
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = nextBloomLabel,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        text = "Next bloom",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Surface(
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        tonalElevation = 1.dp
+                    ) {
+                        Text(
+                            text = label,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer
+                        )
+                    }
                 }
             }
         }
-    }
-}
-
-private fun TreeEntity.nextBloomCountdownLabel(usdaZone: String): String {
-    if (BloomForecastEngine.everbearingPlants(listOf(this)).isNotEmpty()) {
-        return "Ongoing"
-    }
-    if (usdaZone.isBlank()) {
-        return "Unknown"
-    }
-
-    val today = LocalDate.now()
-    val currentMonth = YearMonth.from(today)
-    val nextWindow = generateSequence(0L) { it + 1 }
-        .take(18)
-        .mapNotNull { offset ->
-            BloomForecastEngine.predictMonth(
-                trees = listOf(this),
-                yearMonth = currentMonth.plusMonths(offset),
-                zoneCode = usdaZone,
-                orchardRegionCode = null
-            ).firstOrNull()
-        }
-        .firstOrNull { window -> !window.endDate.isBefore(today) }
-        ?: return "Unknown"
-
-    return if (!today.isBefore(nextWindow.startDate) && !today.isAfter(nextWindow.endDate)) {
-        "Now"
-    } else {
-        "${ChronoUnit.DAYS.between(today, nextWindow.startDate)}d"
     }
 }
 

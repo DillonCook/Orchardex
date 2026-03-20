@@ -2158,6 +2158,39 @@ object BloomForecastEngine {
         )
     }.sortedWith(compareBy({ it.speciesLabel.lowercase() }, { it.treeLabel.lowercase() }))
 
+    fun plantBloomCountdownLabel(tree: TreeEntity, zoneCode: String?): String? {
+        val profileMatch = tree.resolveProfileMatch() ?: return null
+        return when (profileMatch.profile.forecastBehavior) {
+            BloomForecastBehavior.SUPPRESSED -> null
+            BloomForecastBehavior.MANUAL_ONLY -> "Ongoing"
+            BloomForecastBehavior.WINDOW -> {
+                if (zoneCode.isNullOrBlank()) {
+                    return "Unknown"
+                }
+                val today = LocalDate.now()
+                val currentMonth = YearMonth.from(today)
+                val nextWindow = generateSequence(0L) { it + 1 }
+                    .take(18)
+                    .mapNotNull { offset ->
+                        predictMonth(
+                            trees = listOf(tree),
+                            yearMonth = currentMonth.plusMonths(offset),
+                            zoneCode = zoneCode,
+                            orchardRegionCode = null
+                        ).firstOrNull()
+                    }
+                    .firstOrNull { window -> !window.endDate.isBefore(today) }
+                    ?: return "Unknown"
+
+                if (!today.isBefore(nextWindow.startDate) && !today.isAfter(nextWindow.endDate)) {
+                    "Now"
+                } else {
+                    "${java.time.temporal.ChronoUnit.DAYS.between(today, nextWindow.startDate)}d"
+                }
+            }
+        }
+    }
+
     fun predictMonth(
         trees: List<TreeEntity>,
         yearMonth: YearMonth,
