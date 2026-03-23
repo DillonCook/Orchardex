@@ -24,6 +24,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -62,6 +63,7 @@ import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
+import com.dillon.orcharddex.ui.components.FeatureCard
 import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
@@ -141,40 +143,43 @@ fun DexScreen(
     }
 
     if (filtersVisible) {
-        AlertDialog(
-            onDismissRequest = { filtersVisible = false },
-            title = { Text("Filter plants") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ChoiceChipsRow(speciesOptions.take(12), speciesFilter, onSelected = { speciesFilter = it })
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = statusFilter == null, onClick = { statusFilter = null }, label = { Text("Any status") })
-                        TreeStatus.entries.forEach { status ->
-                            FilterChip(selected = statusFilter == status, onClick = { statusFilter = status }, label = { Text(status.name.lowercase()) })
-                        }
-                    }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = plantTypeFilter == null, onClick = { plantTypeFilter = null }, label = { Text("Any planting") })
-                        FilterChip(selected = plantTypeFilter == PlantType.IN_GROUND, onClick = { plantTypeFilter = PlantType.IN_GROUND }, label = { Text("In-ground") })
-                        FilterChip(selected = plantTypeFilter == PlantType.CONTAINER, onClick = { plantTypeFilter = PlantType.CONTAINER }, label = { Text("Container") })
-                    }
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        DexPlantSortOption.entries.forEach { option ->
-                            FilterChip(selected = sort == option, onClick = { sort = option }, label = { Text(option.label) })
-                        }
+        ModalBottomSheet(onDismissRequest = { filtersVisible = false }) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                Text("Filter plants", style = MaterialTheme.typography.titleLarge)
+                ChoiceChipsRow(speciesOptions.take(12), speciesFilter, onSelected = { speciesFilter = it })
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = statusFilter == null, onClick = { statusFilter = null }, label = { Text("Any status") })
+                    TreeStatus.entries.forEach { status ->
+                        FilterChip(selected = statusFilter == status, onClick = { statusFilter = status }, label = { Text(status.name.lowercase()) })
                     }
                 }
-            },
-            confirmButton = { TextButton(onClick = { filtersVisible = false }) { Text("Done") } },
-            dismissButton = {
-                TextButton(onClick = {
-                    speciesFilter = null
-                    statusFilter = null
-                    plantTypeFilter = null
-                    sort = DexPlantSortOption.UPDATED
-                }) { Text("Reset") }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(selected = plantTypeFilter == null, onClick = { plantTypeFilter = null }, label = { Text("Any planting") })
+                    FilterChip(selected = plantTypeFilter == PlantType.IN_GROUND, onClick = { plantTypeFilter = PlantType.IN_GROUND }, label = { Text("In-ground") })
+                    FilterChip(selected = plantTypeFilter == PlantType.CONTAINER, onClick = { plantTypeFilter = PlantType.CONTAINER }, label = { Text("Container") })
+                }
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DexPlantSortOption.entries.forEach { option ->
+                        FilterChip(selected = sort == option, onClick = { sort = option }, label = { Text(option.label) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    OutlinedButton(
+                        onClick = {
+                            speciesFilter = null
+                            statusFilter = null
+                            plantTypeFilter = null
+                            sort = DexPlantSortOption.UPDATED
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) { Text("Reset") }
+                    Button(onClick = { filtersVisible = false }, modifier = Modifier.weight(1f)) { Text("Done") }
+                }
             }
-        )
+        }
     }
 
     Scaffold(
@@ -190,8 +195,10 @@ fun DexScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Plant library") {
-                    Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
+                FeatureCard(
+                    title = "Plant library",
+                    subtitle = "Open any plant in seconds with searchable records and fast filtering."
+                ) {
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = search,
@@ -394,8 +401,10 @@ fun TasksScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Task board") {
-                    Text("Scan overdue tasks first, then work through the next 7 days.")
+                FeatureCard(
+                    title = "Task board",
+                    subtitle = "Start with overdue tasks, then clear the next 7 days."
+                ) {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                         StatCard("Open", reminders.count { it.reminder.completedAt == null && it.reminder.enabled }.toString())
                         StatCard("Overdue", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt < now }.toString())
