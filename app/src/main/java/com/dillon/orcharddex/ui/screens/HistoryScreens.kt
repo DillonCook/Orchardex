@@ -16,12 +16,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -46,6 +46,7 @@ import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
+import com.dillon.orcharddex.ui.components.FeatureCard
 import com.dillon.orcharddex.ui.components.LocalPhotoStrip
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
@@ -93,37 +94,32 @@ fun HistoryScreen(
     val totalHarvests = remember(history) { history.count { it.kind == ActivityKind.HARVEST } }
 
     if (addMenuVisible) {
-        AlertDialog(
-            onDismissRequest = { addMenuVisible = false },
-            title = { Text("Add to history") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddEvent()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Add event")
-                    }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddHarvest()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Add harvest")
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { addMenuVisible = false }) {
-                    Text("Close")
-                }
+        ModalBottomSheet(onDismissRequest = { addMenuVisible = false }) {
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Add to history", style = MaterialTheme.typography.titleLarge)
+                Button(
+                    onClick = {
+                        addMenuVisible = false
+                        onAddEvent()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Add event") }
+                Button(
+                    onClick = {
+                        addMenuVisible = false
+                        onAddHarvest()
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Add harvest") }
+                TextButton(
+                    onClick = { addMenuVisible = false },
+                    modifier = Modifier.align(Alignment.End)
+                ) { Text("Close") }
             }
-        )
+        }
     }
 
     Scaffold(
@@ -143,11 +139,10 @@ fun HistoryScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Harvests") {
-                    Text(
-                        text = "Total seasonal harvests logged across all tracked plants.",
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                FeatureCard(
+                    title = "Harvest journal",
+                    subtitle = "Track seasonal output and keep the orchard timeline clean."
+                ) {
                     com.dillon.orcharddex.ui.components.StatCard(
                         label = "Seasonal harvests logged",
                         value = totalHarvests.toString()

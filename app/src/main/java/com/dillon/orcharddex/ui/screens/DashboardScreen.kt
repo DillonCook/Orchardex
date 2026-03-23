@@ -45,6 +45,7 @@ import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.ui.components.EmptyStateCard
+import com.dillon.orcharddex.ui.components.FeatureCard
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
 import com.dillon.orcharddex.ui.epochToLocalDate
@@ -161,15 +162,14 @@ fun DashboardScreen(
             }
         }
         item {
-            SectionCard("Orchard pulse") {
-                Text(
-                    text = if (dashboard.totalTreeCount == 0) {
-                        "The dashboard becomes your quick review board once plants and reminders are in place."
-                    } else {
-                        "Scan the collection, spot due work, and jump into the right plant or reminder list quickly."
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            FeatureCard(
+                title = "Orchard pulse",
+                subtitle = if (dashboard.totalTreeCount == 0) {
+                    "Once plants and reminders are added, this becomes your command center."
+                } else {
+                    "See collection health and what needs attention in seconds."
+                }
+            ) {
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)

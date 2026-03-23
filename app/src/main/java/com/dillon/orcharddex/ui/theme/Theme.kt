@@ -34,18 +34,18 @@ private val OrchardLightScheme = lightColorScheme(
 )
 
 private val OrchardDarkScheme = darkColorScheme(
-    primary = Color(0xFF9DBA9B),
+    primary = Color(0xFFA8CAA6),
     onPrimary = Color(0xFF0F1A0F),
-    primaryContainer = Color(0xFF223524),
+    primaryContainer = Color(0xFF1F3322),
     onPrimaryContainer = Color(0xFFD6E9D6),
-    secondary = Color(0xFFE6C27C),
+    secondary = Color(0xFFF0C98A),
     onSecondary = Color(0xFF392400),
-    secondaryContainer = Color(0xFF5A3F10),
+    secondaryContainer = Color(0xFF614013),
     onSecondaryContainer = Color(0xFFF8E4BD),
     tertiary = Color(0xFFB7CCBF),
-    background = Color(0xFF111512),
-    surface = Color(0xFF171B17),
-    surfaceVariant = Color(0xFF2E332F),
+    background = Color(0xFF0E1110),
+    surface = Color(0xFF181D1A),
+    surfaceVariant = Color(0xFF2A322D),
     outline = Color(0xFF8C938B)
 )
 
