@@ -478,21 +478,21 @@ fun PrivacyScreen() {
         item {
             SectionCard("Privacy policy") {
                 Text("Last updated: Mar 18, 2026")
-                Text("OrchardDex is an offline-first Android app for orchard records, reminders, photos, harvest logs, and manual backups.")
+                Text("OrcharDex is an offline-first Android app for orchard records, reminders, photos, harvest logs, and manual backups.")
             }
         }
         item {
             SectionCard("Summary") {
-                Text("OrchardDex stores orchard records only on this device.")
+                Text("OrcharDex stores orchard records only on this device.")
                 Text("No account or login is required.")
                 Text("No analytics, ads, crash reporting, or server sync are included.")
-                Text("OrchardDex does not sell, share, or transmit your orchard data to the developer or third parties.")
+                Text("OrcharDex does not sell, share, or transmit your orchard data to the developer or third parties.")
             }
         }
         item {
-            SectionCard("Data OrchardDex stores") {
+            SectionCard("Data OrcharDex stores") {
                 Text("Plant records, notes, tags, orchard details, event logs, harvest logs, reminders, and app settings.")
-                Text("Photos you choose are copied into app-private storage inside OrchardDex.")
+                Text("Photos you choose are copied into app-private storage inside OrcharDex.")
                 Text("Manual backup files are created or imported only when you choose to export or import them.")
             }
         }
@@ -507,7 +507,7 @@ fun PrivacyScreen() {
         item {
             SectionCard("Permissions") {
                 Text("Notification permission is requested only when you enable reminders on Android 13 and newer.")
-                Text("OrchardDex uses the Android photo picker and does not request broad media-library permissions.")
+                Text("OrcharDex uses the Android photo picker and does not request broad media-library permissions.")
             }
         }
         item {
@@ -518,7 +518,7 @@ fun PrivacyScreen() {
         }
         item {
             SectionCard("Contact") {
-                Text("For privacy questions, use the contact method listed in the OrchardDex Google Play listing.")
+                Text("For privacy questions, use the contact method listed in the OrcharDex Google Play listing.")
             }
         }
     }

@@ -2,6 +2,7 @@ package com.dillon.orcharddex
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.compose.setContent
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -12,6 +13,7 @@ import com.dillon.orcharddex.ui.theme.OrchardDexTheme
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        enableEdgeToEdge()
         val app = application as OrchardDexApp
         setContent {
             val settings by app.container.settingsRepository.settings.collectAsStateWithLifecycle(

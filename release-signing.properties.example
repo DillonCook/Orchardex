@@ -1,0 +1,7 @@
+# Copy this file to release-signing.properties and fill in your real values.
+# Keep the real file out of source control.
+
+ORCHARDEX_STORE_FILE=C:/Users/you/keys/orchardex-upload.jks
+ORCHARDEX_STORE_PASSWORD=replace-me
+ORCHARDEX_KEY_ALIAS=orchardex-upload
+ORCHARDEX_KEY_PASSWORD=replace-me

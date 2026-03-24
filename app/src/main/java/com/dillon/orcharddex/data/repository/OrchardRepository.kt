@@ -551,12 +551,14 @@ class OrchardRepository(
     }
 
     suspend fun addWishlist(input: WishlistInput) = withContext(Dispatchers.IO) {
-        val existing = input.id?.let { null } ?: wishlistDao.findBySpeciesAndCultivar(input.species, input.cultivar)
+        val species = input.species.trim()
+        val cultivar = input.cultivar.trim()
+        val existing = input.id?.let { null } ?: wishlistDao.findBySpeciesAndCultivar(species, cultivar)
         wishlistDao.insert(
             WishlistCultivarEntity(
                 id = input.id ?: existing?.id ?: UUID.randomUUID().toString(),
-                species = input.species.trim(),
-                cultivar = input.cultivar.trim(),
+                species = species,
+                cultivar = cultivar,
                 priority = input.priority,
                 notes = input.notes.trim(),
                 acquired = existing?.acquired ?: false,

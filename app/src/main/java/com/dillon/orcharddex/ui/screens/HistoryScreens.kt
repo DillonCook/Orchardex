@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -69,6 +71,16 @@ private enum class HistoryQuickFilter(val label: String) {
     ISSUES("Issues")
 }
 
+private enum class HarvestTracker(val label: String) {
+    CURRENT_YEAR("Current year"),
+    TOTAL("Total harvests")
+}
+
+private data class HarvestSpeciesCount(
+    val species: String,
+    val harvestCount: Int
+)
+
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
@@ -80,7 +92,7 @@ fun HistoryScreen(
     var search by rememberSaveable { mutableStateOf("") }
     var quickFilter by rememberSaveable { mutableStateOf(HistoryQuickFilter.ALL) }
     var addMenuVisible by rememberSaveable { mutableStateOf(false) }
-    var showSeasonalTrackerDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedTracker by rememberSaveable { mutableStateOf<HarvestTracker?>(null) }
 
     val filteredHistory = remember(history, search, quickFilter) {
         val query = search.trim().lowercase()
@@ -91,13 +103,27 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         filteredHistory.groupBy { it.date.monthBucketLabel() }.toList()
     }
-    val currentSeasonYear = remember { java.time.Year.now().value }
-    val seasonalVerifiedHarvests = remember(history, currentSeasonYear) {
-        history.filter { entry ->
-            entry.kind == ActivityKind.HARVEST &&
-                entry.verified &&
-                Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year == currentSeasonYear
+    val currentYear = remember { java.time.Year.now().value }
+    val harvestHistory = remember(history) {
+        history.filter { entry -> entry.kind == ActivityKind.HARVEST }
+    }
+    val currentYearHarvests = remember(harvestHistory, currentYear) {
+        harvestHistory.filter { entry ->
+            Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year == currentYear
         }
+    }
+    val trackerEntries = selectedTracker?.let { tracker ->
+        when (tracker) {
+            HarvestTracker.CURRENT_YEAR -> currentYearHarvests
+            HarvestTracker.TOTAL -> harvestHistory
+        }
+    }.orEmpty()
+    val trackerSpeciesCounts = remember(trackerEntries) {
+        trackerEntries
+            .groupingBy { it.species.ifBlank { "Unknown species" } }
+            .eachCount()
+            .map { (species, count) -> HarvestSpeciesCount(species = species, harvestCount = count) }
+            .sortedWith(compareByDescending<HarvestSpeciesCount> { it.harvestCount }.thenBy { it.species.lowercase() })
     }
 
     if (addMenuVisible) {
@@ -134,39 +160,17 @@ fun HistoryScreen(
         )
     }
 
-    if (showSeasonalTrackerDialog) {
-        AlertDialog(
-            onDismissRequest = { showSeasonalTrackerDialog = false },
-            title = { Text("Seasonal harvest tracker") },
-            text = {
-                if (seasonalVerifiedHarvests.isEmpty()) {
-                    Text("No verified harvests logged for the current calendar year.")
-                } else {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(seasonalVerifiedHarvests, key = { it.id }) { entry ->
-                            SeasonalHarvestRow(
-                                entry = entry,
-                                onClick = {
-                                    showSeasonalTrackerDialog = false
-                                    onEntryClick(entry.kind, entry.id)
-                                }
-                            )
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { showSeasonalTrackerDialog = false }) {
-                    Text("Close")
-                }
-            }
+    selectedTracker?.let { tracker ->
+        HarvestTrackerDialog(
+            title = if (tracker == HarvestTracker.CURRENT_YEAR) "$currentYear harvests" else tracker.label,
+            speciesCounts = trackerSpeciesCounts,
+            totalHarvests = trackerEntries.size,
+            onDismiss = { selectedTracker = null }
         )
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
                 onClick = { addMenuVisible = true },
@@ -179,24 +183,34 @@ fun HistoryScreen(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Harvests") {
+                SectionCard("Harvest trackers") {
                     Text(
-                        text = "Verified harvests received this calendar year across all tracked plants.",
+                        text = "Tap a tracker to review harvest counts by species.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    com.dillon.orcharddex.ui.components.StatCard(
-                        label = "Seasonal harvest tracker",
-                        value = seasonalVerifiedHarvests.size.toString(),
-                        onClick = { showSeasonalTrackerDialog = true }
-                    )
-                    Text(
-                        text = "Tap to review verified harvests in the current calendar year.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "$currentYear harvests",
+                            value = currentYearHarvests.size.toString(),
+                            minWidth = 0.dp,
+                            onClick = { selectedTracker = HarvestTracker.CURRENT_YEAR }
+                        )
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Total harvests",
+                            value = harvestHistory.size.toString(),
+                            minWidth = 0.dp,
+                            onClick = { selectedTracker = HarvestTracker.TOTAL }
+                        )
+                    }
                 }
             }
             item {
@@ -433,25 +447,62 @@ private fun HistoryRow(
 }
 
 @Composable
-private fun SeasonalHarvestRow(
-    entry: HistoryEntryModel,
-    onClick: () -> Unit
+private fun HarvestTrackerDialog(
+    title: String,
+    speciesCounts: List<HarvestSpeciesCount>,
+    totalHarvests: Int,
+    onDismiss: () -> Unit
 ) {
-    OutlinedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(entry.treeLabel, style = MaterialTheme.typography.titleMedium)
-            Text(entry.species, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(entry.preview, style = MaterialTheme.typography.bodySmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            if (speciesCounts.isEmpty()) {
+                Text("No harvests logged yet.")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "$totalHarvests harvests across ${speciesCounts.size} species.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(speciesCounts, key = { it.species }) { item ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = item.species,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = item.harvestCount.toString(),
+                                        style = MaterialTheme.typography.headlineMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
         }
-    }
+    )
 }
 
 private fun HistoryQuickFilter.matches(entry: HistoryEntryModel): Boolean = when (this) {

@@ -2,6 +2,13 @@ package com.dillon.orcharddex.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -9,7 +16,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -41,9 +51,13 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -71,6 +85,7 @@ import com.dillon.orcharddex.ui.toDateTimeLabel
 import com.dillon.orcharddex.ui.viewmodel.DexViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
+import androidx.compose.material3.surfaceColorAtElevation
 import java.io.File
 
 private enum class DexPlantSortOption(val label: String) {
@@ -90,7 +105,7 @@ fun DexScreen(
     val dex by viewModel.dex.collectAsStateWithLifecycle()
     val plants by viewModel.trees.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
-    var wishlistExpanded by rememberSaveable { mutableStateOf(true) }
+    var wishlistVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
     var speciesFilter by rememberSaveable { mutableStateOf<String?>(null) }
     var statusFilter by rememberSaveable { mutableStateOf<TreeStatus?>(null) }
@@ -98,6 +113,13 @@ fun DexScreen(
     var sort by rememberSaveable { mutableStateOf(DexPlantSortOption.UPDATED) }
 
     WishlistEntryDialog(viewModel)
+    if (wishlistVisible) {
+        WishlistEntriesDialog(
+            entries = dex.wishlistEntries,
+            onDismiss = { wishlistVisible = false },
+            onDelete = viewModel::deleteWishlist
+        )
+    }
 
     val speciesOptions = plants.map { it.tree.species }.distinct().sorted()
     val filteredPlants = remember(plants, search, speciesFilter, statusFilter, plantTypeFilter, sort) {
@@ -163,6 +185,7 @@ fun DexScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(onClick = onAddTree, shape = RoundedCornerShape(16.dp), modifier = Modifier.testTag("add_tree")) {
                 Icon(Icons.Outlined.Add, contentDescription = "Add plant")
@@ -170,20 +193,21 @@ fun DexScreen(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                SectionCard("Plant library") {
-                    Text("Search the orchard and open a plant for the full record, photos, reminders, and history.")
+                SectionCard("") {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Button(onClick = viewModel::showAddDialog) { Text("Add to wishlist") }
-                        OutlinedButton(onClick = { wishlistExpanded = !wishlistExpanded }) {
-                            Text(if (wishlistExpanded) "Hide wishlist" else "View wishlist")
+                        OutlinedButton(onClick = { wishlistVisible = true }) {
+                            Text("View wishlist (${dex.wishlistEntries.size})")
                         }
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -194,40 +218,6 @@ fun DexScreen(
                             label = { Text("Search plants or cultivars") }
                         )
                         OutlinedButton(onClick = { filtersVisible = true }) { Text("Filters") }
-                    }
-                    buildDexFilterSummary(speciesFilter, statusFilter, plantTypeFilter, sort)?.let {
-                        Text(it, style = MaterialTheme.typography.bodySmall)
-                    }
-                    Text("${filteredPlants.size} plants shown", style = MaterialTheme.typography.bodySmall)
-                    if (wishlistExpanded) {
-                        if (dex.wishlistEntries.isEmpty()) {
-                            Text("No wishlist entries yet.")
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                dex.wishlistEntries.forEach { entry ->
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                                            Text("${entry.species} - ${entry.cultivar}", style = MaterialTheme.typography.titleMedium)
-                                            Text(
-                                                buildString {
-                                                    append(entry.priority.name.lowercase())
-                                                    if (entry.acquired) append(" - acquired")
-                                                    if (entry.notes.isNotBlank()) append(" - ${entry.notes}")
-                                                },
-                                                style = MaterialTheme.typography.bodySmall,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                        }
-                                        TextButton(onClick = { viewModel.deleteWishlist(entry.id) }) { Text("Delete") }
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
             }
@@ -245,6 +235,74 @@ fun DexScreen(
 
         }
     }
+}
+
+@Composable
+private fun WishlistEntriesDialog(
+    entries: List<com.dillon.orcharddex.data.local.WishlistCultivarEntity>,
+    onDismiss: () -> Unit,
+    onDelete: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Wishlist") },
+        text = {
+            if (entries.isEmpty()) {
+                Text("No wishlist entries yet.")
+            } else {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(entries, key = { it.id }) { entry ->
+                        OutlinedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(14.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = entry.cultivar.takeIf(String::isNotBlank)?.let { "${entry.species} - $it" } ?: entry.species,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    val detailLine = buildString {
+                                        if (entry.acquired) append("Acquired")
+                                        if (entry.notes.isNotBlank()) {
+                                            if (isNotEmpty()) append(" - ")
+                                            append(entry.notes)
+                                        }
+                                    }
+                                    if (detailLine.isNotBlank()) {
+                                        Text(
+                                            text = detailLine,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
+                                TextButton(onClick = { onDelete(entry.id) }) {
+                                    Text("Delete")
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
 }
 
 @Composable
@@ -483,6 +541,7 @@ fun TasksScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(onClick = onAddReminder, shape = RoundedCornerShape(16.dp)) {
                 Icon(Icons.Outlined.Add, contentDescription = "New reminder")
@@ -490,8 +549,10 @@ fun TasksScreen(
         }
     ) { innerPadding ->
         LazyColumn(
-            modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
@@ -686,7 +747,11 @@ fun SettingsScreen(
         )
     }
 
-    LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
         item {
             SectionCard("Orchard") {
                 OutlinedTextField(value = orchardNameDraft, onValueChange = { orchardNameDraft = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Orchard name") })
@@ -740,7 +805,7 @@ fun SettingsScreen(
         }
         item {
             SectionCard("Backups") {
-                OutlinedButton(onClick = { exportLauncher.launch("orcharddex-${BuildConfig.VERSION_NAME}.orcharddex.zip") }, modifier = Modifier.fillMaxWidth().testTag("export_backup")) {
+                OutlinedButton(onClick = { exportLauncher.launch("orchardex-${BuildConfig.VERSION_NAME}.orchardex.zip") }, modifier = Modifier.fillMaxWidth().testTag("export_backup")) {
                     Text("Export backup")
                 }
                 OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
@@ -963,7 +1028,7 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
 
     AlertDialog(
         onDismissRequest = viewModel::hideAddDialog,
-        title = { Text("Add wishlist cultivar") },
+        title = { Text("Add wishlist plant") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
@@ -1003,7 +1068,7 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
                             viewModel.addCultivar = input
                         }
                     },
-                    label = { Text("Cultivar") }
+                    label = { Text("Cultivar (optional)") }
                 )
                 if (!suppressCultivarAutocomplete) {
                     CultivarAutocompleteCard(
@@ -1018,14 +1083,14 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
                     )
                 }
                 OutlinedTextField(value = viewModel.addNotes, onValueChange = { viewModel.addNotes = it }, label = { Text("Notes") })
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    com.dillon.orcharddex.data.model.WishlistPriority.entries.forEach { priority ->
-                        FilterChip(selected = viewModel.addPriority == priority, onClick = { viewModel.addPriority = priority }, label = { Text(priority.name.lowercase()) })
-                    }
-                }
             }
         },
-        confirmButton = { TextButton(onClick = viewModel::saveWishlist) { Text("Save") } },
+        confirmButton = {
+            TextButton(
+                onClick = viewModel::saveWishlist,
+                enabled = viewModel.addSpecies.isNotBlank()
+            ) { Text("Save") }
+        },
         dismissButton = { TextButton(onClick = viewModel::hideAddDialog) { Text("Cancel") } }
     )
 }
@@ -1049,21 +1114,6 @@ private fun DexAddDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
-}
-
-private fun buildDexFilterSummary(
-    speciesFilter: String?,
-    statusFilter: TreeStatus?,
-    plantTypeFilter: PlantType?,
-    sort: DexPlantSortOption
-): String? {
-    val parts = buildList {
-        speciesFilter?.let { add("Species: $it") }
-        statusFilter?.let { add("Status: ${it.name.lowercase()}") }
-        plantTypeFilter?.let { add("Planting: ${it.name.replace("_", "-").lowercase()}") }
-        add("Sort: ${sort.label.lowercase()}")
-    }
-    return parts.joinToString(" | ").takeIf(String::isNotBlank)
 }
 
 private fun ReminderEntity.statusLabel(now: Long, dueSoonCutoff: Long): String = when {

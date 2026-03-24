@@ -1,6 +1,6 @@
-# OrchardDex
+# OrcharDex
 
-OrchardDex is an offline-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses only on-device storage and requires no account, no backend, and no internet permission at runtime.
+OrcharDex is an offline-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses only on-device storage and requires no account, no backend, and no internet permission at runtime.
 
 ## Stack
 
@@ -78,6 +78,8 @@ Windows:
 ```powershell
 .\gradlew.bat bundleRelease
 ```
+
+Release signing setup is documented in [docs/release-signing.md](/C:/Users/Dillo/code/orchardex/docs/release-signing.md).
 
 The unsigned release bundle is produced under `app/build/outputs/bundle/release/`.
 

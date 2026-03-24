@@ -32,7 +32,6 @@ import com.dillon.orcharddex.data.model.ReminderInput
 import com.dillon.orcharddex.data.model.TreeInput
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistInput
-import com.dillon.orcharddex.data.model.WishlistPriority
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.data.preferences.SettingsRepository
@@ -534,7 +533,6 @@ class DexViewModel(
 
     var addSpecies by mutableStateOf("")
     var addCultivar by mutableStateOf("")
-    var addPriority by mutableStateOf(WishlistPriority.MEDIUM)
     var addNotes by mutableStateOf("")
 
     fun showAddDialog() {
@@ -545,18 +543,16 @@ class DexViewModel(
         addDialogVisible = false
         addSpecies = ""
         addCultivar = ""
-        addPriority = WishlistPriority.MEDIUM
         addNotes = ""
     }
 
     fun saveWishlist() {
-        if (addSpecies.isBlank() || addCultivar.isBlank()) return
+        if (addSpecies.isBlank()) return
         viewModelScope.launch {
             repository.addWishlist(
                 WishlistInput(
                     species = addSpecies,
                     cultivar = addCultivar,
-                    priority = addPriority,
                     notes = addNotes
                 )
             )

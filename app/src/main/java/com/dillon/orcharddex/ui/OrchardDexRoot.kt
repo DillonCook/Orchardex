@@ -7,12 +7,18 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
@@ -20,6 +26,7 @@ import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.remember
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -27,7 +34,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
@@ -36,6 +47,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.compose.ui.unit.dp
 import com.dillon.orcharddex.OrchardDexApp
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.ui.navigation.BottomDestination
@@ -56,6 +68,7 @@ import com.dillon.orcharddex.ui.screens.TreeDetailScreen
 import com.dillon.orcharddex.ui.screens.TreeFormScreen
 import com.dillon.orcharddex.ui.viewmodel.OrchardViewModelProvider
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
+import androidx.compose.material3.surfaceColorAtElevation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -88,7 +101,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
     if (!settings.onboardingComplete) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Set up OrchardDex") },
+            title = { Text("Set up OrcharDex") },
             text = {
                 androidx.compose.foundation.layout.Column {
                     OutlinedTextField(
@@ -122,22 +135,100 @@ fun OrchardDexRoot(app: OrchardDexApp) {
     }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             val isRootDestination = bottomDestinations.any { currentRoute.startsWith(it.route) }
-            TopAppBar(
-                title = { Text(currentRoute.titleForRoute(settings.orchardName)) },
-                navigationIcon = {
-                    if (!isRootDestination) {
-                        IconButton(onClick = { navController.popBackStack() }) {
-                            Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+            val isDarkPalette = MaterialTheme.colorScheme.background.luminance() < 0.5f
+            val topBarSurface = MaterialTheme.colorScheme.surfaceColorAtElevation(4.dp)
+            val headerWash = if (isDarkPalette) {
+                listOf(
+                    Color(0xFF2D2147).copy(alpha = 0.38f),
+                    Color.Transparent,
+                    Color(0xFF5C471E).copy(alpha = 0.30f)
+                )
+            } else {
+                listOf(
+                    Color(0xFFD6E7FF).copy(alpha = 0.86f),
+                    Color.Transparent,
+                    Color(0xFFFFE3A9).copy(alpha = 0.76f)
+                )
+            }
+            val headerAccent = if (isDarkPalette) {
+                listOf(
+                    Color(0xFF84A37E).copy(alpha = 0.74f),
+                    Color(0xFF8B78E6).copy(alpha = 0.62f),
+                    Color(0xFFF0B54B).copy(alpha = 0.82f)
+                )
+            } else {
+                listOf(
+                    Color(0xFF7B984B).copy(alpha = 0.76f),
+                    Color(0xFF7390C8).copy(alpha = 0.62f),
+                    Color(0xFFC4892B).copy(alpha = 0.80f)
+                )
+            }
+            val headerSheen = if (isDarkPalette) {
+                listOf(
+                    Color.White.copy(alpha = 0.035f),
+                    Color.Transparent,
+                    Color.Black.copy(alpha = 0.08f)
+                )
+            } else {
+                listOf(
+                    Color.White.copy(alpha = 0.18f),
+                    Color.Transparent,
+                    Color(0xFFC4892B).copy(alpha = 0.06f)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(topBarSurface)
+                    .background(
+                        brush = Brush.horizontalGradient(
+                            colors = headerWash
+                        )
+                    )
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = headerSheen
+                        )
+                    )
+            ) {
+                TopAppBar(
+                    title = { Text(currentRoute.titleForRoute(settings.orchardName)) },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface
+                    ),
+                    navigationIcon = {
+                        if (!isRootDestination) {
+                            IconButton(onClick = { navController.popBackStack() }) {
+                                Icon(Icons.AutoMirrored.Outlined.ArrowBack, contentDescription = "Back")
+                            }
                         }
                     }
-                }
-            )
+                )
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(2.dp)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = headerAccent
+                            )
+                        )
+                )
+            }
         },
         bottomBar = {
             if (showBottomBar) {
-                BottomAppBar {
+                BottomAppBar(
+                    containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                    contentColor = MaterialTheme.colorScheme.onSurface
+                ) {
                     bottomDestinations.forEach { destination ->
                         NavigationBarItem(
                             selected = currentRoute.startsWith(destination.route),
@@ -161,7 +252,9 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         NavHost(
             navController = navController,
             startDestination = BottomDestination.Dashboard.route,
-            modifier = Modifier.padding(innerPadding),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
             enterTransition = { fadeIn(animationSpec = tween(durationMillis = 140)) },
             exitTransition = { fadeOut(animationSpec = tween(durationMillis = 100)) },
             popEnterTransition = { fadeIn(animationSpec = tween(durationMillis = 140)) },
@@ -343,5 +436,5 @@ private fun String.titleForRoute(orchardName: String): String = when {
     startsWith("reminderForm") -> "Reminder"
     startsWith("privacy") -> "Privacy"
     startsWith("catalog") -> "Plant Catalog"
-    else -> "OrchardDex"
+    else -> "OrcharDex"
 }

@@ -17,12 +17,12 @@ OrcharDex is an offline-first Android app for managing orchard records, plant hi
 
 OrcharDex may access or store the following information you enter or select:
 
-- Plant records, notes, tags, and orchard details
-- Event logs and harvest logs
-- Reminder titles, dates, and notes
-- Photos you choose through the Android photo picker
-- App settings such as theme and reminder defaults
-- Manual backup archives that you explicitly export or import
+- plant records, notes, tags, and orchard details
+- event logs and harvest logs
+- reminder titles, dates, and notes
+- photos you choose through the Android photo picker
+- app settings such as theme and reminder defaults
+- manual backup archives that you explicitly export or import
 
 ## How Data Is Used
 

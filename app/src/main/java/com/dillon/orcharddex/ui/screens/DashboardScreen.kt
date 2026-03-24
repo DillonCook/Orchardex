@@ -47,6 +47,7 @@ import com.dillon.orcharddex.data.phenology.EverbearingPlant
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.ui.components.EmptyStateCard
+import com.dillon.orcharddex.ui.components.OrchardDexHeroBanner
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
 import com.dillon.orcharddex.ui.epochToLocalDate
@@ -220,11 +221,8 @@ fun DashboardScreen(
             }
         }
         item {
-            SectionCard("Quick actions") {
-                Text(
-                    text = "Capture orchard work from the dashboard without hunting through other screens.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            SectionCard("") {
+                OrchardDexHeroBanner()
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)

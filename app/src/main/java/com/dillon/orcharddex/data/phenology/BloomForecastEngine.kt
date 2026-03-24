@@ -964,7 +964,11 @@ object BloomForecastEngine {
             "Panama Tall",
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
         ),
-        coconut("Malayan Dwarf", aliases = setOf("Dwarf Malayan")),
+        coconut(
+            "Malayan Dwarf",
+            aliases = setOf("Dwarf Malayan"),
+            pollinationRequirement = PollinationRequirement.UNKNOWN
+        ),
         coconut("Green Malayan Dwarf", aliases = setOf("Malayan Green Dwarf")),
         coconut(
             "Yellow Malayan Dwarf",
@@ -981,7 +985,7 @@ object BloomForecastEngine {
             aliases = setOf("Malayan Red Dwarf"),
             pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
-        coconut("Maypan"),
+        coconut("Maypan", pollinationRequirement = PollinationRequirement.UNKNOWN),
         CultivarBloomProfile(
             "star fruit",
             "Arkin",
@@ -2077,15 +2081,24 @@ object BloomForecastEngine {
     fun resolveSpeciesAutocomplete(query: String): String? {
         val normalizedQuery = normalize(query)
         if (normalizedQuery.isBlank()) return null
-        val exactMatches = speciesAutocompleteCatalog.filter { option ->
-            normalize(option.species) == normalizedQuery ||
-                option.aliases.any { normalize(it) == normalizedQuery }
+        val exactMatches = speciesProfiles.filter { profile ->
+            normalize(profile.catalogSpeciesLabel.toCatalogDisplayLabel()) == normalizedQuery ||
+                normalize(profile.key) == normalizedQuery ||
+                profile.aliases.any { normalize(it) == normalizedQuery }
         }
         if (exactMatches.isEmpty()) return null
-        return exactMatches
-            .map(SpeciesAutocompleteOption::species)
+        val resolvedSpecies = exactMatches
+            .map { it.catalogSpeciesLabel.toCatalogDisplayLabel() }
             .distinctBy(::normalize)
             .singleOrNull()
+            ?: return null
+        val resolvedProfile = exactMatches.first()
+        val exactCitrusLabel = normalizedQuery == normalize(resolvedProfile.key) ||
+            normalizedQuery == normalize(resolvedProfile.catalogSpeciesLabel.toCatalogDisplayLabel())
+        if (exactCitrusLabel && (resolvedProfile.key == "citrus" || resolvedProfile.key in citrusSpeciesKeys)) {
+            return null
+        }
+        return resolvedSpecies
     }
 
     fun zoneCodeFromLabel(label: String): String = UsdaZoneCatalog.zones

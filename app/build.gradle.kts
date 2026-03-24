@@ -1,9 +1,48 @@
+import java.util.Properties
+import org.gradle.api.GradleException
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.kotlin.kapt)
+}
+
+val releaseSigningProperties = Properties().apply {
+    val file = rootProject.file("release-signing.properties")
+    if (file.exists()) {
+        file.inputStream().use(::load)
+    }
+}
+
+fun releaseSigningValue(propertyName: String, envName: String): String? =
+    (
+        releaseSigningProperties.getProperty(propertyName)
+            ?: providers.gradleProperty(propertyName).orNull
+            ?: System.getenv(envName)
+        )
+        ?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = releaseSigningValue("ORCHARDEX_STORE_FILE", "ORCHARDEX_STORE_FILE")
+val releaseStorePassword = releaseSigningValue("ORCHARDEX_STORE_PASSWORD", "ORCHARDEX_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningValue("ORCHARDEX_KEY_ALIAS", "ORCHARDEX_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningValue("ORCHARDEX_KEY_PASSWORD", "ORCHARDEX_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { it != null }
+val isReleaseBuildRequested = gradle.startParameter.taskNames.any {
+    it.contains("Release", ignoreCase = true)
+}
+
+if (isReleaseBuildRequested && !hasReleaseSigning) {
+    throw GradleException(
+        "Release signing is not configured. Copy release-signing.properties.example " +
+            "to release-signing.properties and fill in your upload keystore values."
+    )
 }
 
 android {
@@ -24,12 +63,26 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseSigning) {
+                storeFile = rootProject.file(checkNotNull(releaseStoreFile))
+                storePassword = checkNotNull(releaseStorePassword)
+                keyAlias = checkNotNull(releaseKeyAlias)
+                keyPassword = checkNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
         }
         release {
+            if (hasReleaseSigning) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
