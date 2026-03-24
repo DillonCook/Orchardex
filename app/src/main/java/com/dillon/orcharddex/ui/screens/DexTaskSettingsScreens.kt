@@ -844,7 +844,7 @@ fun SettingsScreen(
 }
 
 @Composable
-fun CatalogScreen() {
+fun CatalogScreen(usdaZone: String) {
     val catalog = remember { BloomForecastEngine.supportedSpeciesReferenceCatalog() }
     var search by rememberSaveable { mutableStateOf("") }
     val filteredCatalog = remember(catalog, search) {
@@ -856,7 +856,10 @@ fun CatalogScreen() {
                 listOf(
                     entry.species,
                     entry.fertilityLabel,
-                    entry.usdaBloomTimingLabel,
+                    entry.referenceBloomTimingLabel,
+                    entry.zoneBloomTimings.joinToString(" ") { timing ->
+                        "${timing.zoneLabel} ${timing.timingLabel}"
+                    },
                     entry.aliases.joinToString(" "),
                     entry.cultivars.joinToString(" ") { cultivar ->
                         buildString {
@@ -898,7 +901,7 @@ fun CatalogScreen() {
             }
         } else {
             items(filteredCatalog, key = { it.species }) { entry ->
-                CatalogSpeciesCard(entry)
+                CatalogSpeciesCard(entry = entry, usdaZone = usdaZone)
             }
         }
     }
@@ -920,7 +923,37 @@ private fun CatalogDetailRow(label: String, value: String) {
 }
 
 @Composable
-private fun CatalogSpeciesCard(entry: CatalogSpeciesReferenceEntry) {
+private fun CatalogSpeciesCard(
+    entry: CatalogSpeciesReferenceEntry,
+    usdaZone: String
+) {
+    var showAllZoneTimings by rememberSaveable(entry.species) { mutableStateOf(false) }
+    val selectedZoneCode = remember(usdaZone) {
+        usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::effectiveZoneCode)
+    }
+    val selectedZoneTiming = remember(entry.zoneBloomTimings, selectedZoneCode) {
+        selectedZoneCode?.let { zoneCode ->
+            entry.zoneBloomTimings.firstOrNull { it.zoneCode == zoneCode }
+        }
+    }
+    val primaryTiming = selectedZoneTiming ?: entry.zoneBloomTimings.firstOrNull()
+    val visibleZoneTimings = remember(entry.zoneBloomTimings, showAllZoneTimings, selectedZoneCode) {
+        val allZoneEntries = entry.zoneBloomTimings.filterNot { it.zoneCode == "all" }
+        if (showAllZoneTimings || allZoneEntries.size <= 8) {
+            allZoneEntries
+        } else {
+            val selectedEntry = selectedZoneCode?.let { zoneCode ->
+                allZoneEntries.firstOrNull { it.zoneCode == zoneCode }
+            }
+            buildList {
+                selectedEntry?.let(::add)
+                allZoneEntries
+                    .filterNot { it.zoneCode == selectedZoneCode }
+                    .take(7)
+                    .forEach(::add)
+            }
+        }
+    }
     OutlinedCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(22.dp)
@@ -947,18 +980,72 @@ private fun CatalogSpeciesCard(entry: CatalogSpeciesReferenceEntry) {
                     modifier = Modifier.padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    CatalogDetailRow(label = "USDA bloom timing", value = entry.usdaBloomTimingLabel)
+                    CatalogDetailRow(
+                        label = when {
+                            primaryTiming == null -> "Reference bloom timing"
+                            primaryTiming.zoneCode == "all" -> "Bloom timing"
+                            selectedZoneCode != null -> "Bloom timing (${primaryTiming.zoneLabel})"
+                            else -> "Reference bloom timing"
+                        },
+                        value = primaryTiming?.timingLabel ?: entry.referenceBloomTimingLabel
+                    )
                     CatalogDetailRow(label = "Fertility", value = entry.fertilityLabel)
                     CatalogDetailRow(label = "Cultivars", value = entry.cultivars.size.toString())
                 }
             }
-            if (entry.cultivars.isEmpty()) {
+            Text(
+                text = "Bloom timing here is species-based. Cultivar timing can shift earlier or later where modeled.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (entry.zoneBloomTimings.isEmpty()) {
                 Text(
-                    text = "Species-level reference only for now.",
+                    text = "No zone-specific bloom windows are modeled for this species yet.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
+                if (selectedZoneCode == null && primaryTiming?.zoneCode != "all") {
+                    Text(
+                        text = "Set your USDA zone in Settings to make this card default to your orchard zone.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (entry.zoneBloomTimings.any { it.zoneCode != "all" }) {
+                    OutlinedButton(
+                        onClick = { showAllZoneTimings = !showAllZoneTimings },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (showAllZoneTimings) {
+                                "Hide all USDA zones"
+                            } else {
+                                "Show all USDA zones"
+                            }
+                        )
+                    }
+                }
+                if (showAllZoneTimings && visibleZoneTimings.isNotEmpty()) {
+                    Surface(
+                        shape = RoundedCornerShape(18.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            visibleZoneTimings.forEach { timing ->
+                                CatalogDetailRow(
+                                    label = timing.zoneLabel,
+                                    value = timing.timingLabel
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (entry.cultivars.isNotEmpty()) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("Cultivars", style = MaterialTheme.typography.titleMedium)
                     entry.cultivars.forEach { cultivar ->

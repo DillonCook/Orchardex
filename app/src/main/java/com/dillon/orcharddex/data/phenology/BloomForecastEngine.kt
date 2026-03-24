@@ -88,10 +88,17 @@ data class CatalogCultivarReferenceEntry(
     val fertilityLabel: String? = null
 )
 
+data class CatalogUsdaBloomTimingEntry(
+    val zoneCode: String,
+    val zoneLabel: String,
+    val timingLabel: String
+)
+
 data class CatalogSpeciesReferenceEntry(
     val species: String,
     val aliases: List<String> = emptyList(),
-    val usdaBloomTimingLabel: String,
+    val referenceBloomTimingLabel: String,
+    val zoneBloomTimings: List<CatalogUsdaBloomTimingEntry> = emptyList(),
     val fertilityLabel: String,
     val cultivars: List<CatalogCultivarReferenceEntry> = emptyList()
 )
@@ -117,6 +124,10 @@ data class EverbearingPlant(
 
 object BloomForecastEngine {
     private val catalogMonthDayFormatter = DateTimeFormatter.ofPattern("MMM d")
+    private const val catalogSeparator = " - "
+
+    private fun formatCatalogRange(startDate: LocalDate, endDate: LocalDate): String =
+        "${startDate.format(catalogMonthDayFormatter)} - ${endDate.format(catalogMonthDayFormatter)}"
 
     private val speciesProfiles = listOf(
         SpeciesBloomProfile(
@@ -2136,7 +2147,8 @@ object BloomForecastEngine {
                     .filterNot { normalize(it) == normalize(speciesLabel) }
                     .distinctBy(::normalize)
                     .sortedBy(String::lowercase),
-                usdaBloomTimingLabel = profile.catalogUsdaBloomTimingLabel(),
+                referenceBloomTimingLabel = profile.catalogUsdaBloomTimingLabel(),
+                zoneBloomTimings = profile.catalogZoneBloomTimingEntries(),
                 fertilityLabel = profile.pollinationRequirement.label,
                 cultivars = cultivarAutocompleteCatalog
                     .filter { normalize(it.species) == normalize(speciesLabel) }
@@ -2165,15 +2177,19 @@ object BloomForecastEngine {
                 val startDate = LocalDate.of(2026, speciesProfile.startMonth, speciesProfile.startDay)
                     .plusDays(phase.startOffsetDays.toLong())
                 val endDate = startDate.plusDays(speciesProfile.durationDays)
-                "Catalog default · USDA ${speciesProfile.referenceZoneCode.uppercase()} · ${startDate.format(catalogMonthDayFormatter)}–${endDate.format(catalogMonthDayFormatter)}"
+                listOf(
+                    "Catalog default",
+                    "USDA ${speciesProfile.referenceZoneCode.uppercase()}",
+                    formatCatalogRange(startDate, endDate)
+                ).joinToString(catalogSeparator)
             }
-            BloomForecastBehavior.MANUAL_ONLY -> "Catalog default · Continuous / repeat-bearing"
-            BloomForecastBehavior.SUPPRESSED -> "Catalog default · No automatic bloom-season forecast"
+            BloomForecastBehavior.MANUAL_ONLY -> "Catalog default - Continuous / repeat-bearing"
+            BloomForecastBehavior.SUPPRESSED -> "Catalog default - No automatic bloom-season forecast"
         }
     }
 
     fun customBloomTimingSummaryLabel(tree: TreeEntity): String? = tree.customBloomWindowForYear(2026)
-        ?.let { window -> "${window.startDate.format(catalogMonthDayFormatter)}–${window.endDate.format(catalogMonthDayFormatter)}" }
+        ?.let { window -> formatCatalogRange(window.startDate, window.endDate) }
 
     fun pollinationRequirementFor(
         speciesInput: String,
@@ -2325,11 +2341,41 @@ object BloomForecastEngine {
             BloomForecastBehavior.WINDOW -> {
                 val startDate = LocalDate.of(2026, startMonth, startDay)
                 val endDate = startDate.plusDays(durationDays)
-                "USDA $zoneCode · ${startDate.format(catalogMonthDayFormatter)}–${endDate.format(catalogMonthDayFormatter)}"
+                "USDA $zoneCode - ${formatCatalogRange(startDate, endDate)}"
             }
-            BloomForecastBehavior.MANUAL_ONLY -> "USDA $zoneCode · Continuous / repeat-bearing"
-            BloomForecastBehavior.SUPPRESSED -> "USDA $zoneCode · No automatic bloom-season forecast"
+            BloomForecastBehavior.MANUAL_ONLY -> "USDA $zoneCode - Continuous / repeat-bearing"
+            BloomForecastBehavior.SUPPRESSED -> "USDA $zoneCode - No automatic bloom-season forecast"
         }
+    }
+
+    private fun SpeciesBloomProfile.catalogZoneBloomTimingEntries(): List<CatalogUsdaBloomTimingEntry> = when (forecastBehavior) {
+        BloomForecastBehavior.WINDOW -> {
+            val referenceZone = UsdaZoneCatalog.resolve(referenceZoneCode)
+            UsdaZoneCatalog.zones.map { zone ->
+                val shiftDays = (referenceZone.index - zone.index) * shiftDaysPerHalfZone
+                val startDate = LocalDate.of(2026, startMonth, startDay).plusDays(shiftDays)
+                val endDate = startDate.plusDays(durationDays)
+                CatalogUsdaBloomTimingEntry(
+                    zoneCode = zone.code,
+                    zoneLabel = "USDA ${zone.code.uppercase()}",
+                    timingLabel = formatCatalogRange(startDate, endDate)
+                )
+            }
+        }
+        BloomForecastBehavior.MANUAL_ONLY -> listOf(
+            CatalogUsdaBloomTimingEntry(
+                zoneCode = "all",
+                zoneLabel = "All USDA zones",
+                timingLabel = "Continuous / repeat-bearing"
+            )
+        )
+        BloomForecastBehavior.SUPPRESSED -> listOf(
+            CatalogUsdaBloomTimingEntry(
+                zoneCode = "all",
+                zoneLabel = "All USDA zones",
+                timingLabel = "No automatic bloom-season forecast"
+            )
+        )
     }
 
     private fun SpeciesBloomProfile.withRegionalOverride(orchardRegionCode: String?): SpeciesBloomProfile {
@@ -2488,3 +2534,4 @@ object BloomForecastEngine {
         toDisplayLabel()
     }
 }
+

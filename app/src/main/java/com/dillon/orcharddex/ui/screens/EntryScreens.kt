@@ -26,6 +26,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TriStateCheckbox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -35,6 +36,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dillon.orcharddex.data.local.HarvestEntity
@@ -85,73 +87,16 @@ fun EventFormScreen(
     ) { uri -> viewModel.update { copy(photoUri = uri) } }
 
     if (selectionDialogVisible) {
-        AlertDialog(
-            onDismissRequest = { selectionDialogVisible = false },
-            title = { Text("Choose plants") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = plantSearch,
-                        onValueChange = { plantSearch = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Search plants") }
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${state.selectedTreeIds.size} selected")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) }) {
-                                Text("Select visible")
-                            }
-                            TextButton(onClick = viewModel::clearTreeSelection) {
-                                Text("Clear")
-                            }
-                        }
-                    }
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(visibleTrees, key = TreeEntity::id) { tree ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.toggleTreeSelection(tree.id) }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = tree.id in state.selectedTreeIds,
-                                        onCheckedChange = { _ -> viewModel.toggleTreeSelection(tree.id) }
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(tree.displayName())
-                                        Text(
-                                            tree.selectorSubtitle(),
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { selectionDialogVisible = false }) {
-                    Text("Done")
-                }
-            }
+        PlantSelectionDialog(
+            search = plantSearch,
+            onSearchChange = { plantSearch = it },
+            visibleTrees = visibleTrees,
+            selectedTreeIds = state.selectedTreeIds,
+            onToggleTree = viewModel::toggleTreeSelection,
+            onToggleSpeciesGroup = viewModel::toggleTreeGroupSelection,
+            onSelectVisibleTrees = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) },
+            onClear = viewModel::clearTreeSelection,
+            onDismiss = { selectionDialogVisible = false }
         )
     }
 
@@ -177,7 +122,7 @@ fun EventFormScreen(
             ) {
                 Text(
                     if (selectedTrees.isEmpty()) {
-                        "Choose plants"
+                        "Choose plants or species"
                     } else {
                         "Edit ${selectedTrees.size} selected plants"
                     }
@@ -278,28 +223,79 @@ fun HarvestFormScreen(
     val state = viewModel.state
     val trees by viewModel.trees.collectAsStateWithLifecycle()
     val harvests by viewModel.harvests.collectAsStateWithLifecycle()
-    val recentHarvests = remember(harvests, state.treeId) {
+    val selectedTrees = remember(trees, state.selectedTreeIds) {
+        trees.filter { it.id in state.selectedTreeIds }
+    }
+    var selectionDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var plantSearch by rememberSaveable { mutableStateOf("") }
+    val visibleTrees = remember(trees, plantSearch) {
+        val query = plantSearch.trim().lowercase()
+        if (query.isBlank()) {
+            trees
+        } else {
+            trees.filter { tree -> tree.matchesPlantSearch(query) }
+        }
+    }
+    val recentHarvests = remember(harvests, state.selectedTreeIds) {
         harvests
-            .filter { harvest -> state.treeId == null || harvest.treeId == state.treeId }
+            .filter { harvest -> harvest.treeId in state.selectedTreeIds }
             .sortedByDescending(HarvestEntity::harvestDate)
     }
     val recentValueHarvests = remember(recentHarvests) { recentHarvests.take(3) }
-    val unitSuggestions = remember(recentHarvests, state.quantityUnit) {
-        harvestUnitSuggestions(recentHarvests, state.quantityUnit)
+    val unitSuggestions = remember(recentHarvests, state.quantityUnit, state.selectedTreeIds) {
+        if (state.selectedTreeIds.isEmpty()) {
+            emptyList()
+        } else {
+            harvestUnitSuggestions(recentHarvests, state.quantityUnit)
+        }
     }
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri -> viewModel.update { copy(photoUri = uri) } }
 
-    EntryFormLayout(title = "Add harvest") {
-        SelectionField(
-            label = "Tree",
-            value = trees.selectedTreeLabel(state.treeId),
-            options = trees.treeLabels(),
-            onSelected = { label ->
-                viewModel.update { copy(treeId = trees.find { it.selectorLabel() == label }?.id) }
-            }
+    if (selectionDialogVisible) {
+        PlantSelectionDialog(
+            search = plantSearch,
+            onSearchChange = { plantSearch = it },
+            visibleTrees = visibleTrees,
+            selectedTreeIds = state.selectedTreeIds,
+            onToggleTree = viewModel::toggleTreeSelection,
+            onToggleSpeciesGroup = viewModel::toggleTreeGroupSelection,
+            onSelectVisibleTrees = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) },
+            onClear = viewModel::clearTreeSelection,
+            onDismiss = { selectionDialogVisible = false }
         )
+    }
+
+    EntryFormLayout(title = "Add harvest") {
+        OutlinedButton(
+            onClick = { selectionDialogVisible = true },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (selectedTrees.isEmpty()) {
+                    "Choose plants or species"
+                } else {
+                    "Edit ${selectedTrees.size} selected plants"
+                }
+            )
+        }
+        if (selectedTrees.isEmpty()) {
+            Text("No plants selected yet.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            selectedTrees.take(4).forEach { tree ->
+                Text(tree.selectorLabel(), style = MaterialTheme.typography.bodySmall)
+            }
+            if (selectedTrees.size > 4) {
+                Text("+${selectedTrees.size - 4} more plants", style = MaterialTheme.typography.bodySmall)
+            }
+            if (selectedTrees.size > 1) {
+                Text(
+                    text = "This harvest entry will be copied to ${selectedTrees.size} plants.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
         DateField(
             label = "Harvest date",
             value = state.harvestDate,
@@ -321,10 +317,14 @@ fun HarvestFormScreen(
                 label = { Text("Unit") }
             )
         }
-        if (state.treeId != null) {
+        if (state.selectedTreeIds.isNotEmpty()) {
             if (recentValueHarvests.isEmpty()) {
                 Text(
-                    text = "Log the first harvest for this plant to unlock quick-fill values here.",
+                    text = if (selectedTrees.size > 1) {
+                        "Log the first harvest for these plants to unlock quick-fill values here."
+                    } else {
+                        "Log the first harvest for this plant to unlock quick-fill values here."
+                    },
                     style = MaterialTheme.typography.bodySmall
                 )
             } else {
@@ -334,7 +334,11 @@ fun HarvestFormScreen(
                         style = MaterialTheme.typography.labelLarge
                     )
                     Text(
-                        text = "Tap a past harvest to reuse quantity, unit, quality, and verification.",
+                        text = if (selectedTrees.size > 1) {
+                            "Tap a past harvest from this selection to reuse quantity, unit, quality, and verification."
+                        } else {
+                            "Tap a past harvest to reuse quantity, unit, quality, and verification."
+                        },
                         style = MaterialTheme.typography.bodySmall
                     )
                     FlowRow(
@@ -348,7 +352,7 @@ fun HarvestFormScreen(
                                 onClick = { viewModel.applyLastHarvest(harvest) },
                                 label = {
                                     Text(
-                                        "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit} • ${harvest.harvestDate.toDateLabel()}"
+                                        "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit} - ${harvest.harvestDate.toDateLabel()}"
                                     )
                                 }
                             )
@@ -419,7 +423,7 @@ fun HarvestFormScreen(
         FormActions(
             onCancel = onCancel,
             onConfirm = { viewModel.save(onSaved) },
-            confirmLabel = "Save harvest",
+            confirmLabel = if (state.selectedTreeIds.size > 1) "Apply harvest" else "Save harvest",
             confirmModifier = Modifier.testTag("harvest_save")
         )
     }
@@ -438,9 +442,14 @@ fun ReminderFormScreen(
     val selectedTrees = remember(trees, state.selectedTreeIds) {
         trees.filter { it.id in state.selectedTreeIds }
     }
-    val focusTreeId = state.treeId ?: state.selectedTreeIds.singleOrNull()
-    val focusTree = remember(trees, focusTreeId) {
-        trees.firstOrNull { it.id == focusTreeId }
+    val focusTree = remember(trees, state.treeId, selectedTrees) {
+        when {
+            state.treeId != null -> trees.firstOrNull { it.id == state.treeId }
+            selectedTrees.isEmpty() -> null
+            selectedTrees.size == 1 -> selectedTrees.first()
+            selectedTrees.sameSpeciesSelection() -> selectedTrees.first()
+            else -> null
+        }
     }
     val careTemplates = remember(focusTree) { careTemplatesFor(focusTree) }
     var selectionDialogVisible by rememberSaveable { mutableStateOf(false) }
@@ -455,73 +464,16 @@ fun ReminderFormScreen(
     }
 
     if (selectionDialogVisible && state.id == null) {
-        AlertDialog(
-            onDismissRequest = { selectionDialogVisible = false },
-            title = { Text("Choose plants") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = plantSearch,
-                        onValueChange = { plantSearch = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Search plants") }
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("${state.selectedTreeIds.size} selected")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            TextButton(onClick = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) }) {
-                                Text("Select visible")
-                            }
-                            TextButton(onClick = viewModel::clearTreeSelection) {
-                                Text("Clear")
-                            }
-                        }
-                    }
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(visibleTrees, key = TreeEntity::id) { tree ->
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .clickable { viewModel.toggleTreeSelection(tree.id) }
-                            ) {
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Checkbox(
-                                        checked = tree.id in state.selectedTreeIds,
-                                        onCheckedChange = { _ -> viewModel.toggleTreeSelection(tree.id) }
-                                    )
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(tree.displayName())
-                                        Text(
-                                            tree.selectorSubtitle(),
-                                            style = MaterialTheme.typography.bodySmall
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { selectionDialogVisible = false }) {
-                    Text("Done")
-                }
-            }
+        PlantSelectionDialog(
+            search = plantSearch,
+            onSearchChange = { plantSearch = it },
+            visibleTrees = visibleTrees,
+            selectedTreeIds = state.selectedTreeIds,
+            onToggleTree = viewModel::toggleTreeSelection,
+            onToggleSpeciesGroup = viewModel::toggleTreeGroupSelection,
+            onSelectVisibleTrees = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) },
+            onClear = viewModel::clearTreeSelection,
+            onDismiss = { selectionDialogVisible = false }
         )
     }
 
@@ -567,7 +519,7 @@ fun ReminderFormScreen(
                     ) {
                         Text(
                             if (selectedTrees.isEmpty()) {
-                                "Choose plants"
+                                "Choose plants or species"
                             } else {
                                 "Edit ${selectedTrees.size} selected plants"
                             }
@@ -811,6 +763,147 @@ private fun FormActions(
     }
 }
 
+private data class SpeciesSelectionGroup(
+    val id: String,
+    val species: String,
+    val treeIds: List<String>,
+    val subtitle: String
+)
+
+@Composable
+private fun PlantSelectionDialog(
+    search: String,
+    onSearchChange: (String) -> Unit,
+    visibleTrees: List<TreeEntity>,
+    selectedTreeIds: Set<String>,
+    onToggleTree: (String) -> Unit,
+    onToggleSpeciesGroup: (Collection<String>) -> Unit,
+    onSelectVisibleTrees: () -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    val speciesGroups = remember(visibleTrees) { visibleTrees.speciesSelectionGroups() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Choose plants or species") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = search,
+                    onValueChange = onSearchChange,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Search plants or species") }
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("${selectedTreeIds.size} selected")
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TextButton(onClick = onSelectVisibleTrees) {
+                            Text("Select visible plants")
+                        }
+                        TextButton(onClick = onClear) {
+                            Text("Clear")
+                        }
+                    }
+                }
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (speciesGroups.isNotEmpty()) {
+                        item {
+                            Text("Species", style = MaterialTheme.typography.labelLarge)
+                        }
+                        items(speciesGroups, key = SpeciesSelectionGroup::id) { group ->
+                            val selectedCount = group.treeIds.count { it in selectedTreeIds }
+                            val toggleState = when {
+                                selectedCount == 0 -> ToggleableState.Off
+                                selectedCount == group.treeIds.size -> ToggleableState.On
+                                else -> ToggleableState.Indeterminate
+                            }
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggleSpeciesGroup(group.treeIds) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    TriStateCheckbox(
+                                        state = toggleState,
+                                        onClick = { onToggleSpeciesGroup(group.treeIds) }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(group.species)
+                                        Text(
+                                            group.subtitle,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (visibleTrees.isNotEmpty()) {
+                        item {
+                            Text("Plants", style = MaterialTheme.typography.labelLarge)
+                        }
+                        items(visibleTrees, key = TreeEntity::id) { tree ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onToggleTree(tree.id) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = tree.id in selectedTreeIds,
+                                        onCheckedChange = { _ -> onToggleTree(tree.id) }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(tree.displayName())
+                                        Text(
+                                            tree.selectorSubtitle(),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (speciesGroups.isEmpty() && visibleTrees.isEmpty()) {
+                        item {
+                            Text(
+                                text = "No matching plants.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Done")
+            }
+        }
+    )
+}
+
 private fun EventType.eventLabel(): String = name.lowercase().replace("_", " ")
     .replaceFirstChar(Char::uppercase)
 
@@ -832,6 +925,35 @@ private fun List<TreeEntity>.treeLabels(): List<String> = map(TreeEntity::select
 
 private fun List<TreeEntity>.selectedTreeLabel(treeId: String?, fallback: String = ""): String =
     firstOrNull { it.id == treeId }?.selectorLabel() ?: fallback
+
+private fun List<TreeEntity>.speciesSelectionGroups(): List<SpeciesSelectionGroup> =
+    filter { it.species.isNotBlank() }
+        .groupBy { it.species.selectionKey() }
+        .values
+        .sortedBy { group -> group.first().species.lowercase() }
+        .map { group ->
+            val cultivars = group
+                .map(TreeEntity::cultivar)
+                .filter(String::isNotBlank)
+                .distinctBy(String::lowercase)
+                .sortedBy(String::lowercase)
+            SpeciesSelectionGroup(
+                id = group.first().species.selectionKey(),
+                species = group.first().species,
+                treeIds = group.map(TreeEntity::id),
+                subtitle = buildString {
+                    append("${group.size} plant")
+                    if (group.size != 1) append("s")
+                    if (cultivars.isNotEmpty()) {
+                        append(" - ")
+                        append(cultivars.take(2).joinToString(", "))
+                        if (cultivars.size > 2) {
+                            append(" +${cultivars.size - 2} more")
+                        }
+                    }
+                }
+            )
+        }
 
 private fun TreeEntity.selectorLabel(): String = buildString {
     append(displayName())
@@ -861,6 +983,15 @@ private fun TreeEntity.matchesPlantSearch(query: String): Boolean = listOf(
     notes,
     tags
 ).any { value -> value.lowercase().contains(query) }
+
+private fun List<TreeEntity>.sameSpeciesSelection(): Boolean =
+    map(TreeEntity::species)
+        .filter(String::isNotBlank)
+        .map(String::selectionKey)
+        .distinct()
+        .size == 1
+
+private fun String.selectionKey(): String = trim().lowercase()
 
 private data class CareTemplate(
     val label: String,

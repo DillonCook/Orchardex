@@ -356,6 +356,30 @@ class BloomForecastEngineTest {
     }
 
     @Test
+    fun supportedSpeciesReferenceCatalog_exposesModeledZoneBloomWindows() {
+        val appleEntry = BloomForecastEngine.supportedSpeciesReferenceCatalog()
+            .first { it.species == "Apple" }
+
+        assertThat(appleEntry.referenceBloomTimingLabel).contains("USDA 7A")
+        assertThat(appleEntry.zoneBloomTimings).hasSize(26)
+        assertThat(appleEntry.zoneBloomTimings.first().zoneLabel).isEqualTo("USDA 1A")
+        assertThat(appleEntry.zoneBloomTimings.last().zoneLabel).isEqualTo("USDA 13B")
+    }
+
+    @Test
+    fun supportedSpeciesReferenceCatalog_shiftsBloomEarlierInWarmerZones() {
+        val appleEntry = BloomForecastEngine.supportedSpeciesReferenceCatalog()
+            .first { it.species == "Apple" }
+        val colderZone = appleEntry.zoneBloomTimings.first { it.zoneCode == "5a" }
+        val referenceZone = appleEntry.zoneBloomTimings.first { it.zoneCode == "7a" }
+        val warmerZone = appleEntry.zoneBloomTimings.first { it.zoneCode == "9a" }
+
+        assertThat(colderZone.timingLabel).isEqualTo("Apr 21 - May 3")
+        assertThat(referenceZone.timingLabel).isEqualTo("Apr 5 - Apr 17")
+        assertThat(warmerZone.timingLabel).isEqualTo("Mar 20 - Apr 1")
+    }
+
+    @Test
     fun supportedCultivarCatalog_includesCommonBananas() {
         val bananaCultivars = BloomForecastEngine.supportedCultivarCatalog()
             .filter { it.species == "Banana" }

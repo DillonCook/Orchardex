@@ -411,6 +411,18 @@ class EventFormViewModel(
         state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
     }
 
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(selectedTreeIds = updated, errorMessage = null)
+    }
+
     fun clearTreeSelection() {
         state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
     }
@@ -456,7 +468,7 @@ class EventFormViewModel(
 }
 
 data class HarvestFormState(
-    val treeId: String? = null,
+    val selectedTreeIds: Set<String> = emptySet(),
     val harvestDate: LocalDate = LocalDate.now(),
     val quantityValue: String = "",
     val quantityUnit: String = "fruit",
@@ -474,7 +486,11 @@ class HarvestFormViewModel(
     private val repository: OrchardRepository
 ) : ViewModel() {
     private val initialTreeId: String? = savedStateHandle[TREE_ID]
-    var state by mutableStateOf(HarvestFormState(treeId = initialTreeId))
+    var state by mutableStateOf(
+        HarvestFormState(
+            selectedTreeIds = initialTreeId?.takeIf(String::isNotBlank)?.let(::setOf) ?: emptySet()
+        )
+    )
         private set
 
     val trees = repository.observeTreeNames().stateIn(
@@ -502,30 +518,60 @@ class HarvestFormViewModel(
         )
     }
 
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        state = state.copy(
+            selectedTreeIds = if (treeId in selected) selected - treeId else selected + treeId,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
+    }
+
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(selectedTreeIds = updated, errorMessage = null)
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
+    }
+
     fun save(onSaved: (String) -> Unit) {
-        val treeId = state.treeId
+        val targetTreeIds = state.selectedTreeIds.toList()
         val quantity = state.quantityValue.toDoubleOrNull()
-        if (treeId.isNullOrBlank() || quantity == null) {
-            state = state.copy(errorMessage = "Pick a tree and enter a quantity.")
+        if (targetTreeIds.isEmpty() || quantity == null) {
+            state = state.copy(errorMessage = "Pick at least one plant and enter a quantity.")
             return
         }
         viewModelScope.launch {
             state = state.copy(isSaving = true)
-            repository.addHarvest(
-                HarvestInput(
-                    treeId = treeId,
-                    harvestDate = localDateAtStartOfDay(state.harvestDate),
-                    quantityValue = quantity,
-                    quantityUnit = state.quantityUnit,
-                    qualityRating = state.qualityRating,
-                    firstFruit = state.firstFruit,
-                    verified = state.verified,
-                    notes = state.notes,
-                    photoUri = state.photoUri
-                )
+            repository.addHarvests(
+                targetTreeIds.map { treeId ->
+                    HarvestInput(
+                        treeId = treeId,
+                        harvestDate = localDateAtStartOfDay(state.harvestDate),
+                        quantityValue = quantity,
+                        quantityUnit = state.quantityUnit,
+                        qualityRating = state.qualityRating,
+                        firstFruit = state.firstFruit,
+                        verified = state.verified,
+                        notes = state.notes,
+                        photoUri = state.photoUri
+                    )
+                }
             )
             state = state.copy(isSaving = false)
-            onSaved(treeId)
+            onSaved(targetTreeIds.singleOrNull().orEmpty())
         }
     }
 }
@@ -731,6 +777,23 @@ class ReminderFormViewModel(
 
     fun selectTreeIds(treeIds: Collection<String>) {
         val updated = state.selectedTreeIds + treeIds
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
         state = state.copy(
             selectedTreeIds = updated,
             treeId = updated.singleOrNull(),

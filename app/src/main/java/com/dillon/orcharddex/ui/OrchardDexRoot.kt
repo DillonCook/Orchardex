@@ -416,7 +416,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 PrivacyScreen()
             }
             composable(OrchardRoutes.CATALOG) {
-                CatalogScreen()
+                CatalogScreen(usdaZone = settings.usdaZone)
             }
         }
     }

@@ -475,22 +475,40 @@ class OrchardRepository(
         )
     }
 
-    suspend fun addHarvest(input: HarvestInput) = withContext(Dispatchers.IO) {
-        val photoPath = input.photoUri?.let { photoStorage.importPhoto(it, PhotoStorage.Category.HARVEST) }
-        harvestDao.insert(
-            HarvestEntity(
-                id = UUID.randomUUID().toString(),
-                treeId = input.treeId,
-                harvestDate = input.harvestDate,
-                quantityValue = input.quantityValue,
-                quantityUnit = input.quantityUnit.trim(),
-                qualityRating = input.qualityRating,
-                firstFruit = input.firstFruit,
-                verified = input.verified,
-                notes = input.notes.trim(),
-                photoPath = photoPath,
-                createdAt = System.currentTimeMillis()
-            )
+    suspend fun addHarvest(input: HarvestInput) = addHarvests(listOf(input))
+
+    suspend fun addHarvests(inputs: List<HarvestInput>) = withContext(Dispatchers.IO) {
+        if (inputs.isEmpty()) return@withContext
+
+        val sharedPhotoUri = inputs.first().photoUri
+        val sharedPhotoPath = if (
+            sharedPhotoUri != null &&
+            inputs.all { it.photoUri == sharedPhotoUri }
+        ) {
+            photoStorage.importPhoto(sharedPhotoUri, PhotoStorage.Category.HARVEST)
+        } else {
+            null
+        }
+        val now = System.currentTimeMillis()
+
+        harvestDao.insertAll(
+            inputs.map { input ->
+                HarvestEntity(
+                    id = UUID.randomUUID().toString(),
+                    treeId = input.treeId,
+                    harvestDate = input.harvestDate,
+                    quantityValue = input.quantityValue,
+                    quantityUnit = input.quantityUnit.trim(),
+                    qualityRating = input.qualityRating,
+                    firstFruit = input.firstFruit,
+                    verified = input.verified,
+                    notes = input.notes.trim(),
+                    photoPath = sharedPhotoPath ?: input.photoUri?.let {
+                        photoStorage.importPhoto(it, PhotoStorage.Category.HARVEST)
+                    },
+                    createdAt = now
+                )
+            }
         )
     }
 
