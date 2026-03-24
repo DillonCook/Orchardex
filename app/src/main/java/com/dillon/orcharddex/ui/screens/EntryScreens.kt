@@ -37,6 +37,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.LeadTimeMode
@@ -49,9 +50,13 @@ import com.dillon.orcharddex.ui.components.PhotoAddCard
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.components.TimeField
+import com.dillon.orcharddex.ui.displayAmount
+import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.viewmodel.EventFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.HarvestFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderFormViewModel
+import com.dillon.orcharddex.ui.viewmodel.ReminderFormState
+import com.dillon.orcharddex.ui.viewmodel.ReminderTargetMode
 
 @Composable
 fun EventFormScreen(
@@ -272,6 +277,16 @@ fun HarvestFormScreen(
 ) {
     val state = viewModel.state
     val trees by viewModel.trees.collectAsStateWithLifecycle()
+    val harvests by viewModel.harvests.collectAsStateWithLifecycle()
+    val recentHarvests = remember(harvests, state.treeId) {
+        harvests
+            .filter { harvest -> state.treeId == null || harvest.treeId == state.treeId }
+            .sortedByDescending(HarvestEntity::harvestDate)
+    }
+    val recentValueHarvests = remember(recentHarvests) { recentHarvests.take(3) }
+    val unitSuggestions = remember(recentHarvests, state.quantityUnit) {
+        harvestUnitSuggestions(recentHarvests, state.quantityUnit)
+    }
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri -> viewModel.update { copy(photoUri = uri) } }
@@ -305,6 +320,62 @@ fun HarvestFormScreen(
                 modifier = Modifier.weight(1f),
                 label = { Text("Unit") }
             )
+        }
+        if (state.treeId != null) {
+            if (recentValueHarvests.isEmpty()) {
+                Text(
+                    text = "Log the first harvest for this plant to unlock quick-fill values here.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Recent harvest values",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    Text(
+                        text = "Tap a past harvest to reuse quantity, unit, quality, and verification.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        recentValueHarvests.forEach { harvest ->
+                            FilterChip(
+                                selected = state.quantityValue == harvest.quantityValue.displayAmount() &&
+                                    state.quantityUnit.equals(harvest.quantityUnit, ignoreCase = true),
+                                onClick = { viewModel.applyLastHarvest(harvest) },
+                                label = {
+                                    Text(
+                                        "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit} • ${harvest.harvestDate.toDateLabel()}"
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        if (unitSuggestions.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Common units",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    unitSuggestions.forEach { unit ->
+                        FilterChip(
+                            selected = state.quantityUnit.equals(unit, ignoreCase = true),
+                            onClick = { viewModel.update { copy(quantityUnit = unit) } },
+                            label = { Text(unit) }
+                        )
+                    }
+                }
+            }
         }
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             (1..5).forEach { rating ->
@@ -363,17 +434,201 @@ fun ReminderFormScreen(
 ) {
     val state = viewModel.state
     val trees by viewModel.trees.collectAsStateWithLifecycle()
+    val activeTrees = remember(trees) { trees.filter { it.status == TreeStatus.ACTIVE } }
+    val selectedTrees = remember(trees, state.selectedTreeIds) {
+        trees.filter { it.id in state.selectedTreeIds }
+    }
+    val focusTreeId = state.treeId ?: state.selectedTreeIds.singleOrNull()
+    val focusTree = remember(trees, focusTreeId) {
+        trees.firstOrNull { it.id == focusTreeId }
+    }
+    val careTemplates = remember(focusTree) { careTemplatesFor(focusTree) }
+    var selectionDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var plantSearch by rememberSaveable { mutableStateOf("") }
+    val visibleTrees = remember(trees, plantSearch) {
+        val query = plantSearch.trim().lowercase()
+        if (query.isBlank()) {
+            trees
+        } else {
+            trees.filter { tree -> tree.matchesPlantSearch(query) }
+        }
+    }
 
-    EntryFormLayout(title = if (state.id == null) "Add reminder" else "Edit reminder") {
-        SelectionField(
-            label = "Tree (optional)",
-            value = trees.selectedTreeLabel(state.treeId, fallback = "Any tree"),
-            options = listOf("Any tree") + trees.treeLabels(),
-            onSelected = { label ->
-                val treeId = trees.find { it.selectorLabel() == label }?.id
-                viewModel.update { copy(treeId = treeId) }
+    if (selectionDialogVisible && state.id == null) {
+        AlertDialog(
+            onDismissRequest = { selectionDialogVisible = false },
+            title = { Text("Choose plants") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = plantSearch,
+                        onValueChange = { plantSearch = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Search plants") }
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("${state.selectedTreeIds.size} selected")
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            TextButton(onClick = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) }) {
+                                Text("Select visible")
+                            }
+                            TextButton(onClick = viewModel::clearTreeSelection) {
+                                Text("Clear")
+                            }
+                        }
+                    }
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 320.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(visibleTrees, key = TreeEntity::id) { tree ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.toggleTreeSelection(tree.id) }
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(
+                                        checked = tree.id in state.selectedTreeIds,
+                                        onCheckedChange = { _ -> viewModel.toggleTreeSelection(tree.id) }
+                                    )
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(tree.displayName())
+                                        Text(
+                                            tree.selectorSubtitle(),
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { selectionDialogVisible = false }) {
+                    Text("Done")
+                }
             }
         )
+    }
+
+    EntryFormLayout(title = if (state.id == null) "Add reminder" else "Edit reminder") {
+        if (state.id == null) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Reminder target",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    FilterChip(
+                        selected = state.targetMode == ReminderTargetMode.GENERAL,
+                        onClick = { viewModel.setTargetMode(ReminderTargetMode.GENERAL) },
+                        label = { Text("General orchard") }
+                    )
+                    FilterChip(
+                        selected = state.targetMode == ReminderTargetMode.SELECTED,
+                        onClick = { viewModel.setTargetMode(ReminderTargetMode.SELECTED) },
+                        label = { Text("Selected plants") }
+                    )
+                    FilterChip(
+                        selected = state.targetMode == ReminderTargetMode.ALL_ACTIVE,
+                        onClick = { viewModel.setTargetMode(ReminderTargetMode.ALL_ACTIVE) },
+                        label = { Text("All active plants") }
+                    )
+                }
+            }
+            when (state.targetMode) {
+                ReminderTargetMode.GENERAL -> {
+                    Text(
+                        text = "This reminder is not tied to a single plant and will stay orchard-wide.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                ReminderTargetMode.SELECTED -> {
+                    OutlinedButton(
+                        onClick = { selectionDialogVisible = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (selectedTrees.isEmpty()) {
+                                "Choose plants"
+                            } else {
+                                "Edit ${selectedTrees.size} selected plants"
+                            }
+                        )
+                    }
+                    if (selectedTrees.isEmpty()) {
+                        Text("No plants selected yet.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        selectedTrees.take(4).forEach { tree ->
+                            Text(tree.selectorLabel(), style = MaterialTheme.typography.bodySmall)
+                        }
+                        if (selectedTrees.size > 4) {
+                            Text(
+                                text = "+${selectedTrees.size - 4} more plants",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+                ReminderTargetMode.ALL_ACTIVE -> {
+                    Text(
+                        text = "${activeTrees.size} active plants will receive this reminder.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        } else {
+            SelectionField(
+                label = "Tree (optional)",
+                value = trees.selectedTreeLabel(state.treeId, fallback = "Any tree"),
+                options = listOf("Any tree") + trees.treeLabels(),
+                onSelected = { label ->
+                    val treeId = trees.find { it.selectorLabel() == label }?.id
+                    viewModel.update { copy(treeId = treeId) }
+                }
+            )
+        }
+        if (careTemplates.isNotEmpty()) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Care templates",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                Text(
+                    text = "Apply a starter title, notes, and cadence, then fine-tune it below.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    careTemplates.forEach { template ->
+                        FilterChip(
+                            selected = state.title == template.title,
+                            onClick = { viewModel.update { applyTemplate(template) } },
+                            label = { Text(template.label) }
+                        )
+                    }
+                }
+            }
+        }
         OutlinedTextField(
             value = state.title,
             onValueChange = { viewModel.update { copy(title = it) } },
@@ -606,3 +861,100 @@ private fun TreeEntity.matchesPlantSearch(query: String): Boolean = listOf(
     notes,
     tags
 ).any { value -> value.lowercase().contains(query) }
+
+private data class CareTemplate(
+    val label: String,
+    val title: String,
+    val notes: String,
+    val recurrenceType: RecurrenceType,
+    val recurrenceIntervalDays: Int? = null,
+    val leadTimeMode: LeadTimeMode = LeadTimeMode.SAME_DAY,
+    val customLeadTimeHours: Int? = null
+)
+
+private fun ReminderFormState.applyTemplate(template: CareTemplate): ReminderFormState = copy(
+    title = template.title,
+    notes = template.notes,
+    recurrenceType = template.recurrenceType,
+    recurrenceIntervalDays = template.recurrenceIntervalDays?.toString() ?: recurrenceIntervalDays,
+    leadTimeMode = template.leadTimeMode,
+    customLeadTimeHours = template.customLeadTimeHours?.toString() ?: customLeadTimeHours,
+    enabled = true
+)
+
+private fun careTemplatesFor(tree: TreeEntity?): List<CareTemplate> {
+    val plantLabel = tree?.displayName()?.lowercase() ?: "the orchard"
+    val bloomLabel = tree?.species?.ifBlank { null } ?: "this planting"
+    return buildList {
+        add(
+            CareTemplate(
+                label = "Fertilize",
+                title = "Fertilize",
+                notes = "Feed $plantLabel and log the product or rate used.",
+                recurrenceType = RecurrenceType.MONTHLY,
+                leadTimeMode = LeadTimeMode.ONE_DAY_BEFORE
+            )
+        )
+        add(
+            CareTemplate(
+                label = "Pest check",
+                title = "Pest check",
+                notes = "Inspect $plantLabel for pests, damage, and disease pressure.",
+                recurrenceType = RecurrenceType.WEEKLY
+            )
+        )
+        add(
+            CareTemplate(
+                label = "Irrigation",
+                title = "Irrigation check",
+                notes = "Check soil moisture and irrigation coverage for $plantLabel.",
+                recurrenceType = RecurrenceType.EVERY_X_DAYS,
+                recurrenceIntervalDays = 3,
+                leadTimeMode = LeadTimeMode.CUSTOM_HOURS,
+                customLeadTimeHours = 12
+            )
+        )
+        add(
+            CareTemplate(
+                label = "Prune",
+                title = "Prune",
+                notes = "Review $plantLabel for cleanup cuts, shaping, or thinning.",
+                recurrenceType = RecurrenceType.NONE,
+                leadTimeMode = LeadTimeMode.ONE_DAY_BEFORE
+            )
+        )
+        add(
+            CareTemplate(
+                label = "Bloom watch",
+                title = "Bloom watch",
+                notes = "Watch $bloomLabel bloom progress and note pollination conditions.",
+                recurrenceType = RecurrenceType.WEEKLY
+            )
+        )
+        add(
+            CareTemplate(
+                label = "Harvest check",
+                title = "Harvest check",
+                notes = "Inspect $plantLabel for ripeness and harvest readiness.",
+                recurrenceType = RecurrenceType.WEEKLY,
+                leadTimeMode = LeadTimeMode.CUSTOM_HOURS,
+                customLeadTimeHours = 6
+            )
+        )
+    }
+}
+
+private fun harvestUnitSuggestions(
+    harvests: List<HarvestEntity>,
+    currentUnit: String
+): List<String> = buildList {
+    currentUnit.trim().takeIf(String::isNotBlank)?.let(::add)
+    harvests
+        .map(HarvestEntity::quantityUnit)
+        .filter(String::isNotBlank)
+        .distinctBy(String::lowercase)
+        .take(4)
+        .forEach(::add)
+    listOf("fruit", "lb", "kg", "basket")
+        .forEach(::add)
+}.distinctBy(String::lowercase)

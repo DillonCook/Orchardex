@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
@@ -50,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.dillon.orcharddex.data.local.HarvestEntity
+import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
@@ -263,7 +266,7 @@ fun TreeFormScreen(
     var suppressCultivarAutocomplete by rememberSaveable(state.id) {
         mutableStateOf(false)
     }
-    val heroExistingPath = state.existingPhotos.firstOrNull()?.relativePath
+    val heroExistingPath = state.existingPhotos.latestPhoto()?.relativePath
     val heroNewUri = state.newPhotoUris.firstOrNull()
     val supportedSpecies = remember { BloomForecastEngine.supportedSpeciesCatalog() }
     val speciesCatalog = remember(knownTrees, supportedSpecies) {
@@ -953,6 +956,20 @@ fun TreeDetailScreen(
     val customBloomTimingSummary = remember(item.tree) {
         BloomForecastEngine.customBloomTimingSummaryLabel(item.tree)
     }
+    val latestPhoto = remember(item.photos) { item.photos.latestPhoto() }
+    val photoProgression = remember(item.photos) {
+        item.photos
+            .sortedWith(compareByDescending<TreePhotoEntity> { it.createdAt }.thenByDescending { it.sortOrder })
+            .mapIndexed { index, photo ->
+                PhotoProgressItem(
+                    id = photo.id,
+                    relativePath = photo.relativePath,
+                    dateLabel = photo.createdAt.toDateLabel(),
+                    badgeLabel = if (index == 0) "Latest" else null
+                )
+            }
+    }
+    val harvestSummary = remember(item.harvests) { item.harvests.toHarvestSummary() }
 
     if (viewModel.confirmDelete) {
         AlertDialog(
@@ -1052,6 +1069,22 @@ fun TreeDetailScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                latestPhoto?.let { photo ->
+                    Card(shape = RoundedCornerShape(24.dp)) {
+                        AsyncImage(
+                            model = File(context.filesDir, "photos/${photo.relativePath}"),
+                            contentDescription = "Latest tree photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                        )
+                    }
+                    Text(
+                        text = "Latest photo • ${photo.createdAt.toDateLabel()}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 LocalPhotoStrip(
                     existingPaths = item.photos.map { photo ->
                         photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
@@ -1062,6 +1095,45 @@ fun TreeDetailScreen(
         item {
             SectionCard("Notes") {
                 Text(item.tree.notes.ifBlank { "No notes yet." })
+            }
+        }
+        item {
+            SectionCard("Harvest summary") {
+                if (harvestSummary.totalHarvests == 0 && !item.tree.hasFruitedBefore) {
+                    Text("No harvests logged yet.")
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CompactFact("Total harvests", harvestSummary.totalHarvests.toString())
+                        harvestSummary.latestHarvestDate?.let { CompactFact("Latest", it.toDateLabel()) }
+                        harvestSummary.firstFruitDate?.let { CompactFact("First fruit", it.toDateLabel()) }
+                        CompactFact("Verified", harvestSummary.verifiedHarvestCount.toString())
+                        if (item.tree.hasFruitedBefore && harvestSummary.firstFruitDate == null) {
+                            CompactFact("History", "Previously fruited")
+                        }
+                    }
+                    if (harvestSummary.totalsByUnit.isNotEmpty()) {
+                        Text("Logged totals", style = MaterialTheme.typography.labelLarge)
+                        harvestSummary.totalsByUnit.forEach { total ->
+                            Text("${total.quantity.displayAmount()} ${total.unit}")
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SectionCard("Photo progression") {
+                if (photoProgression.isEmpty()) {
+                    Text("Add photos over time to compare growth, bloom, and fruiting.")
+                } else {
+                    Text(
+                        text = "Newest to oldest",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    PhotoProgressionStrip(photoProgression)
+                }
             }
         }
         item {
@@ -1158,6 +1230,26 @@ private data class TreeHistoryEntry(
     val isHarvest: Boolean
 )
 
+private data class PhotoProgressItem(
+    val id: String,
+    val relativePath: String,
+    val dateLabel: String,
+    val badgeLabel: String?
+)
+
+private data class HarvestUnitTotal(
+    val unit: String,
+    val quantity: Double
+)
+
+private data class TreeHarvestSummary(
+    val totalHarvests: Int,
+    val latestHarvestDate: Long?,
+    val firstFruitDate: Long?,
+    val verifiedHarvestCount: Int,
+    val totalsByUnit: List<HarvestUnitTotal>
+)
+
 @Composable
 private fun TreeThumbnail(relativePath: String?) {
     val context = LocalContext.current
@@ -1175,4 +1267,77 @@ private fun TreeThumbnail(relativePath: String?) {
             }
         }
     }
+}
+
+@Composable
+private fun PhotoProgressionStrip(items: List<PhotoProgressItem>) {
+    val context = LocalContext.current
+    LazyRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        items(items, key = PhotoProgressItem::id) { photo ->
+            Card(
+                modifier = Modifier.size(132.dp),
+                shape = RoundedCornerShape(22.dp)
+            ) {
+                Box(modifier = Modifier.fillMaxSize()) {
+                    AsyncImage(
+                        model = File(context.filesDir, "photos/${photo.relativePath}"),
+                        contentDescription = "Tree progress photo",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                    photo.badgeLabel?.let { badge ->
+                        Card(
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(8.dp),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = badge,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall
+                            )
+                        }
+                    }
+                    Card(
+                        modifier = Modifier
+                            .align(Alignment.BottomStart)
+                            .padding(8.dp),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            text = photo.dateLabel,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun List<TreePhotoEntity>.latestPhoto(): TreePhotoEntity? = maxWithOrNull(
+    compareBy<TreePhotoEntity> { it.createdAt }.thenBy { it.sortOrder }
+)
+
+private fun List<HarvestEntity>.toHarvestSummary(): TreeHarvestSummary {
+    val orderedHarvests = sortedByDescending(HarvestEntity::harvestDate)
+    return TreeHarvestSummary(
+        totalHarvests = size,
+        latestHarvestDate = orderedHarvests.firstOrNull()?.harvestDate,
+        firstFruitDate = filter(HarvestEntity::firstFruit).minByOrNull(HarvestEntity::harvestDate)?.harvestDate,
+        verifiedHarvestCount = count(HarvestEntity::verified),
+        totalsByUnit = groupBy { harvest ->
+            harvest.quantityUnit.trim().ifBlank { "unit" }
+        }.map { (unit, harvests) ->
+            HarvestUnitTotal(
+                unit = unit,
+                quantity = harvests.sumOf(HarvestEntity::quantityValue)
+            )
+        }.sortedByDescending(HarvestUnitTotal::quantity)
+    )
 }

@@ -58,7 +58,9 @@ class OrchardRepository(
         trees.map { item ->
             TreeListItem(
                 tree = item.tree,
-                mainPhotoPath = item.photos.sortedBy(TreePhotoEntity::sortOrder).firstOrNull()?.relativePath
+                mainPhotoPath = item.photos
+                    .maxWithOrNull(compareBy<TreePhotoEntity> { it.createdAt }.thenBy { it.sortOrder })
+                    ?.relativePath
             )
         }
     }
@@ -72,7 +74,10 @@ class OrchardRepository(
         treeWithPhotos?.let {
             TreeDetailModel(
                 tree = it.tree,
-                photos = it.photos.sortedBy(TreePhotoEntity::sortOrder),
+                photos = it.photos.sortedWith(
+                    compareByDescending<TreePhotoEntity> { photo -> photo.createdAt }
+                        .thenByDescending(TreePhotoEntity::sortOrder)
+                ),
                 events = events,
                 harvests = harvests,
                 reminders = reminders
@@ -274,6 +279,8 @@ class OrchardRepository(
         }
     }
 
+    fun observeAllHarvests(): Flow<List<HarvestEntity>> = harvestDao.observeAllHarvests()
+
     fun observeHistory(): Flow<List<HistoryEntryModel>> = combine(
         treeDao.observeTrees(),
         eventDao.observeAllEvents(),
@@ -298,7 +305,10 @@ class OrchardRepository(
         val tree = treeDao.getTreeWithPhotos(treeId) ?: return@withContext null
         TreeDetailModel(
             tree = tree.tree,
-            photos = tree.photos.sortedBy(TreePhotoEntity::sortOrder),
+            photos = tree.photos.sortedWith(
+                compareByDescending<TreePhotoEntity> { photo -> photo.createdAt }
+                    .thenByDescending(TreePhotoEntity::sortOrder)
+            ),
             events = eventDao.getAllEvents().filter { it.treeId == treeId },
             harvests = harvestDao.getAllHarvests().filter { it.treeId == treeId },
             reminders = reminderDao.getAllReminders().filter { it.treeId == treeId }
@@ -484,29 +494,36 @@ class OrchardRepository(
         )
     }
 
-    suspend fun saveReminder(input: ReminderInput): String = withContext(Dispatchers.IO) {
-        require(input.title.isNotBlank()) { "Reminder title is required." }
+    suspend fun saveReminder(input: ReminderInput): String = saveReminders(listOf(input)).single()
+
+    suspend fun saveReminders(inputs: List<ReminderInput>): List<String> = withContext(Dispatchers.IO) {
+        require(inputs.isNotEmpty()) { "At least one reminder is required." }
         val now = System.currentTimeMillis()
-        val existing = input.id?.let { reminderDao.getReminder(it) }
-        val reminder = ReminderEntity(
-            id = input.id ?: UUID.randomUUID().toString(),
-            treeId = input.treeId,
-            title = input.title.trim(),
-            notes = input.notes.trim(),
-            dueAt = input.dueAt,
-            hasTime = input.hasTime,
-            recurrenceType = input.recurrenceType,
-            recurrenceIntervalDays = input.recurrenceIntervalDays,
-            enabled = input.enabled,
-            completedAt = existing?.completedAt,
-            leadTimeMode = input.leadTimeMode,
-            customLeadTimeHours = input.customLeadTimeHours,
-            createdAt = existing?.createdAt ?: now,
-            updatedAt = now
-        )
-        reminderDao.insert(reminder)
-        if (reminder.enabled) reminderScheduler.schedule(reminder) else reminderScheduler.cancel(reminder.id)
-        reminder.id
+        val reminders = inputs.map { input ->
+            require(input.title.isNotBlank()) { "Reminder title is required." }
+            val existing = input.id?.let { reminderDao.getReminder(it) }
+            ReminderEntity(
+                id = input.id ?: UUID.randomUUID().toString(),
+                treeId = input.treeId,
+                title = input.title.trim(),
+                notes = input.notes.trim(),
+                dueAt = input.dueAt,
+                hasTime = input.hasTime,
+                recurrenceType = input.recurrenceType,
+                recurrenceIntervalDays = input.recurrenceIntervalDays,
+                enabled = input.enabled,
+                completedAt = existing?.completedAt,
+                leadTimeMode = input.leadTimeMode,
+                customLeadTimeHours = input.customLeadTimeHours,
+                createdAt = existing?.createdAt ?: now,
+                updatedAt = now
+            )
+        }
+        reminders.forEach { reminder ->
+            reminderDao.insert(reminder)
+            if (reminder.enabled) reminderScheduler.schedule(reminder) else reminderScheduler.cancel(reminder.id)
+        }
+        reminders.map(ReminderEntity::id)
     }
 
     suspend fun deleteReminder(reminderId: String) = withContext(Dispatchers.IO) {

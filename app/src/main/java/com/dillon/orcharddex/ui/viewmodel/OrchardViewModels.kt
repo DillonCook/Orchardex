@@ -15,6 +15,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.dillon.orcharddex.OrchardDexApp
 import com.dillon.orcharddex.backup.BackupManager
 import com.dillon.orcharddex.backup.BackupValidation
+import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.model.ActivityKind
@@ -481,9 +482,24 @@ class HarvestFormViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
+    val harvests = repository.observeAllHarvests().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
 
     fun update(update: HarvestFormState.() -> HarvestFormState) {
         state = state.update().copy(errorMessage = null)
+    }
+
+    fun applyLastHarvest(harvest: HarvestEntity) {
+        state = state.copy(
+            quantityValue = harvest.quantityValue.toString().removeSuffix(".0"),
+            quantityUnit = harvest.quantityUnit,
+            qualityRating = harvest.qualityRating,
+            verified = harvest.verified,
+            errorMessage = null
+        )
     }
 
     fun save(onSaved: (String) -> Unit) {
@@ -589,9 +605,17 @@ class ReminderListViewModel(
     }
 }
 
+enum class ReminderTargetMode {
+    GENERAL,
+    SELECTED,
+    ALL_ACTIVE
+}
+
 data class ReminderFormState(
     val id: String? = null,
     val treeId: String? = null,
+    val targetMode: ReminderTargetMode = ReminderTargetMode.GENERAL,
+    val selectedTreeIds: Set<String> = emptySet(),
     val title: String = "",
     val notes: String = "",
     val dueDate: LocalDate = LocalDate.now(),
@@ -614,7 +638,14 @@ class ReminderFormViewModel(
 ) : ViewModel() {
     private val reminderId: String? = savedStateHandle[REMINDER_ID]
     private val treeIdArg: String? = savedStateHandle[TREE_ID]
-    var state by mutableStateOf(ReminderFormState(treeId = treeIdArg, isLoading = reminderId != null))
+    var state by mutableStateOf(
+        ReminderFormState(
+            treeId = treeIdArg,
+            targetMode = if (treeIdArg.isNullOrBlank()) ReminderTargetMode.GENERAL else ReminderTargetMode.SELECTED,
+            selectedTreeIds = treeIdArg?.takeIf(String::isNotBlank)?.let(::setOf) ?: emptySet(),
+            isLoading = reminderId != null
+        )
+    )
         private set
 
     val trees = repository.observeTreeNames().stateIn(
@@ -641,6 +672,8 @@ class ReminderFormViewModel(
                     ReminderFormState(
                         id = it.id,
                         treeId = it.treeId,
+                        targetMode = if (it.treeId == null) ReminderTargetMode.GENERAL else ReminderTargetMode.SELECTED,
+                        selectedTreeIds = it.treeId?.let(::setOf) ?: emptySet(),
                         title = it.title,
                         notes = it.notes,
                         dueDate = epochToLocalDate(it.dueAt),
@@ -664,9 +697,78 @@ class ReminderFormViewModel(
         state = state.update().copy(errorMessage = null)
     }
 
+    fun setTargetMode(mode: ReminderTargetMode) {
+        state = when (mode) {
+            ReminderTargetMode.GENERAL -> state.copy(
+                targetMode = mode,
+                treeId = null,
+                selectedTreeIds = emptySet(),
+                errorMessage = null
+            )
+            ReminderTargetMode.SELECTED -> state.copy(
+                targetMode = mode,
+                treeId = state.selectedTreeIds.singleOrNull(),
+                errorMessage = null
+            )
+            ReminderTargetMode.ALL_ACTIVE -> state.copy(
+                targetMode = mode,
+                treeId = null,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        val updated = if (treeId in selected) selected - treeId else selected + treeId
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        val updated = state.selectedTreeIds + treeIds
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(
+            selectedTreeIds = emptySet(),
+            treeId = null,
+            errorMessage = null
+        )
+    }
+
     fun save(onSaved: () -> Unit) {
         if (state.title.isBlank()) {
             state = state.copy(errorMessage = "Title is required.")
+            return
+        }
+        val targetTreeIds = if (state.id != null) {
+            listOf(state.treeId)
+        } else {
+            when (state.targetMode) {
+                ReminderTargetMode.GENERAL -> listOf(null)
+                ReminderTargetMode.SELECTED -> state.selectedTreeIds.toList()
+                ReminderTargetMode.ALL_ACTIVE -> trees.value
+                    .filter { it.status == TreeStatus.ACTIVE }
+                    .map(TreeEntity::id)
+            }
+        }
+        if (state.id == null && state.targetMode == ReminderTargetMode.SELECTED && targetTreeIds.isEmpty()) {
+            state = state.copy(errorMessage = "Select at least one plant.")
+            return
+        }
+        if (state.id == null && state.targetMode == ReminderTargetMode.ALL_ACTIVE && targetTreeIds.isEmpty()) {
+            state = state.copy(errorMessage = "No active plants are available.")
             return
         }
         viewModelScope.launch {
@@ -676,20 +778,22 @@ class ReminderFormViewModel(
             } else {
                 localDateWithTime(state.dueDate, LocalTime.of(8, 0))
             }
-            repository.saveReminder(
-                ReminderInput(
-                    id = state.id,
-                    treeId = state.treeId,
-                    title = state.title,
-                    notes = state.notes,
-                    dueAt = dueAt,
-                    hasTime = state.hasTime,
-                    recurrenceType = state.recurrenceType,
-                    recurrenceIntervalDays = state.recurrenceIntervalDays.toIntOrNull(),
-                    enabled = state.enabled,
-                    leadTimeMode = state.leadTimeMode,
-                    customLeadTimeHours = state.customLeadTimeHours.toIntOrNull()
-                )
+            repository.saveReminders(
+                targetTreeIds.map { targetTreeId ->
+                    ReminderInput(
+                        id = state.id,
+                        treeId = if (state.id != null) state.treeId else targetTreeId,
+                        title = state.title,
+                        notes = state.notes,
+                        dueAt = dueAt,
+                        hasTime = state.hasTime,
+                        recurrenceType = state.recurrenceType,
+                        recurrenceIntervalDays = state.recurrenceIntervalDays.toIntOrNull(),
+                        enabled = state.enabled,
+                        leadTimeMode = state.leadTimeMode,
+                        customLeadTimeHours = state.customLeadTimeHours.toIntOrNull()
+                    )
+                }
             )
             state = state.copy(isSaving = false)
             onSaved()

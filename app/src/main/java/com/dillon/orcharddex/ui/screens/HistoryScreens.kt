@@ -81,6 +81,15 @@ private data class HarvestSpeciesCount(
     val harvestCount: Int
 )
 
+private data class SeasonalSummary(
+    val year: Int,
+    val harvestCount: Int,
+    val firstFruitCount: Int,
+    val speciesCount: Int,
+    val topSpecies: String?,
+    val peakMonth: String?
+)
+
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
@@ -125,6 +134,35 @@ fun HistoryScreen(
             .map { (species, count) -> HarvestSpeciesCount(species = species, harvestCount = count) }
             .sortedWith(compareByDescending<HarvestSpeciesCount> { it.harvestCount }.thenBy { it.species.lowercase() })
     }
+    val seasonalSummaries = remember(harvestHistory) {
+        harvestHistory
+            .groupBy { entry ->
+                Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year
+            }
+            .map { (year, entries) ->
+                val topSpecies = entries
+                    .groupingBy { it.species.ifBlank { "Unknown species" } }
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key
+                val peakMonth = entries
+                    .groupingBy(HistoryEntryModel::monthShortLabel)
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key
+                SeasonalSummary(
+                    year = year,
+                    harvestCount = entries.size,
+                    firstFruitCount = entries.count(HistoryEntryModel::firstFruit),
+                    speciesCount = entries.map { it.species.ifBlank { "Unknown species" } }.distinct().size,
+                    topSpecies = topSpecies,
+                    peakMonth = peakMonth
+                )
+            }
+            .sortedByDescending(SeasonalSummary::year)
+    }
+    val currentSeasonSummary = seasonalSummaries.firstOrNull { it.year == currentYear }
+        ?: seasonalSummaries.firstOrNull()
 
     if (addMenuVisible) {
         AlertDialog(
@@ -210,6 +248,70 @@ fun HistoryScreen(
                             minWidth = 0.dp,
                             onClick = { selectedTracker = HarvestTracker.TOTAL }
                         )
+                    }
+                }
+            }
+            item {
+                SectionCard("Season analytics") {
+                    if (seasonalSummaries.isEmpty()) {
+                        Text("Add harvests to compare seasons, first fruit, and busiest months.")
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.dillon.orcharddex.ui.components.StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "${currentSeasonSummary?.year ?: currentYear} harvests",
+                                value = (currentSeasonSummary?.harvestCount ?: 0).toString(),
+                                minWidth = 0.dp
+                            )
+                            com.dillon.orcharddex.ui.components.StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "First fruit logs",
+                                value = (currentSeasonSummary?.firstFruitCount ?: 0).toString(),
+                                minWidth = 0.dp
+                            )
+                        }
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            label = "Harvested species",
+                            value = (currentSeasonSummary?.speciesCount ?: 0).toString(),
+                            minWidth = 0.dp
+                        )
+                        seasonalSummaries.take(3).forEach { summary ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "${summary.year} season",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = "${summary.harvestCount} harvests • ${summary.speciesCount} species • ${summary.firstFruitCount} first-fruit logs",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    summary.topSpecies?.let {
+                                        Text(
+                                            text = "Top species: $it",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    summary.peakMonth?.let {
+                                        Text(
+                                            text = "Peak month: $it",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -591,3 +693,5 @@ private fun Long.monthShortLabel(): String = Instant.ofEpochMilli(this)
     .atZone(ZoneId.systemDefault())
     .toLocalDate()
     .format(historyMonthShortFormatter)
+
+private fun HistoryEntryModel.monthShortLabel(): String = date.monthShortLabel()
