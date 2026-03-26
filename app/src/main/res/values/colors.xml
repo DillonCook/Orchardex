@@ -16,4 +16,5 @@
     <color name="launcher_fruit_peach">#D98C56</color>
     <color name="launcher_fruit_highlight">#FFF2C6</color>
     <color name="launcher_monochrome">#1F1F1F</color>
+    <color name="splash_native_background">#E6C27F</color>
 </resources>

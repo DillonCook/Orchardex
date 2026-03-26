@@ -74,7 +74,8 @@ data class TreePhotoEntity(
     val relativePath: String,
     val caption: String?,
     val createdAt: Long,
-    val sortOrder: Int
+    val sortOrder: Int,
+    val isHero: Boolean = false
 )
 
 @Serializable

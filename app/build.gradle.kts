@@ -54,7 +54,7 @@ android {
         applicationId = "com.dillon.orcharddex"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
+        versionCode = 5
         versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -130,6 +130,7 @@ dependencies {
     androidTestImplementation(platform(libs.androidx.compose.bom))
 
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.core.splashscreen)
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.runtime.compose)

@@ -58,9 +58,7 @@ class OrchardRepository(
         trees.map { item ->
             TreeListItem(
                 tree = item.tree,
-                mainPhotoPath = item.photos
-                    .maxWithOrNull(compareBy<TreePhotoEntity> { it.createdAt }.thenBy { it.sortOrder })
-                    ?.relativePath
+                mainPhotoPath = item.photos.heroOrLatestPhoto()?.relativePath
             )
         }
     }
@@ -367,10 +365,13 @@ class OrchardRepository(
                             relativePath = relativePath,
                             caption = null,
                             createdAt = now,
-                            sortOrder = existingCount + index
+                            sortOrder = existingCount + index,
+                            isHero = false
                         )
                     )
                 }
+
+                ensureHeroPhotoSelected(treeId)
 
                 markWishlistAcquired(entity.species, entity.cultivar, treeId)
             }
@@ -402,10 +403,12 @@ class OrchardRepository(
                             relativePath = relativePath,
                             caption = null,
                             createdAt = now,
-                            sortOrder = index
+                            sortOrder = index,
+                            isHero = false
                         )
                     )
                 }
+                ensureHeroPhotoSelected(treeId)
             }
 
             val firstTree = trees.first()
@@ -433,10 +436,18 @@ class OrchardRepository(
                     relativePath = relativePath,
                     caption = null,
                     createdAt = now,
-                    sortOrder = existingCount + index
+                    sortOrder = existingCount + index,
+                    isHero = false
                 )
             )
         }
+        ensureHeroPhotoSelected(treeId)
+    }
+
+    suspend fun setTreeHeroPhoto(treeId: String, photoId: String) = withContext(Dispatchers.IO) {
+        val photo = treePhotoDao.getPhotosByIds(listOf(photoId)).firstOrNull() ?: return@withContext
+        if (photo.treeId != treeId) return@withContext
+        treePhotoDao.setHeroPhoto(treeId, photoId)
     }
 
     suspend fun addEvent(input: EventInput) = addEvents(listOf(input))
@@ -698,6 +709,14 @@ class OrchardRepository(
         wishlistDao.insert(match.copy(acquired = true, linkedTreeId = treeId))
     }
 
+    private suspend fun ensureHeroPhotoSelected(treeId: String) {
+        val photos = treePhotoDao.getPhotosForTree(treeId)
+        if (photos.isEmpty() || photos.any(TreePhotoEntity::isHero)) return
+        photos.heroOrLatestPhoto()?.let { heroPhoto ->
+            treePhotoDao.setHeroPhoto(treeId, heroPhoto.id)
+        }
+    }
+
     private suspend fun clearAllDataInternal() {
         reminderDao.getActiveReminders().forEach { reminderScheduler.cancel(it.id) }
         database.withTransaction {
@@ -810,6 +829,10 @@ private fun buildHarvestPreview(harvest: HarvestEntity): String = listOfNotNull(
 
 private fun fruitingTreeIds(trees: List<TreeEntity>, harvests: List<HarvestEntity>): Set<String> =
     harvests.map(HarvestEntity::treeId).toSet() + trees.filter(TreeEntity::hasFruitedBefore).map(TreeEntity::id)
+
+private fun List<TreePhotoEntity>.heroOrLatestPhoto(): TreePhotoEntity? =
+    firstOrNull(TreePhotoEntity::isHero)
+        ?: maxWithOrNull(compareBy<TreePhotoEntity> { it.createdAt }.thenBy { it.sortOrder })
 
 private fun EventType.displayLabel(): String = when (this) {
     EventType.PLANTED -> "Planted"

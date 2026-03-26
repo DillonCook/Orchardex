@@ -179,33 +179,33 @@ fun ReadOnlyField(
     modifier: Modifier = Modifier,
     testTag: String? = null
 ) {
-    Box(
+    OutlinedCard(
         modifier = modifier
             .fillMaxWidth()
             .let { base ->
                 if (testTag == null) base else base.testTag(testTag)
             }
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
     ) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = {},
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text(label) },
-            readOnly = true,
-            enabled = false,
-            colors = OutlinedTextFieldDefaults.colors(
-                disabledTextColor = MaterialTheme.colorScheme.onSurface,
-                disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                disabledBorderColor = MaterialTheme.colorScheme.outline,
-                disabledContainerColor = Color.Transparent,
-                disabledTrailingIconColor = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        )
-        Box(
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .clickable(onClick = onClick)
-        )
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
     }
 }
 
@@ -413,6 +413,9 @@ fun LocalPhotoStrip(
     newUris: List<Uri> = emptyList(),
     onRemoveExisting: ((String) -> Unit)? = null,
     onRemoveNew: ((Uri) -> Unit)? = null,
+    selectedExistingId: String? = null,
+    onSelectExisting: ((String) -> Unit)? = null,
+    selectedBadgeLabel: String = "Hero",
     modifier: Modifier = Modifier
 ) {
     if (existingPaths.isEmpty() && newUris.isEmpty()) return
@@ -424,6 +427,13 @@ fun LocalPhotoStrip(
             RemovableImageCard(
                 model = File(item.second),
                 description = "Photo",
+                onClick = onSelectExisting?.let { { it(item.first) } },
+                isSelected = item.first == selectedExistingId,
+                badgeLabel = if (item.first == selectedExistingId && onSelectExisting != null) {
+                    selectedBadgeLabel
+                } else {
+                    null
+                },
                 onRemove = onRemoveExisting?.let { { it(item.first) } }
             )
         }
@@ -431,6 +441,9 @@ fun LocalPhotoStrip(
             RemovableImageCard(
                 model = uri,
                 description = "New photo",
+                onClick = null,
+                isSelected = false,
+                badgeLabel = null,
                 onRemove = onRemoveNew?.let { { it(uri) } }
             )
         }
@@ -441,18 +454,51 @@ fun LocalPhotoStrip(
 private fun RemovableImageCard(
     model: Any,
     description: String,
+    onClick: (() -> Unit)?,
+    isSelected: Boolean,
+    badgeLabel: String?,
     onRemove: (() -> Unit)?
 ) {
     Box {
-        AsyncImage(
-            model = model,
-            contentDescription = description,
-            contentScale = ContentScale.Crop,
+        OutlinedCard(
             modifier = Modifier
                 .size(112.dp)
-                .clip(RoundedCornerShape(20.dp))
-                .aspectRatio(1f)
-        )
+                .let { base ->
+                    if (onClick == null) base else base.clickable(onClick = onClick)
+                },
+            shape = RoundedCornerShape(20.dp),
+            border = BorderStroke(
+                width = if (isSelected) 2.dp else 1.dp,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.outlineVariant
+                }
+            )
+        ) {
+            AsyncImage(
+                model = model,
+                contentDescription = description,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .size(112.dp)
+                    .clip(RoundedCornerShape(20.dp))
+                    .aspectRatio(1f)
+            )
+        }
+        badgeLabel?.let { label ->
+            Text(
+                text = label,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(8.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(MaterialTheme.colorScheme.primary)
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.onPrimary,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
         if (onRemove != null) {
             IconButton(
                 onClick = onRemove,

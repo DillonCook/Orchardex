@@ -73,6 +73,15 @@ interface TreePhotoDao {
     @Query("SELECT * FROM tree_photos WHERE id IN (:photoIds)")
     suspend fun getPhotosByIds(photoIds: List<String>): List<TreePhotoEntity>
 
+    @Query(
+        """
+        UPDATE tree_photos
+        SET isHero = CASE WHEN id = :photoId THEN 1 ELSE 0 END
+        WHERE treeId = :treeId
+        """
+    )
+    suspend fun setHeroPhoto(treeId: String, photoId: String)
+
     @Query("DELETE FROM tree_photos WHERE id IN (:photoIds)")
     suspend fun deleteByIds(photoIds: List<String>)
 

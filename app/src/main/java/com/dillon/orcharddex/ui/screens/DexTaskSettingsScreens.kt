@@ -558,11 +558,45 @@ fun TasksScreen(
             item {
                 SectionCard("Task board") {
                     Text("Scan overdue tasks first, then work through the next 7 days.")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        StatCard("Open", reminders.count { it.reminder.completedAt == null && it.reminder.enabled }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.OPEN })
-                        StatCard("Overdue", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt < now }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.OVERDUE })
-                        StatCard("Due in 7 days", reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt in now..dueSoonCutoff }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.DUE_IN_7_DAYS })
-                        StatCard("Done or paused", reminders.count { it.reminder.completedAt != null || !it.reminder.enabled }.toString(), onClick = { selectedTaskBoardStat = TaskBoardStat.DONE_OR_PAUSED })
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "Open",
+                                value = reminders.count { it.reminder.completedAt == null && it.reminder.enabled }.toString(),
+                                minWidth = 0.dp,
+                                onClick = { selectedTaskBoardStat = TaskBoardStat.OPEN }
+                            )
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "Overdue",
+                                value = reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt < now }.toString(),
+                                minWidth = 0.dp,
+                                onClick = { selectedTaskBoardStat = TaskBoardStat.OVERDUE }
+                            )
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "Due in 7 days",
+                                value = reminders.count { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt in now..dueSoonCutoff }.toString(),
+                                minWidth = 0.dp,
+                                onClick = { selectedTaskBoardStat = TaskBoardStat.DUE_IN_7_DAYS }
+                            )
+                            StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "Done or paused",
+                                value = reminders.count { it.reminder.completedAt != null || !it.reminder.enabled }.toString(),
+                                minWidth = 0.dp,
+                                onClick = { selectedTaskBoardStat = TaskBoardStat.DONE_OR_PAUSED }
+                            )
+                        }
                     }
                 }
             }

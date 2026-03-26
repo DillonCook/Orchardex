@@ -98,7 +98,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         onResult = {}
     )
 
-    if (!settings.onboardingComplete) {
+    if (settingsViewModel.settingsLoaded && !settings.onboardingComplete) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Set up OrcharDex") },

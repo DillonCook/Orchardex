@@ -18,12 +18,8 @@ class OrchardDexContainer(context: Context) {
         OrchardDexDatabase::class.java,
         OrchardDexDatabase.DB_NAME
     )
-        .addMigrations(
-            OrchardDexDatabase.MIGRATION_1_2,
-            OrchardDexDatabase.MIGRATION_2_3,
-            OrchardDexDatabase.MIGRATION_3_4
-        )
-        .fallbackToDestructiveMigration()
+        // Fail fast on unsupported schemas rather than silently deleting orchard data.
+        .addMigrations(*OrchardDexDatabase.ALL_MIGRATIONS)
         .build()
 
     val settingsRepository = SettingsRepository(appContext)

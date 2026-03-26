@@ -28,7 +28,7 @@ abstract class OrchardDexDatabase : RoomDatabase() {
     abstract fun wishlistDao(): WishlistDao
 
     companion object {
-        const val DB_VERSION = 4
+        const val DB_VERSION = 5
         const val DB_NAME = "orcharddex.db"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -81,5 +81,38 @@ abstract class OrchardDexDatabase : RoomDatabase() {
                 )
             }
         }
+
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    ALTER TABLE tree_photos
+                    ADD COLUMN isHero INTEGER NOT NULL DEFAULT 0
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE tree_photos
+                    SET isHero = CASE
+                        WHEN id = (
+                            SELECT candidate.id
+                            FROM tree_photos AS candidate
+                            WHERE candidate.treeId = tree_photos.treeId
+                            ORDER BY candidate.createdAt DESC, candidate.sortOrder DESC
+                            LIMIT 1
+                        ) THEN 1
+                        ELSE 0
+                    END
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5
+        )
     }
 }

@@ -42,6 +42,7 @@ import com.dillon.orcharddex.ui.epochToLocalTime
 import com.dillon.orcharddex.ui.localDateAtStartOfDay
 import com.dillon.orcharddex.ui.localDateWithTime
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -355,6 +356,12 @@ class TreeDetailViewModel(
     fun addPhotos(uris: List<Uri>) {
         viewModelScope.launch {
             repository.addTreePhotos(treeId, uris)
+        }
+    }
+
+    fun setHeroPhoto(photoId: String) {
+        viewModelScope.launch {
+            repository.setTreeHeroPhoto(treeId, photoId)
         }
     }
 }
@@ -878,6 +885,9 @@ class SettingsViewModel(
     var busy by mutableStateOf(false)
         private set
 
+    var settingsLoaded by mutableStateOf(false)
+        private set
+
     var pendingImport by mutableStateOf<BackupValidation?>(null)
         private set
 
@@ -889,6 +899,13 @@ class SettingsViewModel(
 
     var confirmLoadSample by mutableStateOf(false)
         private set
+
+    init {
+        viewModelScope.launch {
+            settingsRepository.settings.first()
+            settingsLoaded = true
+        }
+    }
 
     fun updateTheme(mode: AppThemeMode) {
         viewModelScope.launch {
