@@ -176,6 +176,14 @@ fun DashboardScreen(
             history = history
         )
     }
+    val orchardPulseStats = listOf(
+        DashboardStat.TREES to dashboard.totalTreeCount,
+        DashboardStat.CULTIVARS to dashboard.cultivarCount,
+        DashboardStat.SPECIES to dashboard.speciesCount,
+        DashboardStat.WISHLIST to dashboard.wishlistCount,
+        DashboardStat.AWAITING_FIRST_FRUIT to dashboard.awaitingFirstFruitCount,
+        DashboardStat.DUE_SOON to dashboard.upcoming7Count
+    )
 
     fun jumpMonth(offset: Long) {
         val updatedMonth = visibleMonth.plusMonths(offset)
@@ -260,27 +268,23 @@ fun DashboardScreen(
                     },
                     style = MaterialTheme.typography.bodyMedium
                 )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    StatCard("Trees", dashboard.totalTreeCount.toString()) {
-                        selectedStat = DashboardStat.TREES
-                    }
-                    StatCard("Cultivars", dashboard.cultivarCount.toString()) {
-                        selectedStat = DashboardStat.CULTIVARS
-                    }
-                    StatCard("Species", dashboard.speciesCount.toString()) {
-                        selectedStat = DashboardStat.SPECIES
-                    }
-                    StatCard("Wishlist", dashboard.wishlistCount.toString()) {
-                        selectedStat = DashboardStat.WISHLIST
-                    }
-                    StatCard("Awaiting first fruit", dashboard.awaitingFirstFruitCount.toString()) {
-                        selectedStat = DashboardStat.AWAITING_FIRST_FRUIT
-                    }
-                    StatCard("Due in 7 days", dashboard.upcoming7Count.toString()) {
-                        selectedStat = DashboardStat.DUE_SOON
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    orchardPulseStats.chunked(2).forEach { row ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            row.forEach { (stat, value) ->
+                                StatCard(
+                                    label = stat.label,
+                                    value = value.toString(),
+                                    modifier = Modifier.weight(1f),
+                                    minWidth = 0.dp
+                                ) {
+                                    selectedStat = stat
+                                }
+                            }
+                        }
                     }
                 }
                 Text(
