@@ -1,6 +1,19 @@
 <resources>
     <color name="seed_green">#35543A</color>
     <color name="seed_gold">#B9852B</color>
-    <color name="launcher_bg">#E8E2D6</color>
-    <color name="launcher_fg">#315236</color>
+    <color name="launcher_bg_glow">#C6BC7A</color>
+    <color name="launcher_bg_mid">#86764E</color>
+    <color name="launcher_bg_edge">#454B41</color>
+    <color name="launcher_canopy_dark">#2B3A25</color>
+    <color name="launcher_canopy_light">#929A50</color>
+    <color name="launcher_trunk_dark">#5E3A1E</color>
+    <color name="launcher_trunk_light">#B98A46</color>
+    <color name="launcher_leaf">#DBD39B</color>
+    <color name="launcher_leaf_shadow">#AFA76D</color>
+    <color name="launcher_fruit_red">#B43A2E</color>
+    <color name="launcher_fruit_green">#B2A94A</color>
+    <color name="launcher_fruit_orange">#D18A26</color>
+    <color name="launcher_fruit_peach">#D98C56</color>
+    <color name="launcher_fruit_highlight">#FFF2C6</color>
+    <color name="launcher_monochrome">#1F1F1F</color>
 </resources>

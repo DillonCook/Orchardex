@@ -4,12 +4,193 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
     <path
-        android:fillColor="@color/launcher_fg"
-        android:pathData="M54,14C40.9,22.2 31,37.2 31,54c0,22 14.5,34.4 23,40 8.5,-5.6 23,-18 23,-40 0,-16.8 -9.9,-31.8 -23,-40z" />
+        android:fillColor="@color/launcher_canopy_dark"
+        android:pathData="M19,56C15,44 18,31 27,23C35,16 47,12 59,13C72,14 84,19 91,29C98,38 100,51 94,61C87,73 74,79 54,80C36,80 22,73 19,56Z" />
     <path
-        android:fillColor="#F3D07A"
-        android:pathData="M54,30c-11.6,0 -21,9.4 -21,21s9.4,21 21,21 21,-9.4 21,-21 -9.4,-21 -21,-21z" />
+        android:fillColor="@color/launcher_canopy_light"
+        android:fillAlpha="0.62"
+        android:pathData="M27,55C25,45 29,35 37,28C44,22 54,20 64,21C74,23 82,28 86,36C90,44 89,54 84,61C78,69 69,73 55,74C42,74 31,69 28,60C27,58 27,56 27,55Z" />
     <path
-        android:fillColor="@color/launcher_fg"
-        android:pathData="M60,12c10.9,2 18.7,10.7 19.9,21.4 -10.7,-1.6 -18.3,-7.5 -21.6,-16.5 -3,8 -9.4,13.4 -17.9,15.7 1,-11.2 8.8,-19.2 19.6,-20.6z" />
+        android:fillColor="@color/launcher_canopy_dark"
+        android:fillAlpha="0.32"
+        android:pathData="M23,52C21,44 23,36 28,31C31,35 33,41 33,47C33,53 31,59 27,64C25,61 24,57 23,52Z" />
+    <path
+        android:fillColor="@color/launcher_canopy_dark"
+        android:fillAlpha="0.28"
+        android:pathData="M81,34C86,38 89,45 89,52C88,58 86,63 82,67C78,60 76,54 76,48C76,43 78,38 81,34Z" />
+    <path
+        android:fillColor="@color/launcher_trunk_dark"
+        android:pathData="M50,77C48,67 49,55 52,43C53.3,36 55.5,34 57.8,41C60.6,53.5 61.1,66 58,77C56,79.4 52.1,79.4 50,77Z" />
+    <path
+        android:fillColor="@color/launcher_trunk_light"
+        android:fillAlpha="0.88"
+        android:pathData="M53.2,76C51.5,67.2 52.2,58.2 54.3,45.2C55.2,40.5 56.2,39.8 57.1,45C58.4,57.4 58.5,66.8 56.4,75.8C55.6,76.9 54.1,77 53.2,76Z" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,75C53,66 53,58 54,50M54,56C47,48 40,42 31,37M54,54C62,47 70,41 79,37M55,46C50,40 46,34 43,27M56,47C63,40 67,34 70,27M53,60C47,56 42,54 37,53M55,60C61,56 66,54 71,52"
+        android:strokeColor="@color/launcher_trunk_dark"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="5.2" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,75C53.3,66.4 53.6,58.9 54.7,51.6M54.3,55.1C48.6,48.4 42.9,43.3 35.5,39.1M54.7,53.8C61.8,47.8 68.4,42.8 75.6,39M55.4,46.7C51.4,40.7 47.9,35.5 45.8,30.1M56.3,47.2C61.6,41 65.5,35.7 68.1,30.2"
+        android:strokeColor="@color/launcher_trunk_light"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2.4" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54,77C49,82 42,86 34,91M54,77C59,82 66,86 74,91M52,78C46,79.5 39,81 29,84M56,78C62,80 69,81 79,84M54,78C54,84 53,89 50,96M54,78C56,84 59,89 62,96M53,78C48,84 44,89 39,96M55,78C60,84 64,89 69,96"
+        android:strokeColor="@color/launcher_trunk_dark"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="4.6" />
+    <path
+        android:fillColor="#00000000"
+        android:pathData="M54.3,78C49.9,82.6 44.3,86.1 37.6,90M54.2,78.3C58.8,82.6 64.1,86.1 70.5,90M54.2,78.1C54.4,83.7 53.8,88 51.8,93.5M54.3,78C57.7,83 60.1,87.2 61.7,92.8"
+        android:strokeColor="@color/launcher_trunk_light"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="2" />
+    <group
+        android:rotation="-28"
+        android:translateX="27"
+        android:translateY="31">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:rotation="16"
+        android:translateX="38"
+        android:translateY="23">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:rotation="-6"
+        android:translateX="62"
+        android:translateY="24">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:rotation="26"
+        android:translateX="74"
+        android:translateY="35">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:rotation="-18"
+        android:translateX="22"
+        android:translateY="48">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:rotation="20"
+        android:translateX="72"
+        android:translateY="49">
+        <path
+            android:fillColor="@color/launcher_leaf"
+            android:pathData="M0,0C2.8,-4.4 8.8,-4.2 11.4,-0.4C8.8,3.2 2.8,3.4 0,0Z" />
+        <path
+            android:fillColor="@color/launcher_leaf_shadow"
+            android:fillAlpha="0.42"
+            android:pathData="M0.8,0.1C3,-2.8 7.2,-2.9 9.2,-0.4C7.3,1.9 3.2,2.1 0.8,0.1Z" />
+    </group>
+    <group
+        android:translateX="29"
+        android:translateY="49">
+        <path
+            android:fillColor="@color/launcher_fruit_red"
+            android:pathData="M0,-5.8A5.3,5.8 0 1,1 0,5.8A5.3,5.8 0 1,1 0,-5.8Z" />
+        <path
+            android:fillColor="@color/launcher_fruit_highlight"
+            android:fillAlpha="0.3"
+            android:pathData="M-1.6,-3.7A1.8,2.2 0 1,1 -1.6,0.4A1.8,2.2 0 1,1 -1.6,-3.7Z" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M0,-6.4C0,-8.8 1.5,-10.3 3.6,-11.2"
+            android:strokeColor="@color/launcher_trunk_dark"
+            android:strokeLineCap="round"
+            android:strokeWidth="1.5" />
+    </group>
+    <group
+        android:translateX="42"
+        android:translateY="36">
+        <path
+            android:fillColor="@color/launcher_fruit_green"
+            android:pathData="M0,-6.8C3.9,-7.4 6.5,-4.2 6.1,-0.6C6.8,3.7 4.2,7.5 0.1,8.1C-4.1,7.5 -6.6,3.5 -6,-0.6C-6.3,-4.4 -3.7,-7.1 0,-6.8Z" />
+        <path
+            android:fillColor="@color/launcher_fruit_highlight"
+            android:fillAlpha="0.26"
+            android:pathData="M-1.8,-4.1A1.8,2.3 0 1,1 -1.8,0.2A1.8,2.3 0 1,1 -1.8,-4.1Z" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M0,-7.2C0,-9.6 1.2,-11 3,-12"
+            android:strokeColor="@color/launcher_trunk_dark"
+            android:strokeLineCap="round"
+            android:strokeWidth="1.5" />
+    </group>
+    <group
+        android:translateX="71"
+        android:translateY="34">
+        <path
+            android:fillColor="@color/launcher_fruit_orange"
+            android:pathData="M0,-6A5.6,6 0 1,1 0,6A5.6,6 0 1,1 0,-6Z" />
+        <path
+            android:fillColor="@color/launcher_fruit_highlight"
+            android:fillAlpha="0.28"
+            android:pathData="M-1.7,-3.8A1.8,2.1 0 1,1 -1.7,0.2A1.8,2.1 0 1,1 -1.7,-3.8Z" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M0,-6.6C0,-9 1.2,-10.5 3.2,-11.4"
+            android:strokeColor="@color/launcher_trunk_dark"
+            android:strokeLineCap="round"
+            android:strokeWidth="1.5" />
+    </group>
+    <group
+        android:translateX="69"
+        android:translateY="51">
+        <path
+            android:fillColor="@color/launcher_fruit_peach"
+            android:pathData="M0,-5.6A5.6,5.6 0 1,1 0,5.6A5.6,5.6 0 1,1 0,-5.6Z" />
+        <path
+            android:fillColor="@color/launcher_fruit_highlight"
+            android:fillAlpha="0.25"
+            android:pathData="M-1.8,-3.4A1.8,2.1 0 1,1 -1.8,0.4A1.8,2.1 0 1,1 -1.8,-3.4Z" />
+        <path
+            android:fillColor="#00000000"
+            android:pathData="M0,-6.2C0,-8.6 1.2,-10.1 3.1,-11"
+            android:strokeColor="@color/launcher_trunk_dark"
+            android:strokeLineCap="round"
+            android:strokeWidth="1.5" />
+    </group>
 </vector>
