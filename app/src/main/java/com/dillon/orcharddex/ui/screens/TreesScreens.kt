@@ -29,6 +29,7 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -51,16 +52,25 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.local.toForecastLocationProfile
+import com.dillon.orcharddex.data.model.ActivityKind
 import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
+import com.dillon.orcharddex.data.model.PhenologyObservation
+import com.dillon.orcharddex.data.model.PollinationMode
+import com.dillon.orcharddex.data.model.PollinationProfile
+import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.CultivarAutocompleteOption
+import com.dillon.orcharddex.data.preferences.AppSettings
+import com.dillon.orcharddex.data.preferences.forecastLocationProfile
 import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
@@ -69,16 +79,17 @@ import com.dillon.orcharddex.ui.components.DateField
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.LocalPhotoStrip
 import com.dillon.orcharddex.ui.components.PhotoAddCard
+import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.toDateLabel
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.viewmodel.TreeDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreeFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreesViewModel
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 private enum class TreeSortOption(val label: String) {
@@ -240,6 +251,7 @@ fun TreeFormScreen(
     val context = LocalContext.current
     val state = viewModel.state
     val knownTrees by viewModel.knownTrees.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
@@ -297,11 +309,16 @@ fun TreeFormScreen(
             .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
             .take(8)
     }
-    val pollinationRequirement = remember(state.species, state.cultivar) {
-        BloomForecastEngine.pollinationRequirementFor(state.species, state.cultivar)
+    val pollinationProfile = remember(state.species, state.cultivar) {
+        BloomForecastEngine.pollinationProfileFor(state.species, state.cultivar)
     }
     val autoBloomTimingLabel = remember(state.species, state.cultivar) {
         BloomForecastEngine.catalogBloomTimingLabelFor(state.species, state.cultivar)
+    }
+    val locationOptions = remember(locations) { locations.map(::treeLocationLabel) }
+    val selectedLocationLabel = remember(locations, state.locationId, state.orchardName) {
+        locations.firstOrNull { it.id == state.locationId }?.let(::treeLocationLabel)
+            ?: state.orchardName.ifBlank { "Primary orchard" }
     }
 
     LazyColumn(
@@ -332,6 +349,30 @@ fun TreeFormScreen(
         }
         item {
             SectionCard(if (state.id == null) "Add tree" else "Edit tree") {
+                if (locationOptions.isNotEmpty()) {
+                    SelectionField(
+                        label = "Growing location",
+                        value = selectedLocationLabel,
+                        options = locationOptions,
+                        onSelected = { selected ->
+                            locations.firstOrNull { treeLocationLabel(it) == selected }?.let { location ->
+                                viewModel.update {
+                                    copy(
+                                        locationId = location.id,
+                                        orchardName = location.name
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                OutlinedTextField(
+                    value = state.sectionName,
+                    onValueChange = { viewModel.update { copy(sectionName = it) } },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Section / bed (optional)") }
+                )
                 OutlinedTextField(
                     value = state.species,
                     onValueChange = { input ->
@@ -393,9 +434,9 @@ fun TreeFormScreen(
                         }
                     )
                 }
-                pollinationRequirement?.let { requirement ->
+                pollinationProfile?.let { profile ->
                     Text(
-                        text = "Known pollination: ${requirement.label}",
+                        text = "Catalog pollination: ${profile.summaryLabel}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
@@ -501,7 +542,7 @@ fun TreeFormScreen(
                         }
                     } else {
                         OutlinedButton(
-                            onClick = { viewModel.update { copy(purchaseDate = LocalDate.now()) } },
+                            onClick = { viewModel.update { copy(purchaseDate = OrchardTime.today()) } },
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Text("Set purchase date")
@@ -660,6 +701,48 @@ fun TreeFormScreen(
                             Text("Reset to catalog")
                         }
                     }
+                    Text(
+                        text = "Pollination override",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Keep these on Catalog unless this plant behaves differently in your orchard.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.selfCompatibilityOverride == null,
+                            onClick = { viewModel.update { copy(selfCompatibilityOverride = null) } },
+                            label = { Text("Catalog") }
+                        )
+                        SelfCompatibility.entries.forEach { value ->
+                            FilterChip(
+                                selected = state.selfCompatibilityOverride == value,
+                                onClick = { viewModel.update { copy(selfCompatibilityOverride = value) } },
+                                label = { Text(value.label) }
+                            )
+                        }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.pollinationModeOverride == null,
+                            onClick = { viewModel.update { copy(pollinationModeOverride = null) } },
+                            label = { Text("Catalog") }
+                        )
+                        PollinationMode.entries.forEach { value ->
+                            FilterChip(
+                                selected = state.pollinationModeOverride == value,
+                                onClick = { viewModel.update { copy(pollinationModeOverride = value) } },
+                                label = { Text(value.label) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = state.pollinationOverrideNote,
+                        onValueChange = { viewModel.update { copy(pollinationOverrideNote = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Pollination override note") }
+                    )
                     OutlinedTextField(
                         value = state.tags,
                         onValueChange = { viewModel.update { copy(tags = it) } },
@@ -906,7 +989,10 @@ private fun com.dillon.orcharddex.ui.viewmodel.TreeFormState.hasAdvancedFieldVal
         bloomTimingMode != com.dillon.orcharddex.data.model.BloomTimingMode.AUTO ||
         customBloomStartMonth.isNotBlank() ||
         customBloomStartDay.isNotBlank() ||
-        customBloomDurationDays.isNotBlank()
+        customBloomDurationDays.isNotBlank() ||
+        selfCompatibilityOverride != null ||
+        pollinationModeOverride != null ||
+        pollinationOverrideNote.isNotBlank()
 
 internal fun previewCultivarAliases(
     query: String,
@@ -936,11 +1022,13 @@ internal fun normalizeAutocomplete(value: String): String = value
 @Composable
 fun TreeDetailScreen(
     viewModel: TreeDetailViewModel,
+    settings: AppSettings,
     onBack: () -> Unit,
     onEditTree: (String) -> Unit,
     onAddEvent: (String) -> Unit,
     onAddHarvest: (String) -> Unit,
-    onAddReminder: (String) -> Unit
+    onAddReminder: (String) -> Unit,
+    onOpenLog: (ActivityKind, String) -> Unit
 ) {
     val context = LocalContext.current
     val detail by viewModel.detail.collectAsStateWithLifecycle()
@@ -950,14 +1038,54 @@ fun TreeDetailScreen(
     val item = detail ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Tree not found.")
     }
-    val pollinationRequirement = remember(item.tree.species, item.tree.cultivar) {
-        BloomForecastEngine.pollinationRequirementFor(item.tree.species, item.tree.cultivar)
+    val locationProfile = remember(item.location, settings) {
+        item.location?.toForecastLocationProfile() ?: settings.forecastLocationProfile()
+    }
+    val catalogPollination = remember(item.tree.species, item.tree.cultivar) {
+        BloomForecastEngine.pollinationProfileFor(item.tree.species, item.tree.cultivar)
+    }
+    val effectivePollination = remember(item.tree, catalogPollination) {
+        PollinationProfile(
+            selfCompatibility = item.tree.selfCompatibilityOverride
+                ?: catalogPollination?.selfCompatibility
+                ?: SelfCompatibility.UNKNOWN,
+            pollinationMode = item.tree.pollinationModeOverride
+                ?: catalogPollination?.pollinationMode
+                ?: PollinationMode.UNKNOWN
+        )
     }
     val customBloomTimingSummary = remember(item.tree) {
         BloomForecastEngine.customBloomTimingSummaryLabel(item.tree)
     }
+    val activityPhotoPathsByOwner = remember(item.activityPhotos) {
+        item.activityPhotos
+            .groupBy { it.ownerKind to it.ownerId }
+            .mapValues { (_, photos) ->
+                photos.sortedBy { photo -> photo.sortOrder }.map { photo -> photo.relativePath }
+            }
+    }
+    val phenologyObservations = remember(item.events, item.harvests) {
+        item.events.map { event ->
+            PhenologyObservation(
+                treeId = item.tree.id,
+                dateMillis = event.eventDate,
+                eventType = event.eventType
+            )
+        } + item.harvests.map { harvest ->
+            PhenologyObservation(
+                treeId = item.tree.id,
+                dateMillis = harvest.harvestDate,
+                isHarvest = true
+            )
+        }
+    }
+    val forecastSummary = remember(item.tree, locationProfile, phenologyObservations) {
+        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile, phenologyObservations)
+    }
     val heroPhoto = remember(item.photos) { item.photos.heroOrLatestPhoto() }
     val harvestSummary = remember(item.harvests) { item.harvests.toHarvestSummary() }
+    var showPlantPhotos by rememberSaveable(item.tree.id) { mutableStateOf(false) }
+    var timelineFilter by rememberSaveable(item.tree.id) { mutableStateOf(TreeTimelineFilter.ALL) }
 
     if (viewModel.confirmDelete) {
         AlertDialog(
@@ -977,34 +1105,56 @@ fun TreeDetailScreen(
         )
     }
 
-    val historyByYear = remember(item.events, item.harvests) {
+    val timelineEntries = remember(item.events, item.harvests, activityPhotoPathsByOwner) {
         (
             item.events.map { event ->
-                TreeHistoryEntry(
+                val photoPaths = activityPhotoPathsByOwner["EVENT" to event.id].orEmpty()
+                TreeTimelineEntry(
+                    id = event.id,
+                    kind = ActivityKind.EVENT,
                     date = event.eventDate,
-                    label = buildString {
-                        append(event.eventType.name.lowercase().replace("_", " "))
-                        if (event.notes.isNotBlank()) append(" • ${event.notes}")
-                    },
+                    title = event.eventType.treeLabel(),
+                    summary = buildEventTimelineSummary(event),
                     eventType = event.eventType,
-                    isHarvest = false
+                    photoPaths = photoPaths.ifEmpty { listOfNotNull(event.photoPath) }
                 )
             } +
                 item.harvests.map { harvest ->
-                    TreeHistoryEntry(
+                    val photoPaths = activityPhotoPathsByOwner["HARVEST" to harvest.id].orEmpty()
+                    TreeTimelineEntry(
+                        id = harvest.id,
+                        kind = ActivityKind.HARVEST,
                         date = harvest.harvestDate,
-                        label = buildString {
-                            append("harvest • ${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}")
-                            if (harvest.firstFruit) append(" • First fruit")
-                            if (harvest.notes.isNotBlank()) append(" • ${harvest.notes}")
-                        },
-                        eventType = null,
+                        title = if (harvest.firstFruit) "First fruit harvest" else "Harvest",
+                        summary = buildHarvestTimelineSummary(harvest),
+                        photoPaths = photoPaths.ifEmpty { listOfNotNull(harvest.photoPath) },
                         isHarvest = true
                     )
                 }
-            ).groupBy { entry ->
-            Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year
-        }.toSortedMap(compareByDescending { it })
+            ).sortedByDescending(TreeTimelineEntry::date)
+    }
+    val seasonRollups = remember(timelineEntries) {
+        timelineEntries
+            .groupBy { Instant.ofEpochMilli(it.date).atZone(OrchardTime.zoneId()).year }
+            .map { (year, entries) ->
+                TreeSeasonRollup(
+                    year = year,
+                    budCount = entries.count { it.eventType == EventType.BUD },
+                    bloomCount = entries.count { it.eventType == EventType.BLOOM },
+                    fruitSetCount = entries.count { it.eventType == EventType.FRUIT_SET },
+                    harvestCount = entries.count(TreeTimelineEntry::isHarvest),
+                    photoCount = entries.count { it.photoPaths.isNotEmpty() }
+                )
+            }
+            .sortedByDescending(TreeSeasonRollup::year)
+    }
+    val filteredTimeline = remember(timelineEntries, timelineFilter) {
+        timelineEntries.filter { timelineFilter.matches(it) }
+    }
+    val filteredTimelineByYear = remember(filteredTimeline) {
+        filteredTimeline
+            .groupBy { Instant.ofEpochMilli(it.date).atZone(OrchardTime.zoneId()).year }
+            .toSortedMap(compareByDescending { it })
     }
 
     Scaffold { innerPadding ->
@@ -1035,8 +1185,12 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard(item.tree.displayName()) {
+            SectionCard("Plant snapshot") {
+                Text(item.tree.displayName(), style = MaterialTheme.typography.titleLarge)
                 Text(item.tree.speciesCultivarLabel())
+                (item.location?.name ?: item.tree.orchardName).takeIf(String::isNotBlank)?.let { locationName ->
+                    Text(locationName)
+                }
                 Text(item.tree.sectionName.ifBlank { "No section assigned" })
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     CompactFact("Planting", item.tree.plantType.name.replace("_", "-").lowercase())
@@ -1047,8 +1201,24 @@ fun TreeDetailScreen(
                     CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
                     CompactFact("Sun", item.tree.sunExposure.orEmpty())
                     CompactFact("Source", item.tree.source.orEmpty())
-                    CompactFact("Pollination", pollinationRequirement?.label.orEmpty())
                     CompactFact("Bloom dates", "Custom".takeIf { customBloomTimingSummary != null }.orEmpty())
+                    if (effectivePollination.selfCompatibility != SelfCompatibility.UNKNOWN) {
+                        CompactFact("Compatibility", effectivePollination.selfCompatibility.label)
+                    }
+                    if (effectivePollination.pollinationMode != PollinationMode.UNKNOWN) {
+                        CompactFact("Pollination", effectivePollination.pollinationMode.label)
+                    }
+                }
+                forecastSummary?.let { summary ->
+                    Text(
+                        text = "Bloom forecast: ${summary.headline}",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = summary.supportingLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 customBloomTimingSummary?.let {
                     Text(
@@ -1074,28 +1244,37 @@ fun TreeDetailScreen(
                     )
                 }
                 if (item.photos.isNotEmpty()) {
-                    Text(
-                        text = "Tap any photo below to make it the hero image.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    OutlinedButton(
+                        onClick = { showPlantPhotos = !showPlantPhotos },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showPlantPhotos) "Hide plant photos" else "View plant photos (${item.photos.size})")
+                    }
+                    if (showPlantPhotos) {
+                        Text(
+                            text = "Tap any photo below to make it the hero image.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LocalPhotoStrip(
+                            existingPaths = item.photos.map { photo ->
+                                photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
+                            },
+                            selectedExistingId = heroPhoto?.id,
+                            onSelectExisting = viewModel::setHeroPhoto
+                        )
+                    }
                 }
-                LocalPhotoStrip(
-                    existingPaths = item.photos.map { photo ->
-                        photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
-                    },
-                    selectedExistingId = heroPhoto?.id,
-                    onSelectExisting = viewModel::setHeroPhoto
-                )
+                item.tree.pollinationOverrideNote?.takeIf(String::isNotBlank)?.let { note ->
+                    Text(text = "Pollination note: $note", style = MaterialTheme.typography.bodySmall)
+                }
+                item.tree.notes.takeIf(String::isNotBlank)?.let { notes ->
+                    Text(text = notes, style = MaterialTheme.typography.bodySmall)
+                }
             }
         }
         item {
-            SectionCard("Notes") {
-                Text(item.tree.notes.ifBlank { "No notes yet." })
-            }
-        }
-        item {
-            SectionCard("Harvest summary") {
+            SectionCard("Production summary") {
                 if (harvestSummary.totalHarvests == 0 && !item.tree.hasFruitedBefore) {
                     Text("No harvests logged yet.")
                 } else {
@@ -1117,6 +1296,16 @@ fun TreeDetailScreen(
                             Text("${total.quantity.displayAmount()} ${total.unit}")
                         }
                     }
+                    if (seasonRollups.isNotEmpty()) {
+                        Text("Recent seasons", style = MaterialTheme.typography.labelLarge)
+                        seasonRollups.take(3).forEach { rollup ->
+                            Text(
+                                "${rollup.year} - ${rollup.budCount} buds - ${rollup.bloomCount} blooms - " +
+                                    "${rollup.fruitSetCount} fruit sets - ${rollup.harvestCount} harvests" +
+                                    if (rollup.photoCount > 0) " - ${rollup.photoCount} photos" else ""
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -1133,51 +1322,92 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard("Season history") {
-                if (historyByYear.isEmpty()) {
-                    Text("No bloom, fruit set, or harvest history yet.")
-                } else {
-                    historyByYear.forEach { (year, entries) ->
-                        val bloomCount = entries.count { it.eventType == EventType.BLOOM }
-                        val fruitSetCount = entries.count { it.eventType == EventType.FRUIT_SET }
-                        val harvestCount = entries.count(TreeHistoryEntry::isHarvest)
-                        Text(year.toString(), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "$bloomCount blooms • $fruitSetCount fruit sets • $harvestCount harvests",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                        entries.sortedByDescending(TreeHistoryEntry::date).forEach { entry ->
-                            Text("${entry.date.toDateLabel()} • ${entry.label}")
-                        }
-                    }
-                }
-            }
-        }
-        item {
-            SectionCard("Harvest history") {
-                if (item.harvests.isEmpty()) {
-                    Text("No harvests yet.")
-                } else {
-                    item.harvests.forEach { harvest ->
-                        Text(
-                            "${harvest.harvestDate.toDateLabel()} • ${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}" +
-                                if (harvest.firstFruit) " • First fruit" else ""
+            SectionCard("Activity timeline") {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TreeTimelineFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = timelineFilter == filter,
+                            onClick = { timelineFilter = filter },
+                            label = { Text(filter.label) }
                         )
                     }
                 }
-            }
-        }
-        item {
-            SectionCard("Activity log") {
-                val timeline = (
-                    item.events.map { it.eventDate to "${it.eventType.name.lowercase().replace("_", " ")} • ${it.notes}" } +
-                        item.harvests.map { it.harvestDate to "harvest • ${it.quantityValue.displayAmount()} ${it.quantityUnit}" }
-                    ).sortedByDescending { it.first }
-                if (timeline.isEmpty()) {
+                if (filteredTimelineByYear.isEmpty()) {
                     Text("No activity on this tree yet.")
                 } else {
-                    timeline.forEach { entry ->
-                        Text("${entry.first.toDateLabel()} • ${entry.second}")
+                    filteredTimelineByYear.forEach { (year, entries) ->
+                        val rollup = seasonRollups.firstOrNull { it.year == year }
+                        Text(year.toString(), style = MaterialTheme.typography.titleSmall)
+                        rollup?.let {
+                            Text(
+                                "${it.budCount} buds - ${it.bloomCount} blooms - ${it.fruitSetCount} fruit sets - ${it.harvestCount} harvests",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        entries.forEach { entry ->
+                            OutlinedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenLog(entry.kind, entry.id) },
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = entry.title,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Text(
+                                            text = entry.date.toDateLabel(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = entry.summary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    entry.photoPath?.let { photoPath ->
+                                        Box {
+                                            Card(
+                                                modifier = Modifier.size(72.dp),
+                                                shape = RoundedCornerShape(18.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = File(context.filesDir, "photos/$photoPath"),
+                                                    contentDescription = "Log photo",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                            if (entry.photoPaths.size > 1) {
+                                                Text(
+                                                    text = "+${entry.photoPaths.size - 1}",
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomEnd)
+                                                        .padding(6.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1207,11 +1437,34 @@ private fun TreeActionButton(
     }
 }
 
-private data class TreeHistoryEntry(
+private enum class TreeTimelineFilter(val label: String) {
+    ALL("All"),
+    SEASONAL("Seasonal"),
+    HARVESTS("Harvests"),
+    ISSUES("Issues"),
+    CARE("Care"),
+    OBSERVATIONS("Observations")
+}
+
+private data class TreeTimelineEntry(
+    val id: String,
+    val kind: ActivityKind,
     val date: Long,
-    val label: String,
-    val eventType: EventType?,
-    val isHarvest: Boolean
+    val title: String,
+    val summary: String,
+    val eventType: EventType? = null,
+    val photoPaths: List<String> = emptyList(),
+    val photoPath: String? = photoPaths.firstOrNull(),
+    val isHarvest: Boolean = false
+)
+
+private data class TreeSeasonRollup(
+    val year: Int,
+    val budCount: Int,
+    val bloomCount: Int,
+    val fruitSetCount: Int,
+    val harvestCount: Int,
+    val photoCount: Int
 )
 
 private data class HarvestUnitTotal(
@@ -1226,6 +1479,15 @@ private data class TreeHarvestSummary(
     val verifiedHarvestCount: Int,
     val totalsByUnit: List<HarvestUnitTotal>
 )
+
+private fun treeLocationLabel(location: GrowingLocationEntity): String = buildString {
+    append(location.name)
+    if (location.countryCode.isNotBlank()) {
+        append(" (")
+        append(location.countryCode)
+        append(")")
+    }
+}
 
 @Composable
 private fun TreeThumbnail(relativePath: String?) {
@@ -1267,3 +1529,44 @@ private fun List<HarvestEntity>.toHarvestSummary(): TreeHarvestSummary {
         }.sortedByDescending(HarvestUnitTotal::quantity)
     )
 }
+
+private fun TreeTimelineFilter.matches(entry: TreeTimelineEntry): Boolean = when (this) {
+    TreeTimelineFilter.ALL -> true
+    TreeTimelineFilter.SEASONAL -> entry.isHarvest || entry.eventType in setOf(EventType.BUD, EventType.BLOOM, EventType.FRUIT_SET)
+    TreeTimelineFilter.HARVESTS -> entry.isHarvest
+    TreeTimelineFilter.ISSUES -> entry.eventType in setOf(
+        EventType.PEST_OBSERVED,
+        EventType.DISEASE_OBSERVED,
+        EventType.FROST_DAMAGE,
+        EventType.HEAT_STRESS
+    )
+    TreeTimelineFilter.CARE -> entry.eventType in setOf(
+        EventType.PLANTED,
+        EventType.REPOTTED,
+        EventType.PRUNED,
+        EventType.FERTILIZED,
+        EventType.SPRAYED,
+        EventType.GRAFTED,
+        EventType.WATERED
+    )
+    TreeTimelineFilter.OBSERVATIONS -> entry.eventType == EventType.NOTE
+}
+
+private fun EventType.treeLabel(): String = name.lowercase()
+    .replace("_", " ")
+    .replaceFirstChar(Char::uppercase)
+
+private fun buildEventTimelineSummary(event: com.dillon.orcharddex.data.local.EventEntity): String = listOfNotNull(
+    event.quantityValue?.let { quantity ->
+        listOf(quantity.displayAmount(), event.quantityUnit.orEmpty()).joinToString(" ").trim().takeIf(String::isNotBlank)
+    },
+    event.cost?.let { "Cost $${it.displayAmount()}" },
+    event.notes.takeIf(String::isNotBlank)
+).joinToString(" - ").ifBlank { "No extra details." }
+
+private fun buildHarvestTimelineSummary(harvest: HarvestEntity): String = listOfNotNull(
+    "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}".trim(),
+    "Quality ${harvest.qualityRating}/5",
+    "First fruit".takeIf { harvest.firstFruit },
+    harvest.notes.takeIf(String::isNotBlank)
+).joinToString(" - ")

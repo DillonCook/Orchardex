@@ -32,6 +32,7 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -63,9 +64,16 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.dillon.orcharddex.BuildConfig
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.ReminderEntity
+import com.dillon.orcharddex.data.local.toForecastLocationProfile
+import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.DexCultivarEntry
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.GrowingLocationInput
+import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.MicroclimateFlag
 import com.dillon.orcharddex.data.phenology.CatalogSpeciesReferenceEntry
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -73,7 +81,9 @@ import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.AppThemeMode
+import com.dillon.orcharddex.data.preferences.forecastLocationProfile
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
@@ -98,12 +108,14 @@ private enum class DexPlantSortOption(val label: String) {
 @Composable
 fun DexScreen(
     viewModel: DexViewModel,
-    usdaZone: String,
+    settings: AppSettings,
     onAddTree: () -> Unit,
-    onTreeClick: (String) -> Unit
+    onTreeClick: (String) -> Unit,
+    onQuickLog: (String) -> Unit
 ) {
     val dex by viewModel.dex.collectAsStateWithLifecycle()
     val plants by viewModel.trees.collectAsStateWithLifecycle()
+    val defaultLocationProfile = remember(settings) { settings.forecastLocationProfile() }
     var search by rememberSaveable { mutableStateOf("") }
     var wishlistVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
@@ -227,8 +239,9 @@ fun DexScreen(
                 items(filteredPlants, key = { it.tree.id }) { item ->
                     DexPlantCard(
                         item = item,
-                        usdaZone = usdaZone,
-                        onClick = { onTreeClick(item.tree.id) }
+                        defaultLocationProfile = defaultLocationProfile,
+                        onClick = { onTreeClick(item.tree.id) },
+                        onQuickAdd = { onQuickLog(item.tree.id) }
                     )
                 }
             }
@@ -330,8 +343,9 @@ private fun DexCultivarCard(entry: DexCultivarEntry, onClick: (() -> Unit)?) {
 @Composable
 private fun DexPlantCard(
     item: TreeListItem,
-    usdaZone: String,
-    onClick: () -> Unit
+    defaultLocationProfile: ForecastLocationProfile,
+    onClick: () -> Unit,
+    onQuickAdd: () -> Unit
 ) {
     val context = LocalContext.current
     val title = item.tree.dexPrimaryTitle()
@@ -339,8 +353,11 @@ private fun DexPlantCard(
     val supportingLine = item.tree.dexSupportingLine()
     val thumbnailLabel = item.tree.cultivar.takeIf(String::isNotBlank)?.take(2)
         ?: item.tree.species.take(2)
-    val nextBloomLabel = remember(item.tree, usdaZone) {
-        BloomForecastEngine.plantBloomCountdownLabel(item.tree, usdaZone)
+    val locationProfile = remember(item.location, defaultLocationProfile) {
+        item.location?.toForecastLocationProfile() ?: defaultLocationProfile
+    }
+    val nextBloomSummary = remember(item.tree, locationProfile) {
+        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile)
     }
 
     OutlinedCard(
@@ -411,13 +428,24 @@ private fun DexPlantCard(
                     )
                 }
             }
-            nextBloomLabel?.let { label ->
+            FilledTonalIconButton(
+                onClick = onQuickAdd,
+                modifier = Modifier
+                    .size(40.dp)
+                    .testTag("dex_quick_add_${item.tree.id}")
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Add,
+                    contentDescription = "Add log"
+                )
+            }
+            nextBloomSummary?.let { summary ->
                 Column(
                     horizontalAlignment = Alignment.End,
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     Text(
-                        text = "Next bloom",
+                        text = "Bloom forecast",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -427,12 +455,19 @@ private fun DexPlantCard(
                         tonalElevation = 1.dp
                     ) {
                         Text(
-                            text = label,
+                            text = summary.headline,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             style = MaterialTheme.typography.titleMedium,
                             color = MaterialTheme.colorScheme.onSecondaryContainer
                         )
                     }
+                    Text(
+                        text = summary.supportingLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
@@ -741,23 +776,66 @@ fun SettingsScreen(
     onOpenCatalog: () -> Unit
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
     var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
     var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
     }
+    var countryCodeDraft by rememberSaveable(settings.countryCode) { mutableStateOf(settings.countryCode) }
+    var timezoneIdDraft by rememberSaveable(settings.timezoneId) { mutableStateOf(settings.timezoneId) }
+    val hemisphereOptions = remember { Hemisphere.entries.map(Hemisphere::label) }
+    var hemisphereDraft by rememberSaveable(settings.hemisphere) { mutableStateOf(settings.hemisphere.label) }
+    var latitudeDraft by rememberSaveable(settings.latitudeDeg) { mutableStateOf(settings.latitudeDeg?.toString().orEmpty()) }
+    var longitudeDraft by rememberSaveable(settings.longitudeDeg) { mutableStateOf(settings.longitudeDeg?.toString().orEmpty()) }
+    var elevationDraft by rememberSaveable(settings.elevationM) { mutableStateOf(settings.elevationM?.toString().orEmpty()) }
+    val chillOptions = remember { ChillHoursBand.entries.map(ChillHoursBand::label) }
+    var chillDraft by rememberSaveable(settings.chillHoursBand) { mutableStateOf(settings.chillHoursBand.label) }
+    var microclimateDraft by rememberSaveable(settings.microclimateFlags.map(MicroclimateFlag::name).sorted().joinToString()) {
+        mutableStateOf(settings.microclimateFlags.mapTo(linkedSetOf(), MicroclimateFlag::name))
+    }
+    var editingLocation by remember { mutableStateOf<GrowingLocationEditorState?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(viewModel::exportBackup)
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::validateImport)
     }
+    val defaultLocationId = settings.defaultLocationId.takeIf(String::isNotBlank)
+    val currentDefaultLocation = remember(locations, defaultLocationId) {
+        defaultLocationId?.let { id -> locations.firstOrNull { it.id == id } }
+    }
+
+    editingLocation?.let { draft ->
+        GrowingLocationEditorDialog(
+            state = draft,
+            onStateChange = { editingLocation = it },
+            onDismiss = { editingLocation = null },
+            onSave = {
+                val timezoneId = draft.timezoneId.trim().ifBlank { settings.timezoneId }
+                viewModel.saveGrowingLocation(
+                    draft.toInput(
+                        fallbackName = draft.name.ifBlank { "Growing location" },
+                        fallbackTimezoneId = timezoneId
+                    )
+                )
+                editingLocation = null
+            }
+        )
+    }
 
     viewModel.pendingImport?.let { validation ->
         AlertDialog(
             onDismissRequest = viewModel::dismissPendingImport,
             title = { Text("Import backup?") },
-            text = { Text("Archive from ${validation.appVersion}\n${validation.treeCount} trees, ${validation.reminderCount} reminders, ${validation.photoCount} photos.\nThis replaces current app data.") },
+            text = {
+                Text(
+                    "Archive from ${validation.appVersion}\n" +
+                        "${validation.treeCount} trees, ${validation.locationCount} locations, " +
+                        "${validation.reminderCount} reminders, ${validation.photoCount} photos.\n" +
+                        "This replaces current app data."
+                )
+            },
             confirmButton = { TextButton(onClick = viewModel::importReplaceAll) { Text("Import") } },
             dismissButton = { TextButton(onClick = viewModel::dismissPendingImport) { Text("Cancel") } }
         )
@@ -787,8 +865,36 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            SectionCard("Orchard") {
-                OutlinedTextField(value = orchardNameDraft, onValueChange = { orchardNameDraft = it }, modifier = Modifier.fillMaxWidth(), label = { Text("Orchard name") })
+            SectionCard("Default growing location") {
+                Text(
+                    "Trees without their own assigned location use this profile. Switch the default or add more locations below.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedTextField(
+                    value = orchardNameDraft,
+                    onValueChange = { orchardNameDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Location name") }
+                )
+                OutlinedTextField(
+                    value = countryCodeDraft,
+                    onValueChange = { countryCodeDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Country / region") }
+                )
+                OutlinedTextField(
+                    value = timezoneIdDraft,
+                    onValueChange = { timezoneIdDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Timezone") }
+                )
+                SelectionField(
+                    label = "Hemisphere",
+                    value = hemisphereDraft,
+                    options = hemisphereOptions,
+                    onSelected = { hemisphereDraft = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
                 SelectionField(
                     label = "USDA zone",
                     value = usdaZoneDraft,
@@ -796,17 +902,160 @@ fun SettingsScreen(
                     onSelected = { usdaZoneDraft = it },
                     modifier = Modifier.fillMaxWidth()
                 )
-                Text("USDA zone drives bloom timing across the orchard experience.", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "Timezone and hemisphere set the seasonal context. USDA zone is optional and is most useful for US growers.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Text(
+                    "Advanced climate tuning",
+                    style = MaterialTheme.typography.titleSmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    OutlinedTextField(
+                        value = latitudeDraft,
+                        onValueChange = { latitudeDraft = it },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("Latitude") }
+                    )
+                    OutlinedTextField(
+                        value = longitudeDraft,
+                        onValueChange = { longitudeDraft = it },
+                        modifier = Modifier.weight(1f),
+                        label = { Text("Longitude") }
+                    )
+                }
+                OutlinedTextField(
+                    value = elevationDraft,
+                    onValueChange = { elevationDraft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Elevation (m)") }
+                )
+                SelectionField(
+                    label = "Chill hours",
+                    value = chillDraft,
+                    options = chillOptions,
+                    onSelected = { chillDraft = it },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    "Leave latitude, elevation, chill hours, and microclimate blank if you do not know them. The app will fall back to coarser forecasts.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    MicroclimateFlag.entries.forEach { flag ->
+                        val selected = flag.name in microclimateDraft
+                        FilterChip(
+                            selected = selected,
+                            onClick = {
+                                microclimateDraft = if (selected) {
+                                    linkedSetOf<String>().apply { addAll(microclimateDraft - flag.name) }
+                                } else {
+                                    linkedSetOf<String>().apply { addAll(microclimateDraft + flag.name) }
+                                }
+                            },
+                            label = { Text(flag.label) }
+                        )
+                    }
+                }
                 OutlinedButton(
                     onClick = {
                         viewModel.updateOrchardProfile(
                             orchardNameDraft,
-                            if (usdaZoneDraft == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft)
+                            ForecastLocationProfile(
+                                name = orchardNameDraft,
+                                countryCode = countryCodeDraft,
+                                timezoneId = timezoneIdDraft,
+                                hemisphere = Hemisphere.entries.first { it.label == hemisphereDraft },
+                                latitudeDeg = latitudeDraft.toDoubleOrNull(),
+                                longitudeDeg = longitudeDraft.toDoubleOrNull(),
+                                elevationM = elevationDraft.toDoubleOrNull(),
+                                usdaZoneCode = if (usdaZoneDraft == "Not set") null else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft),
+                                chillHoursBand = ChillHoursBand.entries.first { it.label == chillDraft },
+                                microclimateFlags = microclimateDraft.mapNotNull { value ->
+                                    runCatching { MicroclimateFlag.valueOf(value) }.getOrNull()
+                                }.toSet()
+                            )
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save orchard details")
+                    Text("Save default location")
+                }
+            }
+        }
+        item {
+            SectionCard("Growing locations") {
+                Text(
+                    "Add separate locations for greenhouses, patios, rentals, or different properties. Each tree can point at one location.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (locations.isEmpty()) {
+                    Text("No growing locations saved yet.")
+                } else {
+                    locations.forEach { location ->
+                        OutlinedCard(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(14.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(location.name, style = MaterialTheme.typography.titleMedium)
+                                listOfNotNull(
+                                    location.countryCode.takeIf(String::isNotBlank),
+                                    location.timezoneId.takeIf(String::isNotBlank),
+                                    location.usdaZoneCode?.let(BloomForecastEngine::zoneLabelForCode)
+                                ).takeIf(List<String>::isNotEmpty)?.let { details ->
+                                    Text(
+                                        details.joinToString(" - "),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    if (location.id == defaultLocationId) {
+                                        CompactFact("Default", "Yes")
+                                    }
+                                    CompactFact("Hemisphere", location.hemisphere.label)
+                                    location.latitudeDeg?.let { CompactFact("Latitude", it.toString()) }
+                                    location.elevationM?.let { CompactFact("Elevation", "${it.toInt()} m") }
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    OutlinedButton(
+                                        onClick = { editingLocation = GrowingLocationEditorState.from(location) },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text("Edit")
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viewModel.setDefaultGrowingLocation(location.id) },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = location.id != defaultLocationId
+                                    ) {
+                                        Text(if (location.id == defaultLocationId) "Default" else "Make default")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                OutlinedButton(
+                    onClick = {
+                        editingLocation = GrowingLocationEditorState.from(
+                            currentDefaultLocation,
+                            settings
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Add growing location")
                 }
             }
         }
@@ -875,6 +1124,217 @@ fun SettingsScreen(
             }
         }
     }
+}
+
+private data class GrowingLocationEditorState(
+    val id: String? = null,
+    val name: String = "",
+    val countryCode: String = "",
+    val timezoneId: String = "",
+    val hemisphere: Hemisphere = Hemisphere.NORTHERN,
+    val latitudeDeg: String = "",
+    val longitudeDeg: String = "",
+    val elevationM: String = "",
+    val usdaZoneLabel: String = "Not set",
+    val chillHoursBand: ChillHoursBand = ChillHoursBand.UNKNOWN,
+    val microclimateFlags: Set<MicroclimateFlag> = emptySet(),
+    val notes: String = ""
+) {
+    fun toInput(fallbackName: String, fallbackTimezoneId: String): GrowingLocationInput = GrowingLocationInput(
+        id = id,
+        name = name.trim().ifBlank { fallbackName },
+        countryCode = countryCode.trim(),
+        timezoneId = timezoneId.trim().ifBlank { fallbackTimezoneId },
+        hemisphere = hemisphere,
+        latitudeDeg = latitudeDeg.toDoubleOrNull(),
+        longitudeDeg = longitudeDeg.toDoubleOrNull(),
+        elevationM = elevationM.toDoubleOrNull(),
+        usdaZoneCode = if (usdaZoneLabel == "Not set") null else BloomForecastEngine.zoneCodeFromLabel(usdaZoneLabel),
+        chillHoursBand = chillHoursBand,
+        microclimateFlags = microclimateFlags,
+        notes = notes.trim()
+    )
+
+    companion object {
+        fun from(location: GrowingLocationEntity?, settings: AppSettings? = null): GrowingLocationEditorState {
+            val fallbackProfile = settings?.forecastLocationProfile()
+            return GrowingLocationEditorState(
+                id = location?.id,
+                name = location?.name ?: fallbackProfile?.name.orEmpty(),
+                countryCode = location?.countryCode ?: fallbackProfile?.countryCode.orEmpty(),
+                timezoneId = location?.timezoneId ?: fallbackProfile?.timezoneId.orEmpty(),
+                hemisphere = location?.hemisphere ?: fallbackProfile?.hemisphere ?: Hemisphere.NORTHERN,
+                latitudeDeg = location?.latitudeDeg?.toString() ?: fallbackProfile?.latitudeDeg?.toString().orEmpty(),
+                longitudeDeg = location?.longitudeDeg?.toString() ?: fallbackProfile?.longitudeDeg?.toString().orEmpty(),
+                elevationM = location?.elevationM?.toString() ?: fallbackProfile?.elevationM?.toString().orEmpty(),
+                usdaZoneLabel = location?.usdaZoneCode?.let(BloomForecastEngine::zoneLabelForCode)
+                    ?: fallbackProfile?.usdaZoneCode?.let(BloomForecastEngine::zoneLabelForCode)
+                    ?: "Not set",
+                chillHoursBand = location?.chillHoursBand ?: fallbackProfile?.chillHoursBand ?: ChillHoursBand.UNKNOWN,
+                microclimateFlags = location?.microclimateFlags ?: fallbackProfile?.microclimateFlags.orEmpty(),
+                notes = location?.notes.orEmpty()
+            )
+        }
+    }
+}
+
+@Composable
+private fun GrowingLocationEditorDialog(
+    state: GrowingLocationEditorState,
+    onStateChange: (GrowingLocationEditorState) -> Unit,
+    onDismiss: () -> Unit,
+    onSave: () -> Unit
+) {
+    val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
+    val hemisphereOptions = remember { Hemisphere.entries.map(Hemisphere::label) }
+    val chillOptions = remember { ChillHoursBand.entries.map(ChillHoursBand::label) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (state.id == null) "Add growing location" else "Edit growing location") },
+        text = {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    OutlinedTextField(
+                        value = state.name,
+                        onValueChange = { onStateChange(state.copy(name = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Location name") }
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = state.countryCode,
+                        onValueChange = { onStateChange(state.copy(countryCode = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Country / region") }
+                    )
+                }
+                item {
+                    OutlinedTextField(
+                        value = state.timezoneId,
+                        onValueChange = { onStateChange(state.copy(timezoneId = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Timezone") }
+                    )
+                }
+                item {
+                    SelectionField(
+                        label = "Hemisphere",
+                        value = state.hemisphere.label,
+                        options = hemisphereOptions,
+                        onSelected = { selected ->
+                            onStateChange(
+                                state.copy(
+                                    hemisphere = Hemisphere.entries.first { it.label == selected }
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        OutlinedTextField(
+                            value = state.latitudeDeg,
+                            onValueChange = { onStateChange(state.copy(latitudeDeg = it)) },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Latitude") }
+                        )
+                        OutlinedTextField(
+                            value = state.longitudeDeg,
+                            onValueChange = { onStateChange(state.copy(longitudeDeg = it)) },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Longitude") }
+                        )
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = state.elevationM,
+                        onValueChange = { onStateChange(state.copy(elevationM = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Elevation (m)") }
+                    )
+                }
+                item {
+                    SelectionField(
+                        label = "USDA zone",
+                        value = state.usdaZoneLabel,
+                        options = zoneOptions,
+                        onSelected = { onStateChange(state.copy(usdaZoneLabel = it)) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    SelectionField(
+                        label = "Chill hours",
+                        value = state.chillHoursBand.label,
+                        options = chillOptions,
+                        onSelected = { selected ->
+                            onStateChange(
+                                state.copy(
+                                    chillHoursBand = ChillHoursBand.entries.first { it.label == selected }
+                                )
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+                item {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        MicroclimateFlag.entries.forEach { flag ->
+                            val selected = flag in state.microclimateFlags
+                            FilterChip(
+                                selected = selected,
+                                onClick = {
+                                    onStateChange(
+                                        state.copy(
+                                            microclimateFlags = if (selected) {
+                                                state.microclimateFlags - flag
+                                            } else {
+                                                state.microclimateFlags + flag
+                                            }
+                                        )
+                                    )
+                                },
+                                label = { Text(flag.label) }
+                            )
+                        }
+                    }
+                }
+                item {
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = { onStateChange(state.copy(notes = it)) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                        label = { Text("Notes") }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onSave,
+                enabled = state.name.isNotBlank() || state.timezoneId.isNotBlank()
+            ) {
+                Text("Save")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Composable

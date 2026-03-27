@@ -38,6 +38,7 @@ enum class EventType {
     PRUNED,
     FERTILIZED,
     SPRAYED,
+    BUD,
     BLOOM,
     FRUIT_SET,
     HARVEST,

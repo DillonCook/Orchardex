@@ -39,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -49,17 +48,20 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.compose.ui.unit.dp
 import com.dillon.orcharddex.OrchardDexApp
+import com.dillon.orcharddex.data.model.ActivityKind
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.ui.navigation.BottomDestination
 import com.dillon.orcharddex.ui.navigation.OrchardRoutes
 import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.screens.CatalogScreen
 import com.dillon.orcharddex.ui.screens.DashboardScreen
 import com.dillon.orcharddex.ui.screens.DexScreen
-import com.dillon.orcharddex.ui.screens.EventFormScreen
-import com.dillon.orcharddex.ui.screens.HarvestFormScreen
 import com.dillon.orcharddex.ui.screens.HistoryDetailScreen
 import com.dillon.orcharddex.ui.screens.HistoryScreen
+import com.dillon.orcharddex.ui.screens.LogFormScreen
 import com.dillon.orcharddex.ui.screens.PrivacyScreen
 import com.dillon.orcharddex.ui.screens.ReminderFormScreen
 import com.dillon.orcharddex.ui.screens.SettingsScreen
@@ -72,10 +74,12 @@ import androidx.compose.material3.surfaceColorAtElevation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OrchardDexRoot(app: OrchardDexApp) {
+fun OrchardDexRoot(
+    app: OrchardDexApp,
+    settings: AppSettings
+) {
     val navController = rememberNavController()
     val settingsViewModel: SettingsViewModel = viewModel(factory = OrchardViewModelProvider.Factory)
-    val settings by settingsViewModel.settings.collectAsStateWithLifecycle()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route.orEmpty()
     var setupOrchardName by rememberSaveable(settings.onboardingComplete) {
@@ -84,6 +88,16 @@ fun OrchardDexRoot(app: OrchardDexApp) {
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
     var setupUsdaZone by rememberSaveable(settings.onboardingComplete, settings.usdaZone) {
         mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
+    }
+    var setupCountryCode by rememberSaveable(settings.onboardingComplete, settings.countryCode) {
+        mutableStateOf(settings.countryCode)
+    }
+    var setupTimezoneId by rememberSaveable(settings.onboardingComplete, settings.timezoneId) {
+        mutableStateOf(settings.timezoneId)
+    }
+    val hemisphereOptions = remember { Hemisphere.entries.map(Hemisphere::label) }
+    var setupHemisphere by rememberSaveable(settings.onboardingComplete, settings.hemisphere) {
+        mutableStateOf(settings.hemisphere.label)
     }
     val bottomDestinations = listOf(
         BottomDestination.Dashboard,
@@ -98,7 +112,7 @@ fun OrchardDexRoot(app: OrchardDexApp) {
         onResult = {}
     )
 
-    if (settingsViewModel.settingsLoaded && !settings.onboardingComplete) {
+    if (!settings.onboardingComplete) {
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Set up OrcharDex") },
@@ -110,12 +124,28 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                         label = { Text("Orchard name") }
                     )
                     SelectionField(
+                        label = "Hemisphere",
+                        value = setupHemisphere,
+                        options = hemisphereOptions,
+                        onSelected = { setupHemisphere = it }
+                    )
+                    OutlinedTextField(
+                        value = setupCountryCode,
+                        onValueChange = { setupCountryCode = it },
+                        label = { Text("Country / region") }
+                    )
+                    OutlinedTextField(
+                        value = setupTimezoneId,
+                        onValueChange = { setupTimezoneId = it },
+                        label = { Text("Timezone") }
+                    )
+                    SelectionField(
                         label = "USDA zone",
                         value = setupUsdaZone,
                         options = zoneOptions,
                         onSelected = { setupUsdaZone = it }
                     )
-                    Text("USDA zone drives bloom timing across the app. You can update it later in Settings.")
+                    Text("Timezone and hemisphere set the seasonal context. USDA zone is optional and mostly useful for US growers.")
                 }
             },
             confirmButton = {
@@ -123,7 +153,13 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                     onClick = {
                         settingsViewModel.completeOnboarding(
                             setupOrchardName,
-                            if (setupUsdaZone == "Not set") "" else BloomForecastEngine.zoneCodeFromLabel(setupUsdaZone)
+                            ForecastLocationProfile(
+                                name = setupOrchardName,
+                                countryCode = setupCountryCode,
+                                timezoneId = setupTimezoneId,
+                                hemisphere = Hemisphere.entries.first { it.label == setupHemisphere },
+                                usdaZoneCode = if (setupUsdaZone == "Not set") null else BloomForecastEngine.zoneCodeFromLabel(setupUsdaZone)
+                            )
                         )
                     },
                     enabled = setupOrchardName.isNotBlank()
@@ -264,8 +300,8 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 DashboardScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
                     onAddTree = { navController.navigate(OrchardRoutes.treeForm()) },
-                    onAddEvent = { navController.navigate(OrchardRoutes.eventForm()) },
-                    onAddHarvest = { navController.navigate(OrchardRoutes.harvestForm()) },
+                    onAddEvent = { navController.navigate(OrchardRoutes.logForm(kind = ActivityKind.EVENT)) },
+                    onAddHarvest = { navController.navigate(OrchardRoutes.logForm(kind = ActivityKind.HARVEST)) },
                     onAddReminder = { navController.navigate(OrchardRoutes.reminderForm()) },
                     onViewTree = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
                 )
@@ -276,16 +312,16 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                     onEntryClick = { kind, entryId ->
                         navController.navigate(OrchardRoutes.historyDetail(kind, entryId))
                     },
-                    onAddEvent = { navController.navigate(OrchardRoutes.eventForm()) },
-                    onAddHarvest = { navController.navigate(OrchardRoutes.harvestForm()) }
+                    onAddLog = { navController.navigate(OrchardRoutes.logForm()) }
                 )
             }
             composable(BottomDestination.Dex.route) {
                 DexScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
-                    usdaZone = settings.usdaZone,
+                    settings = settings,
                     onAddTree = { navController.navigate(OrchardRoutes.treeForm()) },
-                    onTreeClick = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) }
+                    onTreeClick = { treeId -> navController.navigate(OrchardRoutes.treeDetail(treeId)) },
+                    onQuickLog = { treeId -> navController.navigate(OrchardRoutes.logForm(treeId)) }
                 )
             }
             composable(BottomDestination.Tasks.route) {
@@ -323,11 +359,13 @@ fun OrchardDexRoot(app: OrchardDexApp) {
             ) {
                 TreeDetailScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
+                    settings = settings,
                     onBack = { navController.popBackStack() },
                     onEditTree = { treeId -> navController.navigate(OrchardRoutes.treeForm(treeId)) },
-                    onAddEvent = { treeId -> navController.navigate(OrchardRoutes.eventForm(treeId)) },
-                    onAddHarvest = { treeId -> navController.navigate(OrchardRoutes.harvestForm(treeId)) },
-                    onAddReminder = { treeId -> navController.navigate(OrchardRoutes.reminderForm(treeId = treeId)) }
+                    onAddEvent = { treeId -> navController.navigate(OrchardRoutes.logForm(treeId, ActivityKind.EVENT)) },
+                    onAddHarvest = { treeId -> navController.navigate(OrchardRoutes.logForm(treeId, ActivityKind.HARVEST)) },
+                    onAddReminder = { treeId -> navController.navigate(OrchardRoutes.reminderForm(treeId = treeId)) },
+                    onOpenLog = { kind, entryId -> navController.navigate(OrchardRoutes.historyDetail(kind, entryId)) }
                 )
             }
             composable(
@@ -349,35 +387,19 @@ fun OrchardDexRoot(app: OrchardDexApp) {
                 )
             }
             composable(
-                route = OrchardRoutes.EVENT_FORM,
+                route = OrchardRoutes.LOG_FORM,
                 arguments = listOf(
                     navArgument(OrchardRoutes.TREE_ID_ARG) {
                         type = NavType.StringType
                         defaultValue = ""
-                    }
-                )
-            ) {
-                EventFormScreen(
-                    viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
-                    onSaved = { treeId ->
-                        navController.popBackStack()
-                        treeId.takeIf(String::isNotBlank)?.let {
-                            navController.navigate(OrchardRoutes.treeDetail(it))
-                        }
                     },
-                    onCancel = { navController.popBackStack() }
-                )
-            }
-            composable(
-                route = OrchardRoutes.HARVEST_FORM,
-                arguments = listOf(
-                    navArgument(OrchardRoutes.TREE_ID_ARG) {
+                    navArgument(OrchardRoutes.LOG_KIND_ARG) {
                         type = NavType.StringType
                         defaultValue = ""
                     }
                 )
             ) {
-                HarvestFormScreen(
+                LogFormScreen(
                     viewModel = viewModel(factory = OrchardViewModelProvider.Factory),
                     onSaved = { treeId ->
                         navController.popBackStack()
@@ -431,6 +453,7 @@ private fun String.titleForRoute(orchardName: String): String = when {
     startsWith("historyDetail") -> "Log details"
     startsWith("treeDetail") -> "Tree details"
     startsWith("treeForm") -> "Tree"
+    startsWith("logForm") -> "New log"
     startsWith("eventForm") -> "Add event"
     startsWith("harvestForm") -> "Add harvest"
     startsWith("reminderForm") -> "Reminder"

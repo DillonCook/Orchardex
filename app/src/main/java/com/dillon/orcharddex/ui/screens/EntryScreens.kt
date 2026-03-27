@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.model.ActivityKind
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -56,9 +57,343 @@ import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.viewmodel.EventFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.HarvestFormViewModel
+import com.dillon.orcharddex.ui.viewmodel.LogFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderFormState
 import com.dillon.orcharddex.ui.viewmodel.ReminderTargetMode
+
+@Composable
+fun LogFormScreen(
+    viewModel: LogFormViewModel,
+    onSaved: (String) -> Unit,
+    onCancel: () -> Unit
+) {
+    val state = viewModel.state
+    val trees by viewModel.trees.collectAsStateWithLifecycle()
+    val harvests by viewModel.harvests.collectAsStateWithLifecycle()
+    val activeTrees = remember(trees) { trees.filter { it.status == TreeStatus.ACTIVE } }
+    val selectedTrees = remember(trees, state.selectedTreeIds) {
+        trees.filter { it.id in state.selectedTreeIds }
+    }
+    var selectionDialogVisible by rememberSaveable { mutableStateOf(false) }
+    var plantSearch by rememberSaveable { mutableStateOf("") }
+    val visibleTrees = remember(trees, plantSearch) {
+        val query = plantSearch.trim().lowercase()
+        if (query.isBlank()) {
+            trees
+        } else {
+            trees.filter { tree -> tree.matchesPlantSearch(query) }
+        }
+    }
+    val recentHarvests = remember(harvests, state.selectedTreeIds) {
+        harvests
+            .filter { harvest -> harvest.treeId in state.selectedTreeIds }
+            .sortedByDescending(HarvestEntity::harvestDate)
+    }
+    val recentValueHarvests = remember(recentHarvests) { recentHarvests.take(3) }
+    val unitSuggestions = remember(recentHarvests, state.quantityUnit, state.selectedTreeIds, state.kind) {
+        if (state.kind != ActivityKind.HARVEST || state.selectedTreeIds.isEmpty()) {
+            emptyList()
+        } else {
+            harvestUnitSuggestions(recentHarvests, state.quantityUnit)
+        }
+    }
+    val photoLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
+    ) { uris -> viewModel.addPhotos(uris) }
+    val confirmLabel = when (state.kind) {
+        ActivityKind.EVENT -> if (state.applyToAllActive || state.selectedTreeIds.size > 1) {
+            "Apply event"
+        } else {
+            "Save event"
+        }
+        ActivityKind.HARVEST -> if (state.selectedTreeIds.size > 1) {
+            "Apply harvest"
+        } else {
+            "Save harvest"
+        }
+    }
+    val confirmModifier = if (state.kind == ActivityKind.HARVEST) {
+        Modifier.testTag("harvest_save")
+    } else {
+        Modifier
+    }
+
+    if (selectionDialogVisible) {
+        PlantSelectionDialog(
+            search = plantSearch,
+            onSearchChange = { plantSearch = it },
+            visibleTrees = visibleTrees,
+            selectedTreeIds = state.selectedTreeIds,
+            onToggleTree = viewModel::toggleTreeSelection,
+            onToggleSpeciesGroup = viewModel::toggleTreeGroupSelection,
+            onSelectVisibleTrees = { viewModel.selectTreeIds(visibleTrees.map(TreeEntity::id)) },
+            onClear = viewModel::clearTreeSelection,
+            onDismiss = { selectionDialogVisible = false }
+        )
+    }
+
+    EntryFormLayout(title = "Details") {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Type",
+                style = MaterialTheme.typography.labelLarge
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilterChip(
+                    selected = state.kind == ActivityKind.EVENT,
+                    onClick = { viewModel.setKind(ActivityKind.EVENT) },
+                    label = { Text("Event") }
+                )
+                FilterChip(
+                    selected = state.kind == ActivityKind.HARVEST,
+                    onClick = { viewModel.setKind(ActivityKind.HARVEST) },
+                    label = { Text("Harvest") }
+                )
+            }
+        }
+
+        if (state.kind == ActivityKind.EVENT) {
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = !state.applyToAllActive,
+                    onClick = { viewModel.setApplyToAllActive(false) },
+                    label = { Text("Selected plants") }
+                )
+                FilterChip(
+                    selected = state.applyToAllActive,
+                    onClick = { viewModel.setApplyToAllActive(true) },
+                    label = { Text("All active plants") }
+                )
+            }
+        }
+
+        if (state.kind == ActivityKind.EVENT && state.applyToAllActive) {
+            Text("${activeTrees.size} active plants will receive this event.")
+        } else {
+            OutlinedButton(
+                onClick = { selectionDialogVisible = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (selectedTrees.isEmpty()) {
+                        "Choose plants or species"
+                    } else {
+                        "Edit ${selectedTrees.size} selected plants"
+                    }
+                )
+            }
+            if (selectedTrees.isEmpty()) {
+                Text("No plants selected yet.", style = MaterialTheme.typography.bodySmall)
+            } else {
+                selectedTrees.take(4).forEach { tree ->
+                    Text(tree.selectorLabel(), style = MaterialTheme.typography.bodySmall)
+                }
+                if (selectedTrees.size > 4) {
+                    Text("+${selectedTrees.size - 4} more plants", style = MaterialTheme.typography.bodySmall)
+                }
+                if (state.kind == ActivityKind.HARVEST && selectedTrees.size > 1) {
+                    Text(
+                        text = "This harvest entry will be copied to ${selectedTrees.size} plants.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
+        if (state.kind == ActivityKind.EVENT) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "Event type",
+                    style = MaterialTheme.typography.labelLarge
+                )
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    EventType.entries.forEach { eventType ->
+                        FilterChip(
+                            selected = state.eventType == eventType,
+                            onClick = { viewModel.update { copy(eventType = eventType) } },
+                            label = { Text(eventType.eventLabel()) }
+                        )
+                    }
+                }
+            }
+        }
+
+        DateField(
+            label = if (state.kind == ActivityKind.EVENT) "Event date" else "Harvest date",
+            value = state.logDate,
+            onDateSelected = { viewModel.update { copy(logDate = it) } }
+        )
+
+        if (state.kind == ActivityKind.HARVEST) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = state.quantityValue,
+                    onValueChange = { viewModel.update { copy(quantityValue = it) } },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("harvest_quantity"),
+                    label = { Text("Quantity") }
+                )
+                OutlinedTextField(
+                    value = state.quantityUnit,
+                    onValueChange = { viewModel.update { copy(quantityUnit = it) } },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Unit") }
+                )
+            }
+            if (state.selectedTreeIds.isNotEmpty()) {
+                if (recentValueHarvests.isEmpty()) {
+                    Text(
+                        text = if (selectedTrees.size > 1) {
+                            "Log the first harvest for these plants to unlock quick-fill values here."
+                        } else {
+                            "Log the first harvest for this plant to unlock quick-fill values here."
+                        },
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Recent harvest values",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = if (selectedTrees.size > 1) {
+                                "Tap a past harvest from this selection to reuse quantity, unit, and quality."
+                            } else {
+                                "Tap a past harvest to reuse quantity, unit, and quality."
+                            },
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            recentValueHarvests.forEach { harvest ->
+                                FilterChip(
+                                    selected = state.quantityValue == harvest.quantityValue.displayAmount() &&
+                                        state.quantityUnit.equals(harvest.quantityUnit, ignoreCase = true),
+                                    onClick = { viewModel.applyLastHarvest(harvest) },
+                                    label = {
+                                        Text(
+                                            "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit} - ${harvest.harvestDate.toDateLabel()}"
+                                        )
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            Text(
+                text = if (selectedTrees.size > 1) {
+                    "First fruit is tagged automatically for each plant the first time a harvest is logged."
+                } else {
+                    "First fruit is tagged automatically the first time a harvest is logged for this plant."
+                },
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (unitSuggestions.isNotEmpty()) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        text = "Common units",
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        unitSuggestions.forEach { unit ->
+                            FilterChip(
+                                selected = state.quantityUnit.equals(unit, ignoreCase = true),
+                                onClick = { viewModel.update { copy(quantityUnit = unit) } },
+                                label = { Text(unit) }
+                            )
+                        }
+                    }
+                }
+            }
+            Text(
+                text = "Harvest quality",
+                style = MaterialTheme.typography.labelLarge
+            )
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                (1..5).forEach { rating ->
+                    FilterChip(
+                        selected = state.qualityRating == rating,
+                        onClick = { viewModel.update { copy(qualityRating = rating) } },
+                        label = { Text("$rating star") }
+                    )
+                }
+            }
+        } else {
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = { viewModel.update { copy(notes = it) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Notes") },
+                minLines = 4
+            )
+            OutlinedTextField(
+                value = state.cost,
+                onValueChange = { viewModel.update { copy(cost = it) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Cost") }
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = state.quantityValue,
+                    onValueChange = { viewModel.update { copy(quantityValue = it) } },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Qty") }
+                )
+                OutlinedTextField(
+                    value = state.quantityUnit,
+                    onValueChange = { viewModel.update { copy(quantityUnit = it) } },
+                    modifier = Modifier.weight(1f),
+                    label = { Text("Unit") }
+                )
+            }
+        }
+
+        if (state.kind == ActivityKind.HARVEST) {
+            OutlinedTextField(
+                value = state.notes,
+                onValueChange = { viewModel.update { copy(notes = it) } },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Notes") },
+                minLines = 4
+            )
+        }
+
+        PhotoAddCard(
+            onClick = {
+                photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }
+        )
+        if (state.photoUris.isNotEmpty()) {
+            LocalPhotoStrip(
+                existingPaths = emptyList(),
+                newUris = state.photoUris,
+                onRemoveNew = viewModel::removePhoto
+            )
+        }
+        state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        FormActions(
+            onCancel = onCancel,
+            onConfirm = { viewModel.save(onSaved) },
+            confirmLabel = confirmLabel,
+            confirmModifier = confirmModifier
+        )
+    }
+}
 
 @Composable
 fun EventFormScreen(
@@ -83,8 +418,8 @@ fun EventFormScreen(
         }
     }
     val photoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri -> viewModel.update { copy(photoUri = uri) } }
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
+    ) { uris -> viewModel.addPhotos(uris) }
 
     if (selectionDialogVisible) {
         PlantSelectionDialog(
@@ -194,11 +529,11 @@ fun EventFormScreen(
                 photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         )
-        state.photoUri?.let {
+        if (state.photoUris.isNotEmpty()) {
             LocalPhotoStrip(
                 existingPaths = emptyList(),
-                newUris = listOf(it),
-                onRemoveNew = { viewModel.update { copy(photoUri = null) } }
+                newUris = state.photoUris,
+                onRemoveNew = viewModel::removePhoto
             )
         }
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -250,8 +585,8 @@ fun HarvestFormScreen(
         }
     }
     val photoLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri -> viewModel.update { copy(photoUri = uri) } }
+        contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
+    ) { uris -> viewModel.addPhotos(uris) }
 
     if (selectionDialogVisible) {
         PlantSelectionDialog(
@@ -335,9 +670,9 @@ fun HarvestFormScreen(
                     )
                     Text(
                         text = if (selectedTrees.size > 1) {
-                            "Tap a past harvest from this selection to reuse quantity, unit, quality, and verification."
+                            "Tap a past harvest from this selection to reuse quantity, unit, and quality."
                         } else {
-                            "Tap a past harvest to reuse quantity, unit, quality, and verification."
+                            "Tap a past harvest to reuse quantity, unit, and quality."
                         },
                         style = MaterialTheme.typography.bodySmall
                     )
@@ -361,6 +696,14 @@ fun HarvestFormScreen(
                 }
             }
         }
+        Text(
+            text = if (selectedTrees.size > 1) {
+                "First fruit is tagged automatically for each plant the first time a harvest is logged."
+            } else {
+                "First fruit is tagged automatically the first time a harvest is logged for this plant."
+            },
+            style = MaterialTheme.typography.bodySmall
+        )
         if (unitSuggestions.isNotEmpty()) {
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text(
@@ -381,6 +724,10 @@ fun HarvestFormScreen(
                 }
             }
         }
+        Text(
+            text = "Harvest quality",
+            style = MaterialTheme.typography.labelLarge
+        )
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             (1..5).forEach { rating ->
                 FilterChip(
@@ -390,16 +737,6 @@ fun HarvestFormScreen(
                 )
             }
         }
-        FilterChip(
-            selected = state.firstFruit,
-            onClick = { viewModel.update { copy(firstFruit = !state.firstFruit) } },
-            label = { Text("First fruit") }
-        )
-        FilterChip(
-            selected = state.verified,
-            onClick = { viewModel.update { copy(verified = !state.verified) } },
-            label = { Text("Harvest received / verified") }
-        )
         OutlinedTextField(
             value = state.notes,
             onValueChange = { viewModel.update { copy(notes = it) } },
@@ -412,11 +749,11 @@ fun HarvestFormScreen(
                 photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
             }
         )
-        state.photoUri?.let {
+        if (state.photoUris.isNotEmpty()) {
             LocalPhotoStrip(
                 existingPaths = emptyList(),
-                newUris = listOf(it),
-                onRemoveNew = { viewModel.update { copy(photoUri = null) } }
+                newUris = state.photoUris,
+                onRemoveNew = viewModel::removePhoto
             )
         }
         state.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }

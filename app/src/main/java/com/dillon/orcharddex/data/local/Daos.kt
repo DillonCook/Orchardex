@@ -9,6 +9,27 @@ import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
 
 @Dao
+interface GrowingLocationDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(location: GrowingLocationEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(locations: List<GrowingLocationEntity>)
+
+    @Query("SELECT * FROM growing_locations ORDER BY name")
+    fun observeAllLocations(): Flow<List<GrowingLocationEntity>>
+
+    @Query("SELECT * FROM growing_locations ORDER BY name")
+    suspend fun getAllLocations(): List<GrowingLocationEntity>
+
+    @Query("SELECT * FROM growing_locations WHERE id = :locationId")
+    suspend fun getLocation(locationId: String): GrowingLocationEntity?
+
+    @Query("DELETE FROM growing_locations")
+    suspend fun clearAll()
+}
+
+@Dao
 interface TreeDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(tree: TreeEntity)
@@ -45,6 +66,15 @@ interface TreeDao {
 
     @Query("UPDATE trees SET orchardName = :orchardName")
     suspend fun updateOrchardNameForAll(orchardName: String)
+
+    @Query("UPDATE trees SET orchardName = :orchardName WHERE locationId = :locationId")
+    suspend fun updateOrchardNameForLocation(locationId: String, orchardName: String)
+
+    @Query("UPDATE trees SET locationId = :locationId WHERE locationId IS NULL")
+    suspend fun assignLocationToTreesWithoutLocation(locationId: String)
+
+    @Query("SELECT COUNT(*) FROM trees WHERE locationId = :locationId")
+    suspend fun countTreesForLocation(locationId: String): Int
 
     @Query("SELECT DISTINCT species FROM trees ORDER BY species")
     fun observeSpeciesNames(): Flow<List<String>>
@@ -86,6 +116,39 @@ interface TreePhotoDao {
     suspend fun deleteByIds(photoIds: List<String>)
 
     @Query("DELETE FROM tree_photos")
+    suspend fun clearAll()
+}
+
+@Dao
+interface ActivityPhotoDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(photo: ActivityPhotoEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(photos: List<ActivityPhotoEntity>)
+
+    @Query("SELECT * FROM activity_photos ORDER BY createdAt ASC, sortOrder ASC")
+    fun observeAllPhotos(): Flow<List<ActivityPhotoEntity>>
+
+    @Query("SELECT * FROM activity_photos ORDER BY createdAt ASC, sortOrder ASC")
+    suspend fun getAllPhotos(): List<ActivityPhotoEntity>
+
+    @Query(
+        """
+        SELECT * FROM activity_photos
+        WHERE ownerKind = :ownerKind AND ownerId = :ownerId
+        ORDER BY sortOrder ASC, createdAt ASC
+        """
+    )
+    suspend fun getPhotosForOwner(ownerKind: String, ownerId: String): List<ActivityPhotoEntity>
+
+    @Query("SELECT * FROM activity_photos WHERE id IN (:photoIds)")
+    suspend fun getPhotosByIds(photoIds: List<String>): List<ActivityPhotoEntity>
+
+    @Query("DELETE FROM activity_photos WHERE id IN (:photoIds)")
+    suspend fun deleteByIds(photoIds: List<String>)
+
+    @Query("DELETE FROM activity_photos")
     suspend fun clearAll()
 }
 

@@ -1,12 +1,20 @@
 package com.dillon.orcharddex
 
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.model.EventType
+import com.dillon.orcharddex.data.model.ForecastConfidence
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
+import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.PollinationRequirement
+import com.dillon.orcharddex.time.OrchardTime
 import com.google.common.truth.Truth.assertThat
+import java.time.LocalDate
 import java.time.YearMonth
 import org.junit.Test
 
@@ -2808,5 +2816,140 @@ class BloomForecastEngineTest {
 
         assertThat(everbearing).hasSize(1)
         assertThat(everbearing.single().treeId).isEqualTo("papaya-1")
+    }
+
+    @Test
+    fun predictMonth_usesClimateBandShiftWhenLatitudeIsProvidedWithoutUsdaZone() {
+        val appleTree = TreeEntity(
+            id = "apple-climate-band",
+            orchardName = "Home",
+            sectionName = "Test",
+            nickname = null,
+            species = "Apple",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(appleTree),
+            yearMonth = YearMonth.of(2026, 3),
+            locationProfile = ForecastLocationProfile(
+                hemisphere = Hemisphere.NORTHERN,
+                latitudeDeg = 18.0
+            )
+        )
+
+        assertThat(windows).hasSize(1)
+        assertThat(windows.single().startDate).isEqualTo(LocalDate.of(2026, 3, 8))
+        assertThat(windows.single().sourceLabel).isEqualTo("climate band")
+    }
+
+    @Test
+    fun predictMonth_addsElevationDelayWhenUsingClimateBandFallback() {
+        val appleTree = TreeEntity(
+            id = "apple-elevation",
+            orchardName = "Home",
+            sectionName = "Test",
+            nickname = null,
+            species = "Apple",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(appleTree),
+            yearMonth = YearMonth.of(2026, 3),
+            locationProfile = ForecastLocationProfile(
+                hemisphere = Hemisphere.NORTHERN,
+                latitudeDeg = 18.0,
+                elevationM = 1200.0
+            )
+        )
+
+        assertThat(windows).hasSize(1)
+        assertThat(windows.single().startDate).isEqualTo(LocalDate.of(2026, 3, 22))
+        assertThat(windows.single().sourceLabel).isEqualTo("climate band")
+    }
+
+    @Test
+    fun predictMonth_prefersHistoryLearnedWindowsWhenBloomObservationsExist() {
+        val appleTree = TreeEntity(
+            id = "apple-history-learned",
+            orchardName = "Home",
+            sectionName = "Test",
+            nickname = null,
+            species = "Apple",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+        val observations = listOf(
+            PhenologyObservation(
+                treeId = appleTree.id,
+                dateMillis = LocalDate.of(2024, 3, 20).atStartOfDay(OrchardTime.zoneId()).toInstant().toEpochMilli(),
+                eventType = EventType.BLOOM
+            ),
+            PhenologyObservation(
+                treeId = appleTree.id,
+                dateMillis = LocalDate.of(2025, 3, 24).atStartOfDay(OrchardTime.zoneId()).toInstant().toEpochMilli(),
+                eventType = EventType.BLOOM
+            )
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(appleTree),
+            yearMonth = YearMonth.of(2026, 3),
+            locationProfile = ForecastLocationProfile(hemisphere = Hemisphere.NORTHERN),
+            observations = observations
+        )
+
+        assertThat(windows).hasSize(1)
+        assertThat(windows.single().source).isEqualTo(ForecastSource.HISTORY_LEARNED)
+        assertThat(windows.single().confidence).isEqualTo(ForecastConfidence.MEDIUM)
+        assertThat(windows.single().startDate.monthValue).isEqualTo(3)
     }
 }

@@ -10,6 +10,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import com.dillon.orcharddex.data.preferences.AppSettings
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.OrchardDexRoot
 import com.dillon.orcharddex.ui.theme.OrchardDexTheme
 import kotlinx.coroutines.flow.map
@@ -28,16 +29,21 @@ class MainActivity : ComponentActivity() {
                     initialValue = null
                 )
             LaunchedEffect(settings) {
-                if (settings != null) {
+                settings?.let { loadedSettings ->
+                    app.container.repository.ensureGrowingLocations(loadedSettings)
                     keepSplashVisible.value = false
                 }
             }
             settings?.let { loadedSettings ->
+                OrchardTime.updateTimezoneId(loadedSettings.timezoneId)
                 OrchardDexTheme(
                     themeMode = loadedSettings.themeMode,
                     dynamicColor = loadedSettings.dynamicColor
                 ) {
-                    OrchardDexRoot(app = app)
+                    OrchardDexRoot(
+                        app = app,
+                        settings = loadedSettings
+                    )
                 }
             }
         }

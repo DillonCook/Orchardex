@@ -4,6 +4,7 @@ import android.net.Uri
 
 data class TreeInput(
     val id: String? = null,
+    val locationId: String? = null,
     val orchardName: String = "",
     val sectionName: String = "",
     val nickname: String = "",
@@ -27,9 +28,27 @@ data class TreeInput(
     val customBloomStartMonth: Int? = null,
     val customBloomStartDay: Int? = null,
     val customBloomDurationDays: Int? = null,
+    val selfCompatibilityOverride: SelfCompatibility? = null,
+    val pollinationModeOverride: PollinationMode? = null,
+    val pollinationOverrideNote: String = "",
     val quantity: Int = 1,
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: List<String> = emptyList()
+)
+
+data class GrowingLocationInput(
+    val id: String? = null,
+    val name: String,
+    val countryCode: String = "",
+    val timezoneId: String,
+    val hemisphere: Hemisphere = Hemisphere.NORTHERN,
+    val latitudeDeg: Double? = null,
+    val longitudeDeg: Double? = null,
+    val elevationM: Double? = null,
+    val usdaZoneCode: String? = null,
+    val chillHoursBand: ChillHoursBand = ChillHoursBand.UNKNOWN,
+    val microclimateFlags: Set<MicroclimateFlag> = emptySet(),
+    val notes: String = ""
 )
 
 data class EventInput(
@@ -40,7 +59,7 @@ data class EventInput(
     val cost: Double? = null,
     val quantityValue: Double? = null,
     val quantityUnit: String = "",
-    val photoUri: Uri? = null
+    val photoUris: List<Uri> = emptyList()
 )
 
 data class HarvestInput(
@@ -50,9 +69,9 @@ data class HarvestInput(
     val quantityUnit: String,
     val qualityRating: Int = 3,
     val firstFruit: Boolean = false,
-    val verified: Boolean = false,
+    val verified: Boolean = true,
     val notes: String = "",
-    val photoUri: Uri? = null
+    val photoUris: List<Uri> = emptyList()
 )
 
 data class ReminderInput(

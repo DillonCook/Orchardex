@@ -38,19 +38,25 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dillon.orcharddex.data.model.DashboardDetailItem
 import com.dillon.orcharddex.data.model.DashboardModel
+import com.dillon.orcharddex.data.model.ForecastConfidence
 import com.dillon.orcharddex.data.model.HistoryEntryModel
+import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.ReminderListItem
+import com.dillon.orcharddex.data.model.TreeListItem
+import com.dillon.orcharddex.data.local.toForecastLocationProfile
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.BloomPhase
 import com.dillon.orcharddex.data.phenology.EverbearingPlant
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
+import com.dillon.orcharddex.data.preferences.forecastLocationProfile
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.OrchardDexHeroBanner
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
 import com.dillon.orcharddex.ui.epochToLocalDate
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.viewmodel.DashboardViewModel
 import java.time.DayOfWeek
@@ -142,7 +148,8 @@ fun DashboardScreen(
     onAddReminder: () -> Unit,
     onViewTree: (String) -> Unit
 ) {
-    val dashboard by viewModel.dashboard.collectAsStateWithLifecycle()
+    val dashboard by viewModel.dashboard.collectAsStateWithLifecycle(initialValue = null)
+    val dashboardModel = dashboard ?: DashboardModel()
     val trees by viewModel.trees.collectAsStateWithLifecycle()
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
@@ -150,17 +157,19 @@ fun DashboardScreen(
     var selectedStat by rememberSaveable { mutableStateOf<DashboardStat?>(null) }
     var selectedMonthSection by rememberSaveable { mutableStateOf<DashboardMonthSection?>(null) }
     var showSelectedDayDialog by rememberSaveable { mutableStateOf(false) }
-    var visibleMonthText by rememberSaveable { mutableStateOf(YearMonth.now().toString()) }
-    var selectedDateText by rememberSaveable { mutableStateOf(LocalDate.now().toString()) }
+    var visibleMonthText by rememberSaveable { mutableStateOf(OrchardTime.currentYearMonth().toString()) }
+    var selectedDateText by rememberSaveable { mutableStateOf(OrchardTime.today().toString()) }
     val visibleMonth = remember(visibleMonthText) { YearMonth.parse(visibleMonthText) }
     val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
-    val calendarState = remember(trees, reminders, history, settings.usdaZone, visibleMonth) {
+    val locationProfile = remember(settings) { settings.forecastLocationProfile() }
+    val calendarState = remember(trees, reminders, history, locationProfile, settings.orchardRegion, visibleMonth) {
         buildDashboardCalendarState(
-            settings = settings,
+            defaultLocationProfile = locationProfile,
+            orchardRegion = settings.orchardRegion,
             visibleMonth = visibleMonth,
             reminders = reminders,
             history = history,
-            activeTrees = trees.filter { it.status == TreeStatus.ACTIVE }
+            activeTrees = trees.filter { it.tree.status == TreeStatus.ACTIVE }
         )
     }
     val itemsForSelectedDay = remember(calendarState.items, selectedDate) {
@@ -177,12 +186,12 @@ fun DashboardScreen(
         )
     }
     val orchardPulseStats = listOf(
-        DashboardStat.TREES to dashboard.totalTreeCount,
-        DashboardStat.CULTIVARS to dashboard.cultivarCount,
-        DashboardStat.SPECIES to dashboard.speciesCount,
-        DashboardStat.WISHLIST to dashboard.wishlistCount,
-        DashboardStat.AWAITING_FIRST_FRUIT to dashboard.awaitingFirstFruitCount,
-        DashboardStat.DUE_SOON to dashboard.upcoming7Count
+        DashboardStat.TREES to dashboardModel.totalTreeCount,
+        DashboardStat.CULTIVARS to dashboardModel.cultivarCount,
+        DashboardStat.SPECIES to dashboardModel.speciesCount,
+        DashboardStat.WISHLIST to dashboardModel.wishlistCount,
+        DashboardStat.AWAITING_FIRST_FRUIT to dashboardModel.awaitingFirstFruitCount,
+        DashboardStat.DUE_SOON to dashboardModel.upcoming7Count
     )
 
     fun jumpMonth(offset: Long) {
@@ -194,7 +203,7 @@ fun DashboardScreen(
     selectedStat?.let { stat ->
         DashboardDetailDialog(
             stat = stat,
-            dashboard = dashboard,
+            dashboard = dashboardModel,
             onDismiss = { selectedStat = null },
             onViewTree = onViewTree
         )
@@ -220,7 +229,7 @@ fun DashboardScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        if (dashboard.totalTreeCount == 0) {
+        if (dashboard != null && dashboardModel.totalTreeCount == 0) {
             item {
                 EmptyStateCard(
                     title = "Start with your first tree",
@@ -261,7 +270,7 @@ fun DashboardScreen(
         item {
             SectionCard("Orchard pulse") {
                 Text(
-                    text = if (dashboard.totalTreeCount == 0) {
+                    text = if (dashboardModel.totalTreeCount == 0) {
                         "The dashboard becomes your quick review board once plants and reminders are in place."
                     } else {
                         "Scan the collection, spot due work, and jump into the right plant or reminder list quickly."
@@ -326,8 +335,11 @@ private fun DashboardCalendarSection(
             calendarState.activeTreeCount == 0 -> {
                 Text("Add an active plant to see bloom timing here.", style = MaterialTheme.typography.bodySmall)
             }
-            settings.usdaZone.isBlank() -> {
-                Text("Set your USDA zone in Settings to tune bloom timing.", style = MaterialTheme.typography.bodySmall)
+            !settings.forecastLocationProfile().hasForecastSignals() -> {
+                Text(
+                    "Add latitude, elevation, chill hours, or a USDA zone in Settings to tune bloom timing.",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
             calendarState.forecastedTreeCount in 1 until calendarState.activeTreeCount -> {
                 Text(
@@ -418,7 +430,7 @@ private fun DashboardMonthGrid(
                             day = day,
                             summary = items.summaryFor(day),
                             selected = day == selectedDate,
-                            today = day == LocalDate.now(),
+                            today = day == OrchardTime.today(),
                             onClick = { onSelectDay(day) }
                         )
                     }
@@ -771,7 +783,10 @@ private fun buildDashboardMonthSectionState(
                 id = item.id,
                 title = item.title,
                 subtitle = item.subtitle,
-                detail = "${item.startDate.format(dashboardCompactDateFormatter)} – ${item.endDate.format(dashboardCompactDateFormatter)}",
+                detail = listOf(
+                    "${item.startDate.format(dashboardCompactDateFormatter)} - ${item.endDate.format(dashboardCompactDateFormatter)}",
+                    item.detail.takeIf(String::isNotBlank)
+                ).joinToString(" - "),
                 treeId = item.treeId
             )
         }
@@ -819,19 +834,40 @@ private fun buildDashboardMonthSectionState(
 }
 
 private fun buildDashboardCalendarState(
-    settings: AppSettings,
+    defaultLocationProfile: com.dillon.orcharddex.data.model.ForecastLocationProfile,
+    orchardRegion: String,
     visibleMonth: YearMonth,
     reminders: List<ReminderListItem>,
     history: List<HistoryEntryModel>,
-    activeTrees: List<com.dillon.orcharddex.data.local.TreeEntity>
+    activeTrees: List<TreeListItem>
 ): DashboardCalendarState {
-    val bloomWindows = BloomForecastEngine.predictMonth(
-        trees = activeTrees,
-        yearMonth = visibleMonth,
-        zoneCode = settings.usdaZone,
-        orchardRegionCode = null
-    )
-    val everbearingPlants = BloomForecastEngine.everbearingPlants(activeTrees)
+    val observationsByTreeId = history
+        .mapNotNull { entry ->
+            when {
+                entry.kind == com.dillon.orcharddex.data.model.ActivityKind.HARVEST -> PhenologyObservation(
+                    treeId = entry.treeId,
+                    dateMillis = entry.date,
+                    isHarvest = true
+                )
+                entry.eventType != null -> PhenologyObservation(
+                    treeId = entry.treeId,
+                    dateMillis = entry.date,
+                    eventType = entry.eventType
+                )
+                else -> null
+            }
+        }
+        .groupBy(PhenologyObservation::treeId)
+    val bloomWindows = activeTrees.flatMap { item ->
+        BloomForecastEngine.predictMonth(
+            trees = listOf(item.tree),
+            yearMonth = visibleMonth,
+            locationProfile = item.location?.toForecastLocationProfile() ?: defaultLocationProfile,
+            orchardRegionCode = orchardRegion.takeIf(String::isNotBlank),
+            observations = observationsByTreeId[item.tree.id].orEmpty()
+        )
+    }
+    val everbearingPlants = BloomForecastEngine.everbearingPlants(activeTrees.map(TreeListItem::tree))
     val bloomItems = bloomWindows.map(PredictedBloomWindow::toCalendarItem)
     val reminderItems = reminders.mapNotNull { reminderItem ->
         val reminder = reminderItem.reminder
@@ -882,7 +918,17 @@ private fun PredictedBloomWindow.toCalendarItem(): DashboardCalendarItem = Dashb
     kind = DashboardCalendarKind.BLOOM_FORECAST,
     title = treeLabel,
     subtitle = speciesLabel,
-    detail = phase.dashboardDetailLabel(),
+    detail = buildString {
+        if (confidence == ForecastConfidence.LOW) {
+            append("Likely ${startDate.format(dashboardCompactDateFormatter)} - ${endDate.format(dashboardCompactDateFormatter)}")
+        } else {
+            append(phase.dashboardDetailLabel())
+        }
+        append(" - ")
+        append(sourceLabel)
+        append(" - ")
+        append(confidenceLabel)
+    },
     startDate = startDate,
     endDate = endDate,
     treeId = treeId
@@ -927,7 +973,7 @@ private fun List<DashboardCalendarItem>.summaryFor(day: LocalDate): DashboardDay
 }
 
 private fun defaultSelectedDateForMonth(yearMonth: YearMonth): LocalDate =
-    if (yearMonth == YearMonth.now()) LocalDate.now() else yearMonth.atDay(1)
+    if (yearMonth == OrchardTime.currentYearMonth()) OrchardTime.today() else yearMonth.atDay(1)
 
 private fun String.pluralize(count: Int): String = if (count == 1) this else "${this}s"
 

@@ -1,6 +1,8 @@
 package com.dillon.orcharddex.data.model
 
 import com.dillon.orcharddex.data.local.EventEntity
+import com.dillon.orcharddex.data.local.ActivityPhotoEntity
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.ReminderEntity
 import com.dillon.orcharddex.data.local.TreeEntity
@@ -10,12 +12,15 @@ import kotlinx.serialization.Serializable
 
 data class TreeListItem(
     val tree: TreeEntity,
-    val mainPhotoPath: String?
+    val mainPhotoPath: String?,
+    val location: GrowingLocationEntity? = null
 )
 
 data class TreeDetailModel(
     val tree: TreeEntity,
+    val location: GrowingLocationEntity? = null,
     val photos: List<TreePhotoEntity>,
+    val activityPhotos: List<ActivityPhotoEntity> = emptyList(),
     val events: List<EventEntity>,
     val harvests: List<HarvestEntity>,
     val reminders: List<ReminderEntity>
@@ -55,7 +60,8 @@ data class HistoryEntryModel(
     val qualityRating: Int? = null,
     val firstFruit: Boolean = false,
     val verified: Boolean = false,
-    val photoPath: String? = null
+    val photoPath: String? = null,
+    val photoPaths: List<String> = emptyList()
 )
 
 data class DashboardDetailItem(
@@ -121,6 +127,15 @@ data class SettingsSnapshot(
     val defaultCustomLeadHours: Int,
     val orchardName: String = "",
     val usdaZone: String = "",
+    val countryCode: String = "",
+    val timezoneId: String = "",
+    val hemisphere: Hemisphere = Hemisphere.NORTHERN,
+    val latitudeDeg: Double? = null,
+    val longitudeDeg: Double? = null,
+    val elevationM: Double? = null,
+    val chillHoursBand: ChillHoursBand = ChillHoursBand.UNKNOWN,
+    val microclimateFlags: Set<MicroclimateFlag> = emptySet(),
+    val defaultLocationId: String = "",
     val orchardRegion: String = "",
     val onboardingComplete: Boolean = false
 )

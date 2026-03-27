@@ -19,7 +19,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -52,11 +51,11 @@ import com.dillon.orcharddex.ui.components.LocalPhotoStrip
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.toDateLabel
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.viewmodel.HistoryDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.HistoryViewModel
 import java.io.File
 import java.time.Instant
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val historyMonthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
@@ -94,13 +93,11 @@ private data class SeasonalSummary(
 fun HistoryScreen(
     viewModel: HistoryViewModel,
     onEntryClick: (ActivityKind, String) -> Unit,
-    onAddEvent: () -> Unit,
-    onAddHarvest: () -> Unit
+    onAddLog: () -> Unit
 ) {
     val history by viewModel.history.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
     var quickFilter by rememberSaveable { mutableStateOf(HistoryQuickFilter.ALL) }
-    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
     var selectedTracker by rememberSaveable { mutableStateOf<HarvestTracker?>(null) }
 
     val filteredHistory = remember(history, search, quickFilter) {
@@ -112,13 +109,13 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         filteredHistory.groupBy { it.date.monthBucketLabel() }.toList()
     }
-    val currentYear = remember { java.time.Year.now().value }
+    val currentYear = remember { OrchardTime.currentYear() }
     val harvestHistory = remember(history) {
         history.filter { entry -> entry.kind == ActivityKind.HARVEST }
     }
     val currentYearHarvests = remember(harvestHistory, currentYear) {
         harvestHistory.filter { entry ->
-            Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year == currentYear
+            Instant.ofEpochMilli(entry.date).atZone(OrchardTime.zoneId()).year == currentYear
         }
     }
     val trackerEntries = selectedTracker?.let { tracker ->
@@ -137,7 +134,7 @@ fun HistoryScreen(
     val seasonalSummaries = remember(harvestHistory) {
         harvestHistory
             .groupBy { entry ->
-                Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year
+                Instant.ofEpochMilli(entry.date).atZone(OrchardTime.zoneId()).year
             }
             .map { (year, entries) ->
                 val topSpecies = entries
@@ -164,40 +161,6 @@ fun HistoryScreen(
     val currentSeasonSummary = seasonalSummaries.firstOrNull { it.year == currentYear }
         ?: seasonalSummaries.firstOrNull()
 
-    if (addMenuVisible) {
-        AlertDialog(
-            onDismissRequest = { addMenuVisible = false },
-            title = { Text("Add to history") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddEvent()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Add event")
-                    }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddHarvest()
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Add harvest")
-                    }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { addMenuVisible = false }) {
-                    Text("Close")
-                }
-            }
-        )
-    }
-
     selectedTracker?.let { tracker ->
         HarvestTrackerDialog(
             title = if (tracker == HarvestTracker.CURRENT_YEAR) "$currentYear harvests" else tracker.label,
@@ -211,7 +174,7 @@ fun HistoryScreen(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { addMenuVisible = true },
+                onClick = onAddLog,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.testTag("history_new")
             ) {
@@ -430,8 +393,8 @@ fun HistoryDetailScreen(
                             }
                             historyEntry.cost?.let { CompactFact("Cost", "$${it.displayAmount()}") }
                             historyEntry.qualityRating?.let { CompactFact("Quality", "$it/5") }
-                            if (historyEntry.kind == ActivityKind.HARVEST) {
-                                CompactFact("Verified", if (historyEntry.verified) "Yes" else "No")
+                            if (historyEntry.kind == ActivityKind.HARVEST && !historyEntry.verified) {
+                                CompactFact("Verified", "No")
                             }
                             CompactFact("Species", historyEntry.species)
                             CompactFact("Cultivar", historyEntry.cultivar)
@@ -441,13 +404,14 @@ fun HistoryDetailScreen(
                         }
                     }
                 }
-                historyEntry.photoPath?.let { photoPath ->
+                val photoPaths = historyEntry.photoPaths.ifEmpty { listOfNotNull(historyEntry.photoPath) }
+                if (photoPaths.isNotEmpty()) {
                     item {
-                        SectionCard("Photo") {
+                        SectionCard(if (photoPaths.size == 1) "Photo" else "Photos") {
                             LocalPhotoStrip(
-                                existingPaths = listOf(
-                                    historyEntry.id to File(context.filesDir, "photos/$photoPath").absolutePath
-                                )
+                                existingPaths = photoPaths.mapIndexed { index, photoPath ->
+                                    "${historyEntry.id}:$index" to File(context.filesDir, "photos/$photoPath").absolutePath
+                                }
                             )
                         }
                     }
@@ -611,7 +575,8 @@ private fun HistoryQuickFilter.matches(entry: HistoryEntryModel): Boolean = when
     HistoryQuickFilter.ALL -> true
     HistoryQuickFilter.EVENTS -> entry.kind == ActivityKind.EVENT
     HistoryQuickFilter.HARVESTS -> entry.kind == ActivityKind.HARVEST
-    HistoryQuickFilter.SEASONAL -> entry.eventType in setOf(EventType.BLOOM, EventType.FRUIT_SET)
+    HistoryQuickFilter.SEASONAL -> entry.kind == ActivityKind.HARVEST ||
+        entry.eventType in setOf(EventType.BUD, EventType.BLOOM, EventType.FRUIT_SET)
     HistoryQuickFilter.ISSUES -> entry.eventType in setOf(
         EventType.PEST_OBSERVED,
         EventType.DISEASE_OBSERVED,
@@ -658,8 +623,15 @@ private fun HistoryEntryModel.rowMetaLine(): String = buildString {
     if (firstFruit) {
         append(" - first fruit")
     }
-    if (kind == ActivityKind.HARVEST) {
-        append(if (verified) " - verified" else " - unverified")
+    if (kind == ActivityKind.HARVEST && !verified) {
+        append(" - unverified")
+    }
+    if (photoPaths.size > 1) {
+        append(" - ")
+        append(photoPaths.size)
+        append(" photos")
+    } else if (photoPath != null) {
+        append(" - photo")
     }
 }
 
@@ -680,17 +652,17 @@ private fun EventType.detailLabel(): String = name.lowercase()
     .replaceFirstChar(Char::uppercase)
 
 private fun Long.monthBucketLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyMonthFormatter)
 
 private fun Long.dayNumberLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyDayFormatter)
 
 private fun Long.monthShortLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyMonthShortFormatter)
 

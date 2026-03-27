@@ -3,9 +3,15 @@ package com.dillon.orcharddex
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
 import com.dillon.orcharddex.data.local.WishlistCultivarEntity
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.FrostSensitivityLevel
+import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeInput
+import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistPriority
 import com.dillon.orcharddex.data.preferences.SettingsRepository
 import com.dillon.orcharddex.data.repository.OrchardRepository
@@ -14,6 +20,7 @@ import com.dillon.orcharddex.notifications.ReminderScheduler
 import com.dillon.orcharddex.sample.SampleDataSeeder
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.flow.first
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -23,6 +30,7 @@ import org.junit.runner.RunWith
 class OrchardRepositoryTest {
     private lateinit var database: OrchardDexDatabase
     private lateinit var repository: OrchardRepository
+    private lateinit var settingsRepository: SettingsRepository
 
     @Before
     fun setUp() {
@@ -30,9 +38,10 @@ class OrchardRepositoryTest {
         database = Room.inMemoryDatabaseBuilder(context, OrchardDexDatabase::class.java)
             .allowMainThreadQueries()
             .build()
+        settingsRepository = SettingsRepository(context)
         repository = OrchardRepository(
             database = database,
-            settingsRepository = SettingsRepository(context),
+            settingsRepository = settingsRepository,
             photoStorage = PhotoStorage(context),
             reminderScheduler = ReminderScheduler(context),
             sampleDataSeeder = SampleDataSeeder()
@@ -135,5 +144,54 @@ class OrchardRepositoryTest {
 
         val savedTrees = database.treeDao().getAllTrees()
         assertThat(savedTrees.map { it.nickname }).contains("Plant 2")
+    }
+
+    @Test
+    fun ensureGrowingLocations_backfillsDefaultLocationAndAssignsLegacyTrees() = runBlocking {
+        settingsRepository.completeOnboarding(
+            orchardName = "Home orchard",
+            locationProfile = ForecastLocationProfile(
+                name = "Home orchard",
+                countryCode = "US",
+                timezoneId = "America/Los_Angeles",
+                hemisphere = Hemisphere.NORTHERN,
+                usdaZoneCode = "10a"
+            ),
+            orchardRegion = ""
+        )
+        database.treeDao().insert(
+            TreeEntity(
+                id = "legacy-tree",
+                orchardName = "Legacy orchard",
+                sectionName = "South row",
+                nickname = null,
+                species = "Mango",
+                cultivar = "Carrie",
+                rootstock = null,
+                source = null,
+                purchaseDate = null,
+                plantedDate = 1_700_000_000_000,
+                plantType = PlantType.IN_GROUND,
+                containerSize = null,
+                sunExposure = "Full sun",
+                frostSensitivity = FrostSensitivityLevel.MEDIUM,
+                frostSensitivityNote = null,
+                irrigationNote = null,
+                status = TreeStatus.ACTIVE,
+                notes = "",
+                tags = "",
+                createdAt = 1L,
+                updatedAt = 1L
+            )
+        )
+
+        repository.ensureGrowingLocations(settingsRepository.settings.first())
+
+        val location = database.growingLocationDao().getAllLocations().single()
+        val savedTree = database.treeDao().getAllTrees().single()
+
+        assertThat(location.name).isEqualTo("Home orchard")
+        assertThat(savedTree.locationId).isEqualTo(location.id)
+        assertThat(savedTree.orchardName).isEqualTo("Legacy orchard")
     }
 }

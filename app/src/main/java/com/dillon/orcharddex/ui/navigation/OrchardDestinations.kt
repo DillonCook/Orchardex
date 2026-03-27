@@ -23,12 +23,14 @@ sealed class BottomDestination(
 
 object OrchardRoutes {
     const val TREE_ID_ARG = "treeId"
+    const val LOG_KIND_ARG = "logKind"
     const val REMINDER_ID_ARG = "reminderId"
     const val HISTORY_KIND_ARG = "kind"
     const val HISTORY_ENTRY_ID_ARG = "entryId"
 
     const val TREE_DETAIL = "treeDetail/{$TREE_ID_ARG}"
     const val TREE_FORM = "treeForm?$TREE_ID_ARG={$TREE_ID_ARG}"
+    const val LOG_FORM = "logForm?$TREE_ID_ARG={$TREE_ID_ARG}&$LOG_KIND_ARG={$LOG_KIND_ARG}"
     const val EVENT_FORM = "eventForm?$TREE_ID_ARG={$TREE_ID_ARG}"
     const val HARVEST_FORM = "harvestForm?$TREE_ID_ARG={$TREE_ID_ARG}"
     const val REMINDER_FORM = "reminderForm?$TREE_ID_ARG={$TREE_ID_ARG}&$REMINDER_ID_ARG={$REMINDER_ID_ARG}"
@@ -38,6 +40,8 @@ object OrchardRoutes {
 
     fun treeDetail(treeId: String) = "treeDetail/$treeId"
     fun treeForm(treeId: String? = null) = "treeForm?$TREE_ID_ARG=${treeId.orEmpty()}"
+    fun logForm(treeId: String? = null, kind: ActivityKind? = null) =
+        "logForm?$TREE_ID_ARG=${treeId.orEmpty()}&$LOG_KIND_ARG=${kind?.name?.lowercase().orEmpty()}"
     fun eventForm(treeId: String? = null) = "eventForm?$TREE_ID_ARG=${treeId.orEmpty()}"
     fun harvestForm(treeId: String? = null) = "harvestForm?$TREE_ID_ARG=${treeId.orEmpty()}"
     fun reminderForm(treeId: String? = null, reminderId: String? = null) =
