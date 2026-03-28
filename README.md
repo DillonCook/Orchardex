@@ -1,6 +1,6 @@
-# OrchardDex
+# OrcharDex
 
-OrchardDex is an offline-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses only on-device storage and requires no account, no backend, and no internet permission at runtime.
+OrcharDex is an offline-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses on-device storage, requires no account and no backend, and now supports optional online location search plus climate lookup for forecast tuning.
 
 ## Stack
 
@@ -30,10 +30,10 @@ OrchardDex is an offline-first Android app for managing subtropical fruit trees,
 
 The project uses a single app module to minimize maintenance cost. Data flows from Room/DataStore through `OrchardRepository` into screen-specific viewmodels.
 
-## Local-Only Design
+## Local-First Design
 
-- No backend, sync, login, analytics, ads, crash reporting, maps, or weather APIs
-- No `INTERNET` permission
+- No backend, sync, login, analytics, ads, or crash reporting
+- Optional user-triggered geocoding and climate API lookups for growing-location setup
 - User photos are copied into app-specific storage under `files/photos`
 - Backup/export uses the system file picker and a versioned zip archive
 - Optional Android Auto Backup excludes large photo files
@@ -79,6 +79,8 @@ Windows:
 .\gradlew.bat bundleRelease
 ```
 
+Release signing setup is documented in [docs/release-signing.md](/C:/Users/Dillo/code/orchardex/docs/release-signing.md).
+
 The unsigned release bundle is produced under `app/build/outputs/bundle/release/`.
 
 ## Signing
@@ -103,6 +105,7 @@ ORCHARDDEX_KEY_PASSWORD=replace-me
 
 - Privacy policy draft: [`docs/privacy-policy.md`](/C:/Users/Dillo/code/orchardex/docs/privacy-policy.md)
 - Release checklist: [`docs/google-play-release-checklist.md`](/C:/Users/Dillo/code/orchardex/docs/google-play-release-checklist.md)
+- Catalog scaling guide: [`docs/phenology-catalog-scaling-playbook.md`](/C:/Users/Dillo/code/orchardex/docs/phenology-catalog-scaling-playbook.md)
 
 ## Changing The Package Name
 

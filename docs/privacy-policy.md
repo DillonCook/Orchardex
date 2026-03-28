@@ -1,19 +1,21 @@
-# Privacy Policy for OrchardDex
+# Privacy Policy for OrcharDex
 
-Last updated: March 18, 2026
+Last updated: March 23, 2026
 
-OrchardDex is an offline-first Android app for managing orchard records, plant histories, reminders, harvest logs, photos, and manual backups.
+Developer: Dillon Cook
+
+OrcharDex is an offline-first Android app for managing orchard records, plant histories, reminders, harvest logs, photos, and manual backups.
 
 ## Summary
 
-- OrchardDex does not require an account.
-- OrchardDex does not use analytics, ads, crash-reporting SDKs, or server sync.
-- OrchardDex does not transmit your orchard data to the developer or third parties.
-- OrchardDex stores your data locally on your device.
+- OrcharDex does not require an account.
+- OrcharDex does not use analytics, ads, crash-reporting SDKs, or server sync.
+- OrcharDex does not transmit your orchard data to the developer or third parties.
+- OrcharDex stores your data locally on your device.
 
-## Data OrchardDex Accesses
+## Data OrcharDex Accesses
 
-OrchardDex may access or store the following information you enter or select:
+OrcharDex may access or store the following information you enter or select:
 
 - Plant records, notes, tags, and orchard details
 - Event logs and harvest logs
@@ -24,7 +26,7 @@ OrchardDex may access or store the following information you enter or select:
 
 ## How Data Is Used
 
-OrchardDex uses your data only to provide app features on your device, including:
+OrcharDex uses your data only to provide app features on your device, including:
 
 - displaying your orchard records
 - scheduling and showing local reminder notifications
@@ -33,7 +35,7 @@ OrchardDex uses your data only to provide app features on your device, including
 
 ## Data Sharing
 
-OrchardDex does not sell, rent, share, or transmit your personal or app data to the developer or any third party.
+OrcharDex does not sell, rent, share, or transmit your personal or app data to the developer or any third party.
 
 The app does not include:
 
@@ -45,11 +47,11 @@ The app does not include:
 
 ## Notifications
 
-If you enable reminders, OrchardDex may request Android's notification permission on supported devices. Reminder notifications are generated locally on your device.
+If you enable reminders, OrcharDex may request Android's notification permission on supported devices. Reminder notifications are generated locally on your device.
 
 ## Photos
 
-When you select a photo, OrchardDex copies it into app-private storage on your device so it can remain attached to your orchard records. OrchardDex uses the Android photo picker and does not request broad media-library permissions.
+When you select a photo, OrcharDex copies it into app-private storage on your device so it can remain attached to your orchard records. OrcharDex uses the Android photo picker and does not request broad media-library permissions.
 
 ## Backup Files
 
@@ -68,8 +70,11 @@ You can delete data by:
 
 ## Security
 
-OrchardDex stores data in app-local Android storage and local databases controlled by the Android app sandbox. No method of storage is perfectly secure, but OrchardDex is designed to minimize exposure by avoiding unnecessary network transmission and third-party services.
+OrcharDex stores data in app-local Android storage and local databases controlled by the Android app sandbox. No method of storage is perfectly secure, but OrcharDex is designed to minimize exposure by avoiding unnecessary network transmission and third-party services.
 
 ## Contact
 
-For privacy questions or requests, use the contact method listed in the OrchardDex Google Play listing.
+For privacy questions or requests, use one of these contact paths:
+
+- the developer contact email listed on the OrcharDex Google Play listing
+- the public issue tracker at https://github.com/DillonCook/Orchardex/issues

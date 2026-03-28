@@ -15,38 +15,50 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.dillon.orcharddex.OrchardDexApp
 import com.dillon.orcharddex.backup.BackupManager
 import com.dillon.orcharddex.backup.BackupValidation
+import com.dillon.orcharddex.data.local.HarvestEntity
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
+import com.dillon.orcharddex.data.local.toForecastLocationProfile
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.model.ActivityKind
-import com.dillon.orcharddex.data.model.CommonSpeciesSuggestions
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventInput
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.GrowingLocationInput
+import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.HarvestInput
 import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.PlantType
+import com.dillon.orcharddex.data.model.PollinationMode
 import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.ReminderInput
+import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeInput
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistInput
-import com.dillon.orcharddex.data.model.WishlistPriority
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.data.preferences.SettingsRepository
 import com.dillon.orcharddex.data.repository.OrchardRepository
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.epochToLocalDate
 import com.dillon.orcharddex.ui.epochToLocalTime
 import com.dillon.orcharddex.ui.localDateAtStartOfDay
 import com.dillon.orcharddex.ui.localDateWithTime
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.time.LocalDate
 import java.time.LocalTime
 
 private const val TREE_ID = "treeId"
+private const val LOG_KIND = "logKind"
 private const val REMINDER_ID = "reminderId"
 private const val HISTORY_KIND = "kind"
 private const val HISTORY_ENTRY_ID = "entryId"
@@ -58,9 +70,9 @@ class DashboardViewModel(
     val dashboard = repository.observeDashboard().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
-        com.dillon.orcharddex.data.model.DashboardModel()
+        null
     )
-    val trees = repository.observeTreeNames().stateIn(
+    val trees = repository.observeTrees().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
@@ -90,21 +102,36 @@ class TreesViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
-    val species = repository.observeSpeciesNames().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        CommonSpeciesSuggestions
-    )
+    val species = repository.observeSpeciesNames()
+        .map { observedSpecies ->
+            (observedSpecies + BloomForecastEngine.supportedSpeciesCatalog())
+                .filter(String::isNotBlank)
+                .distinctBy { it.trim().lowercase() }
+                .sortedBy(String::lowercase)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            BloomForecastEngine.supportedSpeciesCatalog()
+        )
     val cultivars = repository.observeCultivarNames().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
-    val orchards = repository.observeOrchardNames().stateIn(
-        viewModelScope,
-        SharingStarted.WhileSubscribed(5_000),
-        emptyList()
-    )
+    val orchards = repository.observeGrowingLocations()
+        .map { locations ->
+            locations
+                .map(GrowingLocationEntity::name)
+                .filter(String::isNotBlank)
+                .distinctBy(String::lowercase)
+                .sortedBy(String::lowercase)
+        }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            emptyList()
+        )
 }
 
 class HistoryViewModel(
@@ -146,6 +173,7 @@ class HistoryDetailViewModel(
 
 data class TreeFormState(
     val id: String? = null,
+    val locationId: String? = null,
     val orchardName: String = "",
     val sectionName: String = "",
     val nickname: String = "",
@@ -154,7 +182,7 @@ data class TreeFormState(
     val rootstock: String = "",
     val source: String = "",
     val purchaseDate: LocalDate? = null,
-    val plantedDate: LocalDate = LocalDate.now(),
+    val plantedDate: LocalDate = OrchardTime.today(),
     val plantType: PlantType = PlantType.IN_GROUND,
     val containerSize: String = "",
     val sunExposure: String = "",
@@ -165,6 +193,14 @@ data class TreeFormState(
     val hasFruitedBefore: Boolean = false,
     val notes: String = "",
     val tags: String = "",
+    val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val customBloomStartMonth: String = "",
+    val customBloomStartDay: String = "",
+    val customBloomDurationDays: String = "",
+    val selfCompatibilityOverride: SelfCompatibility? = null,
+    val pollinationModeOverride: PollinationMode? = null,
+    val pollinationOverrideNote: String = "",
+    val quantity: String = "1",
     val existingPhotos: List<TreePhotoEntity> = emptyList(),
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: Set<String> = emptySet(),
@@ -175,10 +211,16 @@ data class TreeFormState(
 
 class TreeFormViewModel(
     savedStateHandle: SavedStateHandle,
-    private val repository: OrchardRepository
+    private val repository: OrchardRepository,
+    private val settingsRepository: SettingsRepository
 ) : ViewModel() {
     private val treeId: String? = savedStateHandle[TREE_ID]
     val knownTrees = repository.observeTreeNames().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val locations = repository.observeGrowingLocations().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
@@ -193,6 +235,7 @@ class TreeFormViewModel(
                 state = detail?.let {
                     TreeFormState(
                         id = it.tree.id,
+                        locationId = it.tree.locationId,
                         orchardName = it.tree.orchardName,
                         sectionName = it.tree.sectionName,
                         nickname = it.tree.nickname.orEmpty(),
@@ -212,10 +255,29 @@ class TreeFormViewModel(
                         hasFruitedBefore = it.tree.hasFruitedBefore,
                         notes = it.tree.notes,
                         tags = it.tree.tags,
+                        bloomTimingMode = it.tree.bloomTimingMode,
+                        customBloomStartMonth = it.tree.customBloomStartMonth?.toString().orEmpty(),
+                        customBloomStartDay = it.tree.customBloomStartDay?.toString().orEmpty(),
+                        customBloomDurationDays = it.tree.customBloomDurationDays?.toString().orEmpty(),
+                        selfCompatibilityOverride = it.tree.selfCompatibilityOverride,
+                        pollinationModeOverride = it.tree.pollinationModeOverride,
+                        pollinationOverrideNote = it.tree.pollinationOverrideNote.orEmpty(),
                         existingPhotos = it.photos,
                         isLoading = false
                     )
                 } ?: TreeFormState(isLoading = false)
+            }
+        } else {
+            viewModelScope.launch {
+                val settings = settingsRepository.snapshot()
+                val defaultLocationId = settings.defaultLocationId.takeIf(String::isNotBlank)
+                val defaultLocation = defaultLocationId?.let { locationId ->
+                    repository.getGrowingLocation(locationId)
+                }
+                state = state.copy(
+                    locationId = defaultLocation?.id ?: defaultLocationId,
+                    orchardName = defaultLocation?.name ?: settings.orchardName
+                )
             }
         }
     }
@@ -244,11 +306,33 @@ class TreeFormViewModel(
             state = state.copy(errorMessage = "Species is required.")
             return
         }
+        val quantity = if (state.id == null) {
+            state.quantity.toIntOrNull()?.takeIf { it > 0 }
+        } else {
+            1
+        }
+        if (quantity == null) {
+            state = state.copy(errorMessage = "Quantity must be at least 1.")
+            return
+        }
+        val customBloomStartMonth = state.customBloomStartMonth.toIntOrNull()
+        val customBloomStartDay = state.customBloomStartDay.toIntOrNull()
+        val customBloomDurationDays = state.customBloomDurationDays.toIntOrNull()
+        if (state.bloomTimingMode == BloomTimingMode.CUSTOM) {
+            val customStartDateValid = runCatching {
+                java.time.LocalDate.of(2024, customBloomStartMonth ?: 0, customBloomStartDay ?: 0)
+            }.isSuccess
+            if (!customStartDateValid || customBloomDurationDays == null || customBloomDurationDays <= 0) {
+                state = state.copy(errorMessage = "Custom bloom timing needs a valid start month/day and duration.")
+                return
+            }
+        }
         viewModelScope.launch {
             state = state.copy(isSaving = true, errorMessage = null)
             val savedTreeId = repository.saveTree(
                 TreeInput(
                     id = state.id,
+                    locationId = state.locationId,
                     orchardName = state.orchardName,
                     sectionName = state.sectionName,
                     nickname = state.nickname,
@@ -268,6 +352,14 @@ class TreeFormViewModel(
                     hasFruitedBefore = state.hasFruitedBefore,
                     notes = state.notes,
                     tags = state.tags,
+                    bloomTimingMode = state.bloomTimingMode,
+                    customBloomStartMonth = customBloomStartMonth,
+                    customBloomStartDay = customBloomStartDay,
+                    customBloomDurationDays = customBloomDurationDays,
+                    selfCompatibilityOverride = state.selfCompatibilityOverride,
+                    pollinationModeOverride = state.pollinationModeOverride,
+                    pollinationOverrideNote = state.pollinationOverrideNote,
+                    quantity = quantity,
                     newPhotoUris = state.newPhotoUris,
                     removedPhotoIds = state.removedPhotoIds.toList()
                 )
@@ -313,18 +405,217 @@ class TreeDetailViewModel(
             repository.addTreePhotos(treeId, uris)
         }
     }
+
+    fun setHeroPhoto(photoId: String) {
+        viewModelScope.launch {
+            repository.setTreeHeroPhoto(treeId, photoId)
+        }
+    }
+}
+
+data class LogFormState(
+    val kind: ActivityKind = ActivityKind.EVENT,
+    val applyToAllActive: Boolean = false,
+    val selectedTreeIds: Set<String> = emptySet(),
+    val eventType: EventType = EventType.NOTE,
+    val logDate: LocalDate = OrchardTime.today(),
+    val notes: String = "",
+    val cost: String = "",
+    val quantityValue: String = "",
+    val quantityUnit: String = "",
+    val qualityRating: Int = 3,
+    val firstFruit: Boolean = false,
+    val verified: Boolean = true,
+    val photoUris: List<Uri> = emptyList(),
+    val isSaving: Boolean = false,
+    val errorMessage: String? = null
+)
+
+class LogFormViewModel(
+    savedStateHandle: SavedStateHandle,
+    private val repository: OrchardRepository
+) : ViewModel() {
+    private val initialTreeId: String? = savedStateHandle.get<String>(TREE_ID)?.takeIf(String::isNotBlank)
+    private val initialKind: ActivityKind = savedStateHandle.get<String>(LOG_KIND)
+        ?.uppercase()
+        ?.let { value -> runCatching { ActivityKind.valueOf(value) }.getOrNull() }
+        ?: ActivityKind.EVENT
+
+    var state by mutableStateOf(
+        LogFormState(
+            kind = initialKind,
+            selectedTreeIds = initialTreeId?.let(::setOf) ?: emptySet(),
+            quantityUnit = if (initialKind == ActivityKind.HARVEST) "fruit" else ""
+        )
+    )
+        private set
+
+    val trees = repository.observeTreeNames().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val harvests = repository.observeAllHarvests().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+
+    fun update(update: LogFormState.() -> LogFormState) {
+        state = state.update().copy(errorMessage = null)
+    }
+
+    fun setKind(kind: ActivityKind) {
+        state = when (kind) {
+            ActivityKind.EVENT -> state.copy(
+                kind = kind,
+                errorMessage = null
+            )
+            ActivityKind.HARVEST -> state.copy(
+                kind = kind,
+                applyToAllActive = false,
+                quantityUnit = state.quantityUnit.ifBlank { "fruit" },
+                errorMessage = null
+            )
+        }
+    }
+
+    fun setApplyToAllActive(enabled: Boolean) {
+        state = state.copy(applyToAllActive = enabled, errorMessage = null)
+    }
+
+    fun applyLastHarvest(harvest: HarvestEntity) {
+        state = state.copy(
+            quantityValue = harvest.quantityValue.toString().removeSuffix(".0"),
+            quantityUnit = harvest.quantityUnit,
+            qualityRating = harvest.qualityRating,
+            errorMessage = null
+        )
+    }
+
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        state = state.copy(
+            selectedTreeIds = if (treeId in selected) selected - treeId else selected + treeId,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
+    }
+
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(selectedTreeIds = updated, errorMessage = null)
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
+    }
+
+    fun addPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        state = state.copy(photoUris = (state.photoUris + uris).distinct(), errorMessage = null)
+    }
+
+    fun removePhoto(uri: Uri) {
+        state = state.copy(photoUris = state.photoUris - uri, errorMessage = null)
+    }
+
+    fun save(onSaved: (String) -> Unit) {
+        when (state.kind) {
+            ActivityKind.EVENT -> saveEvent(onSaved)
+            ActivityKind.HARVEST -> saveHarvest(onSaved)
+        }
+    }
+
+    private fun saveEvent(onSaved: (String) -> Unit) {
+        val targetTreeIds = if (state.applyToAllActive) {
+            trees.value.filter { it.status == TreeStatus.ACTIVE }.map(TreeEntity::id)
+        } else {
+            state.selectedTreeIds.toList()
+        }.distinct()
+
+        if (targetTreeIds.isEmpty()) {
+            state = state.copy(
+                errorMessage = if (state.applyToAllActive) {
+                    "No active plants are available."
+                } else {
+                    "Select at least one plant."
+                }
+            )
+            return
+        }
+
+        viewModelScope.launch {
+            state = state.copy(isSaving = true)
+            repository.addEvents(
+                targetTreeIds.map { treeId ->
+                    EventInput(
+                        treeId = treeId,
+                        eventType = state.eventType,
+                        eventDate = localDateAtStartOfDay(state.logDate),
+                        notes = state.notes,
+                        cost = state.cost.toDoubleOrNull(),
+                        quantityValue = state.quantityValue.toDoubleOrNull(),
+                        quantityUnit = state.quantityUnit,
+                        photoUris = state.photoUris
+                    )
+                }
+            )
+            state = state.copy(isSaving = false)
+            onSaved(targetTreeIds.singleOrNull().orEmpty())
+        }
+    }
+
+    private fun saveHarvest(onSaved: (String) -> Unit) {
+        val targetTreeIds = state.selectedTreeIds.toList()
+        val quantity = state.quantityValue.toDoubleOrNull()
+        if (targetTreeIds.isEmpty() || quantity == null) {
+            state = state.copy(errorMessage = "Pick at least one plant and enter a quantity.")
+            return
+        }
+        viewModelScope.launch {
+            state = state.copy(isSaving = true)
+            repository.addHarvests(
+                targetTreeIds.map { treeId ->
+                    HarvestInput(
+                        treeId = treeId,
+                        harvestDate = localDateAtStartOfDay(state.logDate),
+                        quantityValue = quantity,
+                        quantityUnit = state.quantityUnit,
+                        qualityRating = state.qualityRating,
+                        firstFruit = state.firstFruit,
+                        verified = state.verified,
+                        notes = state.notes,
+                        photoUris = state.photoUris
+                    )
+                }
+            )
+            state = state.copy(isSaving = false)
+            onSaved(targetTreeIds.singleOrNull().orEmpty())
+        }
+    }
 }
 
 data class EventFormState(
     val applyToAllActive: Boolean = false,
     val selectedTreeIds: Set<String> = emptySet(),
     val eventType: EventType = EventType.NOTE,
-    val eventDate: LocalDate = LocalDate.now(),
+    val eventDate: LocalDate = OrchardTime.today(),
     val notes: String = "",
     val cost: String = "",
     val quantityValue: String = "",
     val quantityUnit: String = "",
-    val photoUri: Uri? = null,
+    val photoUris: List<Uri> = emptyList(),
     val isSaving: Boolean = false,
     val errorMessage: String? = null
 )
@@ -367,8 +658,29 @@ class EventFormViewModel(
         state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
     }
 
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(selectedTreeIds = updated, errorMessage = null)
+    }
+
     fun clearTreeSelection() {
         state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
+    }
+
+    fun addPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        state = state.copy(photoUris = (state.photoUris + uris).distinct(), errorMessage = null)
+    }
+
+    fun removePhoto(uri: Uri) {
+        state = state.copy(photoUris = state.photoUris - uri, errorMessage = null)
     }
 
     fun save(onSaved: (String) -> Unit) {
@@ -401,7 +713,7 @@ class EventFormViewModel(
                         cost = state.cost.toDoubleOrNull(),
                         quantityValue = state.quantityValue.toDoubleOrNull(),
                         quantityUnit = state.quantityUnit,
-                        photoUri = state.photoUri
+                        photoUris = state.photoUris
                     )
                 }
             )
@@ -412,14 +724,15 @@ class EventFormViewModel(
 }
 
 data class HarvestFormState(
-    val treeId: String? = null,
-    val harvestDate: LocalDate = LocalDate.now(),
+    val selectedTreeIds: Set<String> = emptySet(),
+    val harvestDate: LocalDate = OrchardTime.today(),
     val quantityValue: String = "",
     val quantityUnit: String = "fruit",
     val qualityRating: Int = 3,
     val firstFruit: Boolean = false,
+    val verified: Boolean = true,
     val notes: String = "",
-    val photoUri: Uri? = null,
+    val photoUris: List<Uri> = emptyList(),
     val isSaving: Boolean = false,
     val errorMessage: String? = null
 )
@@ -429,10 +742,19 @@ class HarvestFormViewModel(
     private val repository: OrchardRepository
 ) : ViewModel() {
     private val initialTreeId: String? = savedStateHandle[TREE_ID]
-    var state by mutableStateOf(HarvestFormState(treeId = initialTreeId))
+    var state by mutableStateOf(
+        HarvestFormState(
+            selectedTreeIds = initialTreeId?.takeIf(String::isNotBlank)?.let(::setOf) ?: emptySet()
+        )
+    )
         private set
 
     val trees = repository.observeTreeNames().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val harvests = repository.observeAllHarvests().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
@@ -442,29 +764,78 @@ class HarvestFormViewModel(
         state = state.update().copy(errorMessage = null)
     }
 
+    fun applyLastHarvest(harvest: HarvestEntity) {
+        state = state.copy(
+            quantityValue = harvest.quantityValue.toString().removeSuffix(".0"),
+            quantityUnit = harvest.quantityUnit,
+            qualityRating = harvest.qualityRating,
+            errorMessage = null
+        )
+    }
+
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        state = state.copy(
+            selectedTreeIds = if (treeId in selected) selected - treeId else selected + treeId,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        state = state.copy(selectedTreeIds = state.selectedTreeIds + treeIds, errorMessage = null)
+    }
+
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(selectedTreeIds = updated, errorMessage = null)
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(selectedTreeIds = emptySet(), errorMessage = null)
+    }
+
+    fun addPhotos(uris: List<Uri>) {
+        if (uris.isEmpty()) return
+        state = state.copy(photoUris = (state.photoUris + uris).distinct(), errorMessage = null)
+    }
+
+    fun removePhoto(uri: Uri) {
+        state = state.copy(photoUris = state.photoUris - uri, errorMessage = null)
+    }
+
     fun save(onSaved: (String) -> Unit) {
-        val treeId = state.treeId
+        val targetTreeIds = state.selectedTreeIds.toList()
         val quantity = state.quantityValue.toDoubleOrNull()
-        if (treeId.isNullOrBlank() || quantity == null) {
-            state = state.copy(errorMessage = "Pick a tree and enter a quantity.")
+        if (targetTreeIds.isEmpty() || quantity == null) {
+            state = state.copy(errorMessage = "Pick at least one plant and enter a quantity.")
             return
         }
         viewModelScope.launch {
             state = state.copy(isSaving = true)
-            repository.addHarvest(
-                HarvestInput(
-                    treeId = treeId,
-                    harvestDate = localDateAtStartOfDay(state.harvestDate),
-                    quantityValue = quantity,
-                    quantityUnit = state.quantityUnit,
-                    qualityRating = state.qualityRating,
-                    firstFruit = state.firstFruit,
-                    notes = state.notes,
-                    photoUri = state.photoUri
-                )
+            repository.addHarvests(
+                targetTreeIds.map { treeId ->
+                    HarvestInput(
+                        treeId = treeId,
+                        harvestDate = localDateAtStartOfDay(state.harvestDate),
+                        quantityValue = quantity,
+                        quantityUnit = state.quantityUnit,
+                        qualityRating = state.qualityRating,
+                        firstFruit = state.firstFruit,
+                        verified = state.verified,
+                        notes = state.notes,
+                        photoUris = state.photoUris
+                    )
+                }
             )
             state = state.copy(isSaving = false)
-            onSaved(treeId)
+            onSaved(targetTreeIds.singleOrNull().orEmpty())
         }
     }
 }
@@ -473,6 +844,11 @@ class DexViewModel(
     private val repository: OrchardRepository
 ) : ViewModel() {
     val trees = repository.observeTrees().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
+    val history = repository.observeHistory().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
@@ -488,7 +864,6 @@ class DexViewModel(
 
     var addSpecies by mutableStateOf("")
     var addCultivar by mutableStateOf("")
-    var addPriority by mutableStateOf(WishlistPriority.MEDIUM)
     var addNotes by mutableStateOf("")
 
     fun showAddDialog() {
@@ -499,18 +874,16 @@ class DexViewModel(
         addDialogVisible = false
         addSpecies = ""
         addCultivar = ""
-        addPriority = WishlistPriority.MEDIUM
         addNotes = ""
     }
 
     fun saveWishlist() {
-        if (addSpecies.isBlank() || addCultivar.isBlank()) return
+        if (addSpecies.isBlank()) return
         viewModelScope.launch {
             repository.addWishlist(
                 WishlistInput(
                     species = addSpecies,
                     cultivar = addCultivar,
-                    priority = addPriority,
                     notes = addNotes
                 )
             )
@@ -547,12 +920,20 @@ class ReminderListViewModel(
     }
 }
 
+enum class ReminderTargetMode {
+    GENERAL,
+    SELECTED,
+    ALL_ACTIVE
+}
+
 data class ReminderFormState(
     val id: String? = null,
     val treeId: String? = null,
+    val targetMode: ReminderTargetMode = ReminderTargetMode.GENERAL,
+    val selectedTreeIds: Set<String> = emptySet(),
     val title: String = "",
     val notes: String = "",
-    val dueDate: LocalDate = LocalDate.now(),
+    val dueDate: LocalDate = OrchardTime.today(),
     val dueTime: LocalTime = LocalTime.of(8, 0),
     val hasTime: Boolean = false,
     val recurrenceType: RecurrenceType = RecurrenceType.NONE,
@@ -572,7 +953,14 @@ class ReminderFormViewModel(
 ) : ViewModel() {
     private val reminderId: String? = savedStateHandle[REMINDER_ID]
     private val treeIdArg: String? = savedStateHandle[TREE_ID]
-    var state by mutableStateOf(ReminderFormState(treeId = treeIdArg, isLoading = reminderId != null))
+    var state by mutableStateOf(
+        ReminderFormState(
+            treeId = treeIdArg,
+            targetMode = if (treeIdArg.isNullOrBlank()) ReminderTargetMode.GENERAL else ReminderTargetMode.SELECTED,
+            selectedTreeIds = treeIdArg?.takeIf(String::isNotBlank)?.let(::setOf) ?: emptySet(),
+            isLoading = reminderId != null
+        )
+    )
         private set
 
     val trees = repository.observeTreeNames().stateIn(
@@ -599,6 +987,8 @@ class ReminderFormViewModel(
                     ReminderFormState(
                         id = it.id,
                         treeId = it.treeId,
+                        targetMode = if (it.treeId == null) ReminderTargetMode.GENERAL else ReminderTargetMode.SELECTED,
+                        selectedTreeIds = it.treeId?.let(::setOf) ?: emptySet(),
                         title = it.title,
                         notes = it.notes,
                         dueDate = epochToLocalDate(it.dueAt),
@@ -622,9 +1012,95 @@ class ReminderFormViewModel(
         state = state.update().copy(errorMessage = null)
     }
 
+    fun setTargetMode(mode: ReminderTargetMode) {
+        state = when (mode) {
+            ReminderTargetMode.GENERAL -> state.copy(
+                targetMode = mode,
+                treeId = null,
+                selectedTreeIds = emptySet(),
+                errorMessage = null
+            )
+            ReminderTargetMode.SELECTED -> state.copy(
+                targetMode = mode,
+                treeId = state.selectedTreeIds.singleOrNull(),
+                errorMessage = null
+            )
+            ReminderTargetMode.ALL_ACTIVE -> state.copy(
+                targetMode = mode,
+                treeId = null,
+                errorMessage = null
+            )
+        }
+    }
+
+    fun toggleTreeSelection(treeId: String) {
+        val selected = state.selectedTreeIds
+        val updated = if (treeId in selected) selected - treeId else selected + treeId
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun selectTreeIds(treeIds: Collection<String>) {
+        val updated = state.selectedTreeIds + treeIds
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun toggleTreeGroupSelection(treeIds: Collection<String>) {
+        val group = treeIds.toSet()
+        if (group.isEmpty()) return
+        val selected = state.selectedTreeIds
+        val updated = if (group.all { it in selected }) {
+            selected - group
+        } else {
+            selected + group
+        }
+        state = state.copy(
+            selectedTreeIds = updated,
+            treeId = updated.singleOrNull(),
+            targetMode = ReminderTargetMode.SELECTED,
+            errorMessage = null
+        )
+    }
+
+    fun clearTreeSelection() {
+        state = state.copy(
+            selectedTreeIds = emptySet(),
+            treeId = null,
+            errorMessage = null
+        )
+    }
+
     fun save(onSaved: () -> Unit) {
         if (state.title.isBlank()) {
             state = state.copy(errorMessage = "Title is required.")
+            return
+        }
+        val targetTreeIds = if (state.id != null) {
+            listOf(state.treeId)
+        } else {
+            when (state.targetMode) {
+                ReminderTargetMode.GENERAL -> listOf(null)
+                ReminderTargetMode.SELECTED -> state.selectedTreeIds.toList()
+                ReminderTargetMode.ALL_ACTIVE -> trees.value
+                    .filter { it.status == TreeStatus.ACTIVE }
+                    .map(TreeEntity::id)
+            }
+        }
+        if (state.id == null && state.targetMode == ReminderTargetMode.SELECTED && targetTreeIds.isEmpty()) {
+            state = state.copy(errorMessage = "Select at least one plant.")
+            return
+        }
+        if (state.id == null && state.targetMode == ReminderTargetMode.ALL_ACTIVE && targetTreeIds.isEmpty()) {
+            state = state.copy(errorMessage = "No active plants are available.")
             return
         }
         viewModelScope.launch {
@@ -634,20 +1110,22 @@ class ReminderFormViewModel(
             } else {
                 localDateWithTime(state.dueDate, LocalTime.of(8, 0))
             }
-            repository.saveReminder(
-                ReminderInput(
-                    id = state.id,
-                    treeId = state.treeId,
-                    title = state.title,
-                    notes = state.notes,
-                    dueAt = dueAt,
-                    hasTime = state.hasTime,
-                    recurrenceType = state.recurrenceType,
-                    recurrenceIntervalDays = state.recurrenceIntervalDays.toIntOrNull(),
-                    enabled = state.enabled,
-                    leadTimeMode = state.leadTimeMode,
-                    customLeadTimeHours = state.customLeadTimeHours.toIntOrNull()
-                )
+            repository.saveReminders(
+                targetTreeIds.map { targetTreeId ->
+                    ReminderInput(
+                        id = state.id,
+                        treeId = if (state.id != null) state.treeId else targetTreeId,
+                        title = state.title,
+                        notes = state.notes,
+                        dueAt = dueAt,
+                        hasTime = state.hasTime,
+                        recurrenceType = state.recurrenceType,
+                        recurrenceIntervalDays = state.recurrenceIntervalDays.toIntOrNull(),
+                        enabled = state.enabled,
+                        leadTimeMode = state.leadTimeMode,
+                        customLeadTimeHours = state.customLeadTimeHours.toIntOrNull()
+                    )
+                }
             )
             state = state.copy(isSaving = false)
             onSaved()
@@ -665,6 +1143,11 @@ class SettingsViewModel(
         SharingStarted.WhileSubscribed(5_000),
         AppSettings()
     )
+    val locations = repository.observeGrowingLocations().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
 
     var busy by mutableStateOf(false)
         private set
@@ -681,6 +1164,18 @@ class SettingsViewModel(
     var confirmLoadSample by mutableStateOf(false)
         private set
 
+    var locationSearchQuery by mutableStateOf("")
+        private set
+
+    var locationSearchResults by mutableStateOf<List<LocationSearchResult>>(emptyList())
+        private set
+
+    var locationSearchBusy by mutableStateOf(false)
+        private set
+
+    var locationSearchError by mutableStateOf<String?>(null)
+        private set
+
     fun updateTheme(mode: AppThemeMode) {
         viewModelScope.launch {
             settingsRepository.updateTheme(mode)
@@ -693,13 +1188,37 @@ class SettingsViewModel(
         }
     }
 
-    fun updateOrchardProfile(name: String, usdaZone: String) {
+    fun updateOrchardProfile(name: String, locationProfile: ForecastLocationProfile) {
         viewModelScope.launch {
-            val trimmedName = name.trim()
-            val normalizedZone = usdaZone.trim().lowercase()
-            settingsRepository.updateOrchardName(trimmedName)
-            settingsRepository.updateUsdaZone(normalizedZone)
-            repository.syncOrchardName(trimmedName)
+            busy = true
+            try {
+                val snapshot = settingsRepository.snapshot()
+                val existingDefaultLocation = snapshot.defaultLocationId
+                    .takeIf(String::isNotBlank)
+                    ?.let { locationId -> repository.getGrowingLocation(locationId) }
+                val savedLocation = repository.saveGrowingLocation(
+                    GrowingLocationInput(
+                        id = snapshot.defaultLocationId.takeIf(String::isNotBlank),
+                        name = name.trim(),
+                        countryCode = locationProfile.countryCode,
+                        timezoneId = locationProfile.timezoneId,
+                        hemisphere = locationProfile.hemisphere,
+                        latitudeDeg = locationProfile.latitudeDeg,
+                        longitudeDeg = locationProfile.longitudeDeg,
+                        elevationM = locationProfile.elevationM,
+                        usdaZoneCode = locationProfile.usdaZoneCode,
+                        chillHoursBand = locationProfile.chillHoursBand,
+                        microclimateFlags = locationProfile.microclimateFlags,
+                        notes = existingDefaultLocation?.notes ?: locationProfile.notes
+                    )
+                )
+                settingsRepository.updateDefaultLocationId(savedLocation.id)
+                settingsRepository.updateOrchardName(savedLocation.name)
+                settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
+                settingsRepository.updateOrchardRegion("")
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -709,12 +1228,100 @@ class SettingsViewModel(
         }
     }
 
-    fun completeOnboarding(orchardName: String, usdaZone: String) {
+    fun completeOnboarding(
+        orchardName: String,
+        locationProfile: ForecastLocationProfile
+    ) {
         viewModelScope.launch {
             val trimmed = orchardName.trim()
-            val normalizedZone = usdaZone.trim().lowercase()
-            settingsRepository.completeOnboarding(trimmed, normalizedZone)
-            repository.syncOrchardName(trimmed)
+            settingsRepository.completeOnboarding(trimmed, locationProfile, "")
+            repository.ensureGrowingLocations(settingsRepository.settings.first())
+        }
+    }
+
+    fun saveGrowingLocation(input: GrowingLocationInput) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val savedLocation = repository.saveGrowingLocation(input)
+                val snapshot = settingsRepository.snapshot()
+                if (snapshot.defaultLocationId.isBlank() || snapshot.defaultLocationId == savedLocation.id) {
+                    settingsRepository.updateDefaultLocationId(savedLocation.id)
+                    settingsRepository.updateOrchardName(savedLocation.name)
+                    settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
+                    settingsRepository.updateOrchardRegion("")
+                }
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun setDefaultGrowingLocation(locationId: String) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val location = repository.getGrowingLocation(locationId) ?: return@launch
+                settingsRepository.updateDefaultLocationId(location.id)
+                settingsRepository.updateOrchardName(location.name)
+                settingsRepository.updateForecastLocation(location.toForecastLocationProfile())
+                settingsRepository.updateOrchardRegion("")
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun updateLocationSearchQuery(query: String) {
+        locationSearchQuery = query
+        locationSearchResults = emptyList()
+        locationSearchError = null
+    }
+
+    fun clearLocationSearch() {
+        locationSearchQuery = ""
+        locationSearchResults = emptyList()
+        locationSearchError = null
+        locationSearchBusy = false
+    }
+
+    fun searchLocationMatches(query: String = locationSearchQuery) {
+        viewModelScope.launch {
+            val trimmed = query.trim()
+            locationSearchQuery = query
+            if (trimmed.length < 2) {
+                locationSearchResults = emptyList()
+                locationSearchError = "Enter at least 2 characters."
+                return@launch
+            }
+            locationSearchBusy = true
+            locationSearchError = null
+            try {
+                locationSearchResults = repository.searchGrowingLocations(trimmed)
+                if (locationSearchResults.isEmpty()) {
+                    locationSearchError = "No matches found."
+                }
+            } catch (_: Exception) {
+                locationSearchResults = emptyList()
+                locationSearchError = "Location search is unavailable right now."
+            } finally {
+                locationSearchBusy = false
+            }
+        }
+    }
+
+    fun refreshLocationClimate(locationId: String) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val refreshed = repository.refreshLocationClimate(locationId) ?: return@launch
+                val snapshot = settingsRepository.snapshot()
+                if (snapshot.defaultLocationId == refreshed.id) {
+                    settingsRepository.updateForecastLocation(refreshed.toForecastLocationProfile())
+                }
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -745,6 +1352,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             busy = true
             backupManager.importReplaceAll(uri)
+            repository.ensureGrowingLocations(settingsRepository.settings.first())
             busy = false
             dismissPendingImport()
         }
@@ -780,6 +1388,7 @@ class SettingsViewModel(
             busy = true
             confirmLoadSample = false
             repository.loadSampleDataReplaceAll()
+            repository.ensureGrowingLocations(settingsRepository.settings.first())
             busy = false
         }
     }
@@ -796,8 +1405,15 @@ object OrchardViewModelProvider {
         initializer { TreesViewModel(orchardDexApplication().container.repository) }
         initializer { HistoryViewModel(orchardDexApplication().container.repository) }
         initializer { HistoryDetailViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
-        initializer { TreeFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
+        initializer {
+            TreeFormViewModel(
+                this.createSavedStateHandle(),
+                orchardDexApplication().container.repository,
+                orchardDexApplication().container.settingsRepository
+            )
+        }
         initializer { TreeDetailViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
+        initializer { LogFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { EventFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { HarvestFormViewModel(this.createSavedStateHandle(), orchardDexApplication().container.repository) }
         initializer { DexViewModel(orchardDexApplication().container.repository) }

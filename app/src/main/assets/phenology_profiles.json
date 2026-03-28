@@ -1,0 +1,22 @@
+{
+  "speciesProfiles": [
+    {
+      "key": "dragon fruit",
+      "aliases": [
+        "dragon fruit",
+        "dragonfruit",
+        "pitaya"
+      ],
+      "referenceZoneCode": "10b",
+      "startMonth": 5,
+      "startDay": 1,
+      "durationDays": 155,
+      "shiftDaysPerHalfZone": 0,
+      "defaultPhase": "MID",
+      "forecastBehavior": "WINDOW",
+      "pollinationRequirement": "CROSS_POLLINATION_RECOMMENDED",
+      "catalogSpeciesLabel": "dragon fruit"
+    }
+  ],
+  "cultivarProfiles": []
+}

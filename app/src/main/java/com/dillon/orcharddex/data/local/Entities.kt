@@ -6,27 +6,71 @@ import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
+import com.dillon.orcharddex.data.model.BloomTimingMode
+import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.EventType
+import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
+import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.MicroclimateFlag
 import com.dillon.orcharddex.data.model.PlantType
+import com.dillon.orcharddex.data.model.PollinationMode
 import com.dillon.orcharddex.data.model.RecurrenceType
+import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistPriority
 import kotlinx.serialization.Serializable
 
 @Serializable
 @Entity(
+    tableName = "growing_locations",
+    indices = [Index("name")]
+)
+data class GrowingLocationEntity(
+    @PrimaryKey val id: String,
+    val name: String,
+    val countryCode: String,
+    val timezoneId: String,
+    val hemisphere: Hemisphere,
+    val latitudeDeg: Double?,
+    val longitudeDeg: Double?,
+    val elevationM: Double?,
+    val usdaZoneCode: String?,
+    val chillHoursBand: ChillHoursBand,
+    val microclimateFlags: Set<MicroclimateFlag>,
+    val climateSource: String? = null,
+    val climateFetchedAt: Long? = null,
+    val climateMeanMonthlyTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMinTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMaxTempC: List<Double> = emptyList(),
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long
+)
+
+@Serializable
+@Entity(
     tableName = "trees",
+    foreignKeys = [
+        ForeignKey(
+            entity = GrowingLocationEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["locationId"],
+            onDelete = ForeignKey.SET_NULL
+        )
+    ],
     indices = [
         Index("species"),
         Index("cultivar"),
         Index("orchardName"),
-        Index("status")
+        Index("status"),
+        Index("locationId")
     ]
 )
 data class TreeEntity(
     @PrimaryKey val id: String,
+    val locationId: String? = null,
     val orchardName: String,
     val sectionName: String,
     val nickname: String?,
@@ -46,6 +90,13 @@ data class TreeEntity(
     val hasFruitedBefore: Boolean = false,
     val notes: String,
     val tags: String,
+    val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val customBloomStartMonth: Int? = null,
+    val customBloomStartDay: Int? = null,
+    val customBloomDurationDays: Int? = null,
+    val selfCompatibilityOverride: SelfCompatibility? = null,
+    val pollinationModeOverride: PollinationMode? = null,
+    val pollinationOverrideNote: String? = null,
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -66,6 +117,22 @@ data class TreeEntity(
 data class TreePhotoEntity(
     @PrimaryKey val id: String,
     val treeId: String,
+    val relativePath: String,
+    val caption: String?,
+    val createdAt: Long,
+    val sortOrder: Int,
+    val isHero: Boolean = false
+)
+
+@Serializable
+@Entity(
+    tableName = "activity_photos",
+    indices = [Index(value = ["ownerKind", "ownerId"]), Index("relativePath")]
+)
+data class ActivityPhotoEntity(
+    @PrimaryKey val id: String,
+    val ownerKind: String,
+    val ownerId: String,
     val relativePath: String,
     val caption: String?,
     val createdAt: Long,
@@ -119,6 +186,7 @@ data class HarvestEntity(
     val quantityUnit: String,
     val qualityRating: Int,
     val firstFruit: Boolean,
+    val verified: Boolean = true,
     val notes: String,
     val photoPath: String?,
     val createdAt: Long
@@ -177,4 +245,27 @@ data class TreeWithPhotos(
         entityColumn = "treeId"
     )
     val photos: List<TreePhotoEntity>
+)
+
+fun GrowingLocationEntity.toForecastLocationProfile(): ForecastLocationProfile = ForecastLocationProfile(
+    name = name,
+    countryCode = countryCode,
+    timezoneId = timezoneId,
+    hemisphere = hemisphere,
+    latitudeDeg = latitudeDeg,
+    longitudeDeg = longitudeDeg,
+    elevationM = elevationM,
+    usdaZoneCode = usdaZoneCode,
+    chillHoursBand = chillHoursBand,
+    microclimateFlags = microclimateFlags,
+    climateFingerprint = climateSource?.takeIf(String::isNotBlank)?.let { source ->
+        com.dillon.orcharddex.data.model.LocationClimateFingerprint(
+            source = source,
+            fetchedAt = climateFetchedAt ?: 0L,
+            meanMonthlyTempC = climateMeanMonthlyTempC,
+            meanMonthlyMinTempC = climateMeanMonthlyMinTempC,
+            meanMonthlyMaxTempC = climateMeanMonthlyMaxTempC
+        )
+    },
+    notes = notes
 )

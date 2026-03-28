@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
@@ -16,12 +18,11 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material3.Button
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -46,16 +47,15 @@ import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
-import com.dillon.orcharddex.ui.components.FeatureCard
 import com.dillon.orcharddex.ui.components.LocalPhotoStrip
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.toDateLabel
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.viewmodel.HistoryDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.HistoryViewModel
 import java.io.File
 import java.time.Instant
-import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 private val historyMonthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
@@ -70,17 +70,35 @@ private enum class HistoryQuickFilter(val label: String) {
     ISSUES("Issues")
 }
 
+private enum class HarvestTracker(val label: String) {
+    CURRENT_YEAR("Current year"),
+    TOTAL("Total harvests")
+}
+
+private data class HarvestSpeciesCount(
+    val species: String,
+    val harvestCount: Int
+)
+
+private data class SeasonalSummary(
+    val year: Int,
+    val harvestCount: Int,
+    val firstFruitCount: Int,
+    val speciesCount: Int,
+    val topSpecies: String?,
+    val peakMonth: String?
+)
+
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
     onEntryClick: (ActivityKind, String) -> Unit,
-    onAddEvent: () -> Unit,
-    onAddHarvest: () -> Unit
+    onAddLog: () -> Unit
 ) {
     val history by viewModel.history.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
     var quickFilter by rememberSaveable { mutableStateOf(HistoryQuickFilter.ALL) }
-    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
+    var selectedTracker by rememberSaveable { mutableStateOf<HarvestTracker?>(null) }
 
     val filteredHistory = remember(history, search, quickFilter) {
         val query = search.trim().lowercase()
@@ -91,41 +109,72 @@ fun HistoryScreen(
     val groupedHistory = remember(filteredHistory) {
         filteredHistory.groupBy { it.date.monthBucketLabel() }.toList()
     }
-    val totalHarvests = remember(history) { history.count { it.kind == ActivityKind.HARVEST } }
-
-    if (addMenuVisible) {
-        ModalBottomSheet(onDismissRequest = { addMenuVisible = false }) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Text("Add to history", style = MaterialTheme.typography.titleLarge)
-                Button(
-                    onClick = {
-                        addMenuVisible = false
-                        onAddEvent()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Add event") }
-                Button(
-                    onClick = {
-                        addMenuVisible = false
-                        onAddHarvest()
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) { Text("Add harvest") }
-                TextButton(
-                    onClick = { addMenuVisible = false },
-                    modifier = Modifier.align(Alignment.End)
-                ) { Text("Close") }
-            }
+    val currentYear = remember { OrchardTime.currentYear() }
+    val harvestHistory = remember(history) {
+        history.filter { entry -> entry.kind == ActivityKind.HARVEST }
+    }
+    val currentYearHarvests = remember(harvestHistory, currentYear) {
+        harvestHistory.filter { entry ->
+            Instant.ofEpochMilli(entry.date).atZone(OrchardTime.zoneId()).year == currentYear
         }
+    }
+    val trackerEntries = selectedTracker?.let { tracker ->
+        when (tracker) {
+            HarvestTracker.CURRENT_YEAR -> currentYearHarvests
+            HarvestTracker.TOTAL -> harvestHistory
+        }
+    }.orEmpty()
+    val trackerSpeciesCounts = remember(trackerEntries) {
+        trackerEntries
+            .groupingBy { it.species.ifBlank { "Unknown species" } }
+            .eachCount()
+            .map { (species, count) -> HarvestSpeciesCount(species = species, harvestCount = count) }
+            .sortedWith(compareByDescending<HarvestSpeciesCount> { it.harvestCount }.thenBy { it.species.lowercase() })
+    }
+    val seasonalSummaries = remember(harvestHistory) {
+        harvestHistory
+            .groupBy { entry ->
+                Instant.ofEpochMilli(entry.date).atZone(OrchardTime.zoneId()).year
+            }
+            .map { (year, entries) ->
+                val topSpecies = entries
+                    .groupingBy { it.species.ifBlank { "Unknown species" } }
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key
+                val peakMonth = entries
+                    .groupingBy(HistoryEntryModel::monthShortLabel)
+                    .eachCount()
+                    .maxByOrNull { it.value }
+                    ?.key
+                SeasonalSummary(
+                    year = year,
+                    harvestCount = entries.size,
+                    firstFruitCount = entries.count(HistoryEntryModel::firstFruit),
+                    speciesCount = entries.map { it.species.ifBlank { "Unknown species" } }.distinct().size,
+                    topSpecies = topSpecies,
+                    peakMonth = peakMonth
+                )
+            }
+            .sortedByDescending(SeasonalSummary::year)
+    }
+    val currentSeasonSummary = seasonalSummaries.firstOrNull { it.year == currentYear }
+        ?: seasonalSummaries.firstOrNull()
+
+    selectedTracker?.let { tracker ->
+        HarvestTrackerDialog(
+            title = if (tracker == HarvestTracker.CURRENT_YEAR) "$currentYear harvests" else tracker.label,
+            speciesCounts = trackerSpeciesCounts,
+            totalHarvests = trackerEntries.size,
+            onDismiss = { selectedTracker = null }
+        )
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { addMenuVisible = true },
+                onClick = onAddLog,
                 shape = RoundedCornerShape(16.dp),
                 modifier = Modifier.testTag("history_new")
             ) {
@@ -135,18 +184,98 @@ fun HistoryScreen(
     ) { innerPadding ->
         LazyColumn(
             modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             item {
-                FeatureCard(
-                    title = "Harvest journal",
-                    subtitle = "Track seasonal output and keep the orchard timeline clean."
-                ) {
-                    com.dillon.orcharddex.ui.components.StatCard(
-                        label = "Seasonal harvests logged",
-                        value = totalHarvests.toString()
+                SectionCard("Harvest trackers") {
+                    Text(
+                        text = "Tap a tracker to review harvest counts by species.",
+                        style = MaterialTheme.typography.bodyMedium
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "$currentYear harvests",
+                            value = currentYearHarvests.size.toString(),
+                            minWidth = 0.dp,
+                            onClick = { selectedTracker = HarvestTracker.CURRENT_YEAR }
+                        )
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            modifier = Modifier.weight(1f),
+                            label = "Total harvests",
+                            value = harvestHistory.size.toString(),
+                            minWidth = 0.dp,
+                            onClick = { selectedTracker = HarvestTracker.TOTAL }
+                        )
+                    }
+                }
+            }
+            item {
+                SectionCard("Season analytics") {
+                    if (seasonalSummaries.isEmpty()) {
+                        Text("Add harvests to compare seasons, first fruit, and busiest months.")
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            com.dillon.orcharddex.ui.components.StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "${currentSeasonSummary?.year ?: currentYear} harvests",
+                                value = (currentSeasonSummary?.harvestCount ?: 0).toString(),
+                                minWidth = 0.dp
+                            )
+                            com.dillon.orcharddex.ui.components.StatCard(
+                                modifier = Modifier.weight(1f),
+                                label = "First fruit logs",
+                                value = (currentSeasonSummary?.firstFruitCount ?: 0).toString(),
+                                minWidth = 0.dp
+                            )
+                        }
+                        com.dillon.orcharddex.ui.components.StatCard(
+                            label = "Harvested species",
+                            value = (currentSeasonSummary?.speciesCount ?: 0).toString(),
+                            minWidth = 0.dp
+                        )
+                        seasonalSummaries.take(3).forEach { summary ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(20.dp)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                ) {
+                                    Text(
+                                        text = "${summary.year} season",
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = "${summary.harvestCount} harvests • ${summary.speciesCount} species • ${summary.firstFruitCount} first-fruit logs",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    summary.topSpecies?.let {
+                                        Text(
+                                            text = "Top species: $it",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    summary.peakMonth?.let {
+                                        Text(
+                                            text = "Peak month: $it",
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
             item {
@@ -264,6 +393,9 @@ fun HistoryDetailScreen(
                             }
                             historyEntry.cost?.let { CompactFact("Cost", "$${it.displayAmount()}") }
                             historyEntry.qualityRating?.let { CompactFact("Quality", "$it/5") }
+                            if (historyEntry.kind == ActivityKind.HARVEST && !historyEntry.verified) {
+                                CompactFact("Verified", "No")
+                            }
                             CompactFact("Species", historyEntry.species)
                             CompactFact("Cultivar", historyEntry.cultivar)
                             if (historyEntry.firstFruit) {
@@ -272,13 +404,14 @@ fun HistoryDetailScreen(
                         }
                     }
                 }
-                historyEntry.photoPath?.let { photoPath ->
+                val photoPaths = historyEntry.photoPaths.ifEmpty { listOfNotNull(historyEntry.photoPath) }
+                if (photoPaths.isNotEmpty()) {
                     item {
-                        SectionCard("Photo") {
+                        SectionCard(if (photoPaths.size == 1) "Photo" else "Photos") {
                             LocalPhotoStrip(
-                                existingPaths = listOf(
-                                    historyEntry.id to File(context.filesDir, "photos/$photoPath").absolutePath
-                                )
+                                existingPaths = photoPaths.mapIndexed { index, photoPath ->
+                                    "${historyEntry.id}:$index" to File(context.filesDir, "photos/$photoPath").absolutePath
+                                }
                             )
                         }
                     }
@@ -379,11 +512,71 @@ private fun HistoryRow(
     }
 }
 
+@Composable
+private fun HarvestTrackerDialog(
+    title: String,
+    speciesCounts: List<HarvestSpeciesCount>,
+    totalHarvests: Int,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            if (speciesCounts.isEmpty()) {
+                Text("No harvests logged yet.")
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        text = "$totalHarvests harvests across ${speciesCounts.size} species.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 360.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(speciesCounts, key = { it.species }) { item ->
+                            OutlinedCard(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = item.species,
+                                        modifier = Modifier.weight(1f),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = item.harvestCount.toString(),
+                                        style = MaterialTheme.typography.headlineMedium
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) { Text("Close") }
+        }
+    )
+}
+
 private fun HistoryQuickFilter.matches(entry: HistoryEntryModel): Boolean = when (this) {
     HistoryQuickFilter.ALL -> true
     HistoryQuickFilter.EVENTS -> entry.kind == ActivityKind.EVENT
     HistoryQuickFilter.HARVESTS -> entry.kind == ActivityKind.HARVEST
-    HistoryQuickFilter.SEASONAL -> entry.eventType in setOf(EventType.BLOOM, EventType.FRUIT_SET)
+    HistoryQuickFilter.SEASONAL -> entry.kind == ActivityKind.HARVEST ||
+        entry.eventType in setOf(EventType.BUD, EventType.BLOOM, EventType.FRUIT_SET)
     HistoryQuickFilter.ISSUES -> entry.eventType in setOf(
         EventType.PEST_OBSERVED,
         EventType.DISEASE_OBSERVED,
@@ -430,6 +623,16 @@ private fun HistoryEntryModel.rowMetaLine(): String = buildString {
     if (firstFruit) {
         append(" - first fruit")
     }
+    if (kind == ActivityKind.HARVEST && !verified) {
+        append(" - unverified")
+    }
+    if (photoPaths.size > 1) {
+        append(" - ")
+        append(photoPaths.size)
+        append(" photos")
+    } else if (photoPath != null) {
+        append(" - photo")
+    }
 }
 
 private fun HistoryEntryModel.isIssueLog(): Boolean = eventType in setOf(
@@ -449,16 +652,18 @@ private fun EventType.detailLabel(): String = name.lowercase()
     .replaceFirstChar(Char::uppercase)
 
 private fun Long.monthBucketLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyMonthFormatter)
 
 private fun Long.dayNumberLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyDayFormatter)
 
 private fun Long.monthShortLabel(): String = Instant.ofEpochMilli(this)
-    .atZone(ZoneId.systemDefault())
+    .atZone(OrchardTime.zoneId())
     .toLocalDate()
     .format(historyMonthShortFormatter)
+
+private fun HistoryEntryModel.monthShortLabel(): String = date.monthShortLabel()

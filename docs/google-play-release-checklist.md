@@ -1,10 +1,11 @@
 # Google Play Release Checklist
 
-Use this list before submitting OrchardDex to Google Play.
+Use this list before submitting OrcharDex to Google Play.
 
 ## In The Codebase
 
 - Build a signed release Android App Bundle with `bundleRelease`
+- Confirm `release-signing.properties` is present locally and not committed
 - Verify the app opens cleanly on a fresh install
 - Verify reminder notifications work on Android 13+ after permission is granted
 - Verify export/import backups on a physical device
@@ -26,7 +27,7 @@ Use this list before submitting OrchardDex to Google Play.
 
 - Keystore and signing config kept outside the repo
 - Final version code and version name
-- Privacy policy content
+- Privacy policy content and public URL
 - Short description and full description
 - App screenshots
 - Feature graphic

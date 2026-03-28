@@ -1,6 +1,7 @@
 package com.dillon.orcharddex
 
 import android.app.Application
+import com.dillon.orcharddex.data.phenology.PhenologyCatalogAssets
 import com.dillon.orcharddex.notifications.ReminderNotificationManager
 
 class OrchardDexApp : Application() {
@@ -9,6 +10,7 @@ class OrchardDexApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        PhenologyCatalogAssets.initialize(this)
         container = OrchardDexContainer(this)
         ReminderNotificationManager.createChannel(this)
     }

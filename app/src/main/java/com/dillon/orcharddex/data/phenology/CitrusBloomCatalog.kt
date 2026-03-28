@@ -2,7 +2,15 @@ package com.dillon.orcharddex.data.phenology
 
 internal object CitrusBloomCatalog {
     val speciesProfiles = listOf(
-        SpeciesBloomProfile("citrus", setOf("citrus"), "9b", 3, 6, 25),
+        SpeciesBloomProfile(
+            "citrus",
+            setOf("citrus"),
+            "9b",
+            3,
+            6,
+            25,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+        ),
         SpeciesBloomProfile(
             "lemon",
             setOf(
@@ -16,7 +24,8 @@ internal object CitrusBloomCatalog {
             "9b",
             3,
             1,
-            32
+            32,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         SpeciesBloomProfile(
             "lime",
@@ -38,7 +47,8 @@ internal object CitrusBloomCatalog {
             "9b",
             3,
             6,
-            34
+            34,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         SpeciesBloomProfile(
             "orange",
@@ -54,7 +64,8 @@ internal object CitrusBloomCatalog {
             "9b",
             3,
             10,
-            24
+            24,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         SpeciesBloomProfile(
             "mandarin",
@@ -72,7 +83,8 @@ internal object CitrusBloomCatalog {
             "9a",
             3,
             5,
-            22
+            22,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         SpeciesBloomProfile(
             "grapefruit",
@@ -88,7 +100,8 @@ internal object CitrusBloomCatalog {
             "9b",
             3,
             8,
-            24
+            24,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE
         )
     )
 

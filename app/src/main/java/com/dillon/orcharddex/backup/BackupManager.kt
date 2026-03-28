@@ -3,8 +3,10 @@ package com.dillon.orcharddex.backup
 import android.content.Context
 import android.net.Uri
 import androidx.room.withTransaction
+import com.dillon.orcharddex.data.local.ActivityPhotoEntity
 import com.dillon.orcharddex.BuildConfig
 import com.dillon.orcharddex.data.local.EventEntity
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
 import com.dillon.orcharddex.data.local.ReminderEntity
@@ -28,6 +30,7 @@ import java.util.zip.ZipOutputStream
 data class BackupValidation(
     val appVersion: String,
     val schemaVersion: Int,
+    val locationCount: Int,
     val treeCount: Int,
     val eventCount: Int,
     val harvestCount: Int,
@@ -38,7 +41,7 @@ data class BackupValidation(
 
 @Serializable
 data class BackupManifest(
-    val archiveVersion: Int = 1,
+    val archiveVersion: Int = 2,
     val appVersion: String,
     val schemaVersion: Int,
     val exportedAt: Long
@@ -55,7 +58,9 @@ class BackupManager(
 
     suspend fun exportTo(uri: Uri) = withContext(Dispatchers.IO) {
         val trees = database.treeDao().getAllTrees()
+        val locations = database.growingLocationDao().getAllLocations()
         val treePhotos = database.treePhotoDao().getAllPhotos()
+        val activityPhotos = database.activityPhotoDao().getAllPhotos()
         val events = database.eventDao().getAllEvents()
         val harvests = database.harvestDao().getAllHarvests()
         val reminders = database.reminderDao().getAllReminders()
@@ -63,6 +68,7 @@ class BackupManager(
         val settings = settingsRepository.snapshot()
         val photoPaths = (
             treePhotos.map(TreePhotoEntity::relativePath) +
+                activityPhotos.map(ActivityPhotoEntity::relativePath) +
                 events.mapNotNull(EventEntity::photoPath) +
                 harvests.mapNotNull(HarvestEntity::photoPath)
             ).distinct()
@@ -78,8 +84,10 @@ class BackupManager(
                         exportedAt = System.currentTimeMillis()
                     )
                 )
+                writeJson(zip, "growing_locations.json", locations)
                 writeJson(zip, "trees.json", trees)
                 writeJson(zip, "tree_photos.json", treePhotos)
+                writeJson(zip, "activity_photos.json", activityPhotos)
                 writeJson(zip, "events.json", events)
                 writeJson(zip, "harvests.json", harvests)
                 writeJson(zip, "reminders.json", reminders)
@@ -100,6 +108,10 @@ class BackupManager(
     suspend fun validateImport(uri: Uri): BackupValidation = withContext(Dispatchers.IO) {
         val entries = readArchive(uri)
         val manifest = json.decodeFromString<BackupManifest>(entries.getRequiredText("manifest.json"))
+        val locations = entries["growing_locations.json"]
+            ?.toString(Charsets.UTF_8)
+            ?.let { json.decodeFromString<List<GrowingLocationEntity>>(it) }
+            .orEmpty()
         val trees = json.decodeFromString<List<TreeEntity>>(entries.getRequiredText("trees.json"))
         val events = json.decodeFromString<List<EventEntity>>(entries.getRequiredText("events.json"))
         val harvests = json.decodeFromString<List<HarvestEntity>>(entries.getRequiredText("harvests.json"))
@@ -108,6 +120,7 @@ class BackupManager(
         BackupValidation(
             appVersion = manifest.appVersion,
             schemaVersion = manifest.schemaVersion,
+            locationCount = locations.size,
             treeCount = trees.size,
             eventCount = events.size,
             harvestCount = harvests.size,
@@ -119,10 +132,18 @@ class BackupManager(
 
     suspend fun importReplaceAll(uri: Uri) = withContext(Dispatchers.IO) {
         val entries = readArchive(uri)
+        val locations = entries["growing_locations.json"]
+            ?.toString(Charsets.UTF_8)
+            ?.let { json.decodeFromString<List<GrowingLocationEntity>>(it) }
+            .orEmpty()
         val trees = json.decodeFromString<List<TreeEntity>>(entries.getRequiredText("trees.json"))
         val treePhotos = json.decodeFromString<List<TreePhotoEntity>>(entries.getRequiredText("tree_photos.json"))
         val events = json.decodeFromString<List<EventEntity>>(entries.getRequiredText("events.json"))
         val harvests = json.decodeFromString<List<HarvestEntity>>(entries.getRequiredText("harvests.json"))
+        val activityPhotos = entries["activity_photos.json"]
+            ?.toString(Charsets.UTF_8)
+            ?.let { json.decodeFromString<List<ActivityPhotoEntity>>(it) }
+            ?: legacyActivityPhotos(events, harvests)
         val reminders = json.decodeFromString<List<ReminderEntity>>(entries.getRequiredText("reminders.json"))
         val wishlist = json.decodeFromString<List<WishlistCultivarEntity>>(entries.getRequiredText("wishlist.json"))
         val settings = json.decodeFromString<SettingsSnapshot>(entries.getRequiredText("settings.json"))
@@ -131,15 +152,19 @@ class BackupManager(
         photoStorage.clearAll()
 
         database.withTransaction {
+            database.activityPhotoDao().clearAll()
             database.eventDao().clearAll()
             database.harvestDao().clearAll()
             database.reminderDao().clearAll()
             database.treePhotoDao().clearAll()
             database.treeDao().clearAll()
+            database.growingLocationDao().clearAll()
             database.wishlistDao().clearAll()
 
+            database.growingLocationDao().insertAll(locations)
             database.treeDao().insertAll(trees)
             database.treePhotoDao().insertAll(treePhotos)
+            database.activityPhotoDao().insertAll(activityPhotos)
             database.eventDao().insertAll(events)
             database.harvestDao().insertAll(harvests)
             database.reminderDao().insertAll(reminders)
@@ -157,11 +182,13 @@ class BackupManager(
     suspend fun clearAllData() = withContext(Dispatchers.IO) {
         database.reminderDao().getActiveReminders().forEach { reminderScheduler.cancel(it.id) }
         database.withTransaction {
+            database.activityPhotoDao().clearAll()
             database.eventDao().clearAll()
             database.harvestDao().clearAll()
             database.reminderDao().clearAll()
             database.treePhotoDao().clearAll()
             database.treeDao().clearAll()
+            database.growingLocationDao().clearAll()
             database.wishlistDao().clearAll()
         }
         photoStorage.clearAll()
@@ -196,4 +223,40 @@ class BackupManager(
 
     private fun Map<String, ByteArray>.getRequiredText(name: String): String =
         this[name]?.toString(Charsets.UTF_8) ?: error("Missing backup entry: $name")
+
+    private fun legacyActivityPhotos(
+        events: List<EventEntity>,
+        harvests: List<HarvestEntity>
+    ): List<ActivityPhotoEntity> = buildList {
+        events.forEach { event ->
+            event.photoPath?.takeIf(String::isNotBlank)?.let { relativePath ->
+                add(
+                    ActivityPhotoEntity(
+                        id = "event:${event.id}",
+                        ownerKind = "EVENT",
+                        ownerId = event.id,
+                        relativePath = relativePath,
+                        caption = null,
+                        createdAt = event.createdAt,
+                        sortOrder = 0
+                    )
+                )
+            }
+        }
+        harvests.forEach { harvest ->
+            harvest.photoPath?.takeIf(String::isNotBlank)?.let { relativePath ->
+                add(
+                    ActivityPhotoEntity(
+                        id = "harvest:${harvest.id}",
+                        ownerKind = "HARVEST",
+                        ownerId = harvest.id,
+                        relativePath = relativePath,
+                        caption = null,
+                        createdAt = harvest.createdAt,
+                        sortOrder = 0
+                    )
+                )
+            }
+        }
+    }
 }

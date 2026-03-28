@@ -11,16 +11,16 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
@@ -28,8 +28,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -44,19 +44,33 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
+import com.dillon.orcharddex.data.local.HarvestEntity
+import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.TreeEntity
+import com.dillon.orcharddex.data.local.toForecastLocationProfile
+import com.dillon.orcharddex.data.model.ActivityKind
+import com.dillon.orcharddex.data.model.BloomTimingMode
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.PlantType
+import com.dillon.orcharddex.data.model.PhenologyObservation
+import com.dillon.orcharddex.data.model.PollinationMode
+import com.dillon.orcharddex.data.model.PollinationProfile
+import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
 import com.dillon.orcharddex.data.phenology.CultivarAutocompleteOption
+import com.dillon.orcharddex.data.preferences.AppSettings
+import com.dillon.orcharddex.data.preferences.forecastLocationProfile
 import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
@@ -65,16 +79,17 @@ import com.dillon.orcharddex.ui.components.DateField
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.LocalPhotoStrip
 import com.dillon.orcharddex.ui.components.PhotoAddCard
+import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.toDateLabel
+import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.viewmodel.TreeDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreeFormViewModel
 import com.dillon.orcharddex.ui.viewmodel.TreesViewModel
 import java.io.File
 import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.UUID
 
 private enum class TreeSortOption(val label: String) {
@@ -140,6 +155,7 @@ fun TreesScreen(
     }
 
     Scaffold(
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         floatingActionButton = {
             FloatingActionButton(onClick = onAddTree, modifier = Modifier.testTag("add_tree")) {
                 Text("+")
@@ -214,7 +230,9 @@ fun TreesScreen(
                             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 AssistChip(onClick = {}, label = { Text(item.tree.species) })
                                 AssistChip(onClick = {}, label = { Text(item.tree.plantType.name.replace("_", "-").lowercase()) })
-                                AssistChip(onClick = {}, label = { Text(item.tree.status.name.lowercase()) })
+                                if (item.tree.status != TreeStatus.ACTIVE) {
+                                    AssistChip(onClick = {}, label = { Text(item.tree.status.name.lowercase()) })
+                                }
                             }
                         }
                     }
@@ -233,6 +251,7 @@ fun TreeFormScreen(
     val context = LocalContext.current
     val state = viewModel.state
     val knownTrees by viewModel.knownTrees.collectAsStateWithLifecycle()
+    val locations by viewModel.locations.collectAsStateWithLifecycle()
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
@@ -247,8 +266,8 @@ fun TreeFormScreen(
         }
         pendingCameraUri = null
     }
-    var showRootstockField by rememberSaveable(state.id, state.rootstock.isNotBlank()) {
-        mutableStateOf(state.rootstock.isNotBlank())
+    var showAdvancedFields by rememberSaveable(state.id) {
+        mutableStateOf(state.hasAdvancedFieldValues())
     }
     var suppressSpeciesAutocomplete by rememberSaveable(state.id) {
         mutableStateOf(false)
@@ -256,7 +275,7 @@ fun TreeFormScreen(
     var suppressCultivarAutocomplete by rememberSaveable(state.id) {
         mutableStateOf(false)
     }
-    val heroExistingPath = state.existingPhotos.firstOrNull()?.relativePath
+    val heroExistingPath = state.existingPhotos.heroOrLatestPhoto()?.relativePath
     val heroNewUri = state.newPhotoUris.firstOrNull()
     val supportedSpecies = remember { BloomForecastEngine.supportedSpeciesCatalog() }
     val speciesCatalog = remember(knownTrees, supportedSpecies) {
@@ -265,8 +284,16 @@ fun TreeFormScreen(
             .distinctBy(::normalizeAutocomplete)
             .sortedBy(String::lowercase)
     }
-    val speciesSuggestions = remember(state.species, speciesCatalog) {
+    val builtInSpeciesSuggestions = remember(state.species) {
+        BloomForecastEngine.speciesAutocompleteOptions(state.species)
+    }
+    val orchardSpeciesSuggestions = remember(state.species, speciesCatalog) {
         autocompleteSpeciesOptions(state.species, speciesCatalog)
+    }
+    val speciesSuggestions = remember(builtInSpeciesSuggestions, orchardSpeciesSuggestions) {
+        (builtInSpeciesSuggestions + orchardSpeciesSuggestions)
+            .distinctBy(::normalizeAutocomplete)
+            .take(8)
     }
     val builtInCultivarSuggestions = remember(state.cultivar, state.species) {
         BloomForecastEngine.cultivarAutocompleteOptions(state.cultivar, state.species)
@@ -278,6 +305,17 @@ fun TreeFormScreen(
         (builtInCultivarSuggestions + orchardCultivarSuggestions)
             .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
             .take(8)
+    }
+    val pollinationProfile = remember(state.species, state.cultivar) {
+        BloomForecastEngine.pollinationProfileFor(state.species, state.cultivar)
+    }
+    val autoBloomTimingLabel = remember(state.species, state.cultivar) {
+        BloomForecastEngine.catalogBloomTimingLabelFor(state.species, state.cultivar)
+    }
+    val locationOptions = remember(locations) { locations.map(::treeLocationLabel) }
+    val selectedLocationLabel = remember(locations, state.locationId, state.orchardName) {
+        locations.firstOrNull { it.id == state.locationId }?.let(::treeLocationLabel)
+            ?: state.orchardName.ifBlank { locations.firstOrNull()?.let(::treeLocationLabel) ?: "Growing location" }
     }
 
     LazyColumn(
@@ -308,34 +346,22 @@ fun TreeFormScreen(
         }
         item {
             SectionCard(if (state.id == null) "Add tree" else "Edit tree") {
-                OutlinedTextField(
-                    value = state.nickname,
-                    onValueChange = { viewModel.update { copy(nickname = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Nickname / label") }
-                )
-                OutlinedTextField(
-                    value = state.species,
-                    onValueChange = { input ->
-                        suppressSpeciesAutocomplete = false
-                        val exactSpecies = speciesCatalog.firstOrNull {
-                            normalizeAutocomplete(it) == normalizeAutocomplete(input)
-                        }
-                        viewModel.update { copy(species = exactSpecies ?: input) }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("tree_species"),
-                    label = { Text("Species") }
-                )
-                if (!suppressSpeciesAutocomplete) {
-                    SpeciesAutocompleteCard(
-                        query = state.species,
-                        suggestions = speciesSuggestions,
-                        onSelected = { suggestion ->
-                            suppressSpeciesAutocomplete = true
-                            viewModel.update { copy(species = suggestion) }
-                        }
+                if (locationOptions.isNotEmpty()) {
+                    SelectionField(
+                        label = "Growing location",
+                        value = selectedLocationLabel,
+                        options = locationOptions,
+                        onSelected = { selected ->
+                            locations.firstOrNull { treeLocationLabel(it) == selected }?.let { location ->
+                                viewModel.update {
+                                    copy(
+                                        locationId = location.id,
+                                        orchardName = location.name
+                                    )
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
                 OutlinedTextField(
@@ -375,60 +401,55 @@ fun TreeFormScreen(
                     )
                 }
                 OutlinedTextField(
-                    value = state.source,
-                    onValueChange = { viewModel.update { copy(source = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Source / nursery") }
+                    value = state.species,
+                    onValueChange = { input ->
+                        suppressSpeciesAutocomplete = false
+                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
+                            ?: speciesCatalog.firstOrNull {
+                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
+                            }
+                        viewModel.update { copy(species = exactSpecies ?: input) }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("tree_species"),
+                    label = { Text("Species") }
                 )
-                if (showRootstockField) {
-                    OutlinedTextField(
-                        value = state.rootstock,
-                        onValueChange = { viewModel.update { copy(rootstock = it) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Rootstock") }
-                    )
-                    TextButton(
-                        onClick = {
-                            viewModel.update { copy(rootstock = "") }
-                            showRootstockField = false
+                if (!suppressSpeciesAutocomplete) {
+                    SpeciesAutocompleteCard(
+                        query = state.species,
+                        suggestions = speciesSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            viewModel.update { copy(species = suggestion) }
                         }
-                    ) {
-                        Text("Hide rootstock")
-                    }
-                } else {
-                    TextButton(onClick = { showRootstockField = true }) {
-                        Text("Add rootstock")
-                    }
-                }
-            }
-        }
-        item {
-            SectionCard("Dates & placement") {
-                if (state.purchaseDate != null) {
-                    DateField(
-                        label = "Purchase date",
-                        value = state.purchaseDate,
-                        onDateSelected = { viewModel.update { copy(purchaseDate = it) } }
                     )
-                    OutlinedButton(
-                        onClick = { viewModel.update { copy(purchaseDate = null) } },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Clear purchase date")
-                    }
-                } else {
-                    OutlinedButton(
-                        onClick = { viewModel.update { copy(purchaseDate = LocalDate.now()) } },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Set purchase date")
-                    }
                 }
-                DateField(
-                    label = "Planted date",
-                    value = state.plantedDate,
-                    onDateSelected = { viewModel.update { copy(plantedDate = it) } }
-                )
+                pollinationProfile?.let { profile ->
+                    Text(
+                        text = "Catalog pollination: ${profile.summaryLabel}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (state.id == null) {
+                    OutlinedTextField(
+                        value = state.quantity,
+                        onValueChange = { input ->
+                            if (input.all(Char::isDigit)) {
+                                viewModel.update { copy(quantity = input) }
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("tree_quantity"),
+                        label = { Text("How many plants?") },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                    Text(
+                        text = "This creates separate plant records with the same details and auto-numbers duplicate nicknames when needed.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -451,85 +472,274 @@ fun TreeFormScreen(
                         onCheckedChange = { checked -> viewModel.update { copy(hasFruitedBefore = checked) } }
                     )
                 }
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = state.plantType == PlantType.IN_GROUND,
-                        onClick = { viewModel.update { copy(plantType = PlantType.IN_GROUND) } },
-                        label = { Text("In-ground") }
-                    )
-                    FilterChip(
-                        selected = state.plantType == PlantType.CONTAINER,
-                        onClick = { viewModel.update { copy(plantType = PlantType.CONTAINER) } },
-                        label = { Text("Container") }
-                    )
-                }
-                if (state.plantType == PlantType.CONTAINER) {
-                    OutlinedTextField(
-                        value = state.containerSize,
-                        onValueChange = { viewModel.update { copy(containerSize = it) } },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Container size") }
-                    )
-                }
-                OutlinedTextField(
-                    value = state.sunExposure,
-                    onValueChange = { viewModel.update { copy(sunExposure = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Sun exposure") }
-                )
             }
         }
         item {
-            SectionCard("Care") {
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FrostSensitivityLevel.entries.forEach { level ->
+            SectionCard("Advanced") {
+                Text(
+                    text = "Optional details for labeling, dates, placement, care, and notes.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                TextButton(
+                    onClick = { showAdvancedFields = !showAdvancedFields },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(if (showAdvancedFields) "Hide advanced fields" else "Show advanced fields")
+                }
+                if (showAdvancedFields) {
+                    OutlinedTextField(
+                        value = state.nickname,
+                        onValueChange = { viewModel.update { copy(nickname = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Nickname / label (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = state.source,
+                        onValueChange = { viewModel.update { copy(source = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Source / nursery (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = state.rootstock,
+                        onValueChange = { viewModel.update { copy(rootstock = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Rootstock (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = state.sectionName,
+                        onValueChange = { viewModel.update { copy(sectionName = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Section / bed (optional)") }
+                    )
+                    if (state.purchaseDate != null) {
+                        DateField(
+                            label = "Purchase date",
+                            value = state.purchaseDate,
+                            onDateSelected = { viewModel.update { copy(purchaseDate = it) } }
+                        )
+                        OutlinedButton(
+                            onClick = { viewModel.update { copy(purchaseDate = null) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Clear purchase date")
+                        }
+                    } else {
+                        OutlinedButton(
+                            onClick = { viewModel.update { copy(purchaseDate = OrchardTime.today()) } },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Set purchase date")
+                        }
+                    }
+                    DateField(
+                        label = "Planted date",
+                        value = state.plantedDate,
+                        onDateSelected = { viewModel.update { copy(plantedDate = it) } }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(
-                            selected = state.frostSensitivity == level,
-                            onClick = { viewModel.update { copy(frostSensitivity = level) } },
-                            label = { Text(level.name.lowercase()) }
+                            selected = state.plantType == PlantType.IN_GROUND,
+                            onClick = { viewModel.update { copy(plantType = PlantType.IN_GROUND) } },
+                            label = { Text("In-ground") }
+                        )
+                        FilterChip(
+                            selected = state.plantType == PlantType.CONTAINER,
+                            onClick = { viewModel.update { copy(plantType = PlantType.CONTAINER) } },
+                            label = { Text("Container") }
                         )
                     }
-                }
-                if (state.frostSensitivity == FrostSensitivityLevel.CUSTOM) {
+                    if (state.plantType == PlantType.CONTAINER) {
+                        OutlinedTextField(
+                            value = state.containerSize,
+                            onValueChange = { viewModel.update { copy(containerSize = it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Container size") }
+                        )
+                    }
                     OutlinedTextField(
-                        value = state.frostSensitivityNote,
-                        onValueChange = { viewModel.update { copy(frostSensitivityNote = it) } },
+                        value = state.sunExposure,
+                        onValueChange = { viewModel.update { copy(sunExposure = it) } },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Frost sensitivity note") }
+                        label = { Text("Sun exposure") }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FrostSensitivityLevel.entries.forEach { level ->
+                            FilterChip(
+                                selected = state.frostSensitivity == level,
+                                onClick = { viewModel.update { copy(frostSensitivity = level) } },
+                                label = { Text(level.name.lowercase()) }
+                            )
+                        }
+                    }
+                    if (state.frostSensitivity == FrostSensitivityLevel.CUSTOM) {
+                        OutlinedTextField(
+                            value = state.frostSensitivityNote,
+                            onValueChange = { viewModel.update { copy(frostSensitivityNote = it) } },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Frost sensitivity note") }
+                        )
+                    }
+                    OutlinedTextField(
+                        value = state.irrigationNote,
+                        onValueChange = { viewModel.update { copy(irrigationNote = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Irrigation note") }
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        TreeStatus.entries.forEach { status ->
+                            FilterChip(
+                                selected = state.status == status,
+                                onClick = { viewModel.update { copy(status = status) } },
+                                label = { Text(status.name.lowercase()) }
+                            )
+                        }
+                    }
+                    Text(
+                        text = "Bloom timing",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Auto uses cultivar dates if known, otherwise species defaults. Custom stays on this plant only.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.bloomTimingMode == BloomTimingMode.AUTO,
+                            onClick = {
+                                viewModel.update {
+                                    copy(
+                                        bloomTimingMode = BloomTimingMode.AUTO,
+                                        customBloomStartMonth = "",
+                                        customBloomStartDay = "",
+                                        customBloomDurationDays = ""
+                                    )
+                                }
+                            },
+                            label = { Text("Auto") }
+                        )
+                        FilterChip(
+                            selected = state.bloomTimingMode == BloomTimingMode.CUSTOM,
+                            onClick = { viewModel.update { copy(bloomTimingMode = BloomTimingMode.CUSTOM) } },
+                            label = { Text("Custom") }
+                        )
+                    }
+                    if (state.bloomTimingMode == BloomTimingMode.AUTO) {
+                        Text(
+                            text = autoBloomTimingLabel ?: "No catalog bloom timing found yet. Switch to Custom if this plant needs a local override.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    } else {
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            OutlinedTextField(
+                                value = state.customBloomStartMonth,
+                                onValueChange = { input ->
+                                    if (input.all(Char::isDigit)) {
+                                        viewModel.update { copy(customBloomStartMonth = input) }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Start month") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                            OutlinedTextField(
+                                value = state.customBloomStartDay,
+                                onValueChange = { input ->
+                                    if (input.all(Char::isDigit)) {
+                                        viewModel.update { copy(customBloomStartDay = input) }
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                label = { Text("Start day") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                            )
+                        }
+                        OutlinedTextField(
+                            value = state.customBloomDurationDays,
+                            onValueChange = { input ->
+                                if (input.all(Char::isDigit)) {
+                                    viewModel.update { copy(customBloomDurationDays = input) }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Duration days") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                        )
+                        Text(
+                            text = "Use this when the catalog timing is off locally or this cultivar is missing from the catalog.",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.update {
+                                    copy(
+                                        bloomTimingMode = BloomTimingMode.AUTO,
+                                        customBloomStartMonth = "",
+                                        customBloomStartDay = "",
+                                        customBloomDurationDays = ""
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text("Reset to catalog")
+                        }
+                    }
+                    Text(
+                        text = "Pollination override",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Keep these on Catalog unless this plant behaves differently in your orchard.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.selfCompatibilityOverride == null,
+                            onClick = { viewModel.update { copy(selfCompatibilityOverride = null) } },
+                            label = { Text("Catalog") }
+                        )
+                        SelfCompatibility.entries.forEach { value ->
+                            FilterChip(
+                                selected = state.selfCompatibilityOverride == value,
+                                onClick = { viewModel.update { copy(selfCompatibilityOverride = value) } },
+                                label = { Text(value.label) }
+                            )
+                        }
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(
+                            selected = state.pollinationModeOverride == null,
+                            onClick = { viewModel.update { copy(pollinationModeOverride = null) } },
+                            label = { Text("Catalog") }
+                        )
+                        PollinationMode.entries.forEach { value ->
+                            FilterChip(
+                                selected = state.pollinationModeOverride == value,
+                                onClick = { viewModel.update { copy(pollinationModeOverride = value) } },
+                                label = { Text(value.label) }
+                            )
+                        }
+                    }
+                    OutlinedTextField(
+                        value = state.pollinationOverrideNote,
+                        onValueChange = { viewModel.update { copy(pollinationOverrideNote = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Pollination override note") }
+                    )
+                    OutlinedTextField(
+                        value = state.tags,
+                        onValueChange = { viewModel.update { copy(tags = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Tags") }
+                    )
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = { viewModel.update { copy(notes = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Notes") },
+                        minLines = 4
                     )
                 }
-                OutlinedTextField(
-                    value = state.irrigationNote,
-                    onValueChange = { viewModel.update { copy(irrigationNote = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Irrigation note") }
-                )
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    TreeStatus.entries.forEach { status ->
-                        FilterChip(
-                            selected = state.status == status,
-                            onClick = { viewModel.update { copy(status = status) } },
-                            label = { Text(status.name.lowercase()) }
-                        )
-                    }
-                }
-                OutlinedTextField(
-                    value = state.tags,
-                    onValueChange = { viewModel.update { copy(tags = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Tags") }
-                )
-            }
-        }
-        item {
-            SectionCard("Notes") {
-                OutlinedTextField(
-                    value = state.notes,
-                    onValueChange = { viewModel.update { copy(notes = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Notes") },
-                    minLines = 4
-                )
             }
         }
         item {
@@ -544,7 +754,13 @@ fun TreeFormScreen(
                         .weight(1f)
                         .testTag("tree_save")
                 ) {
-                    Text(if (state.id == null) "Save tree" else "Update tree")
+                    Text(
+                        when {
+                            state.id != null -> "Update tree"
+                            state.quantity.toIntOrNull()?.let { it > 1 } == true -> "Save trees"
+                            else -> "Save tree"
+                        }
+                    )
                 }
             }
         }
@@ -552,7 +768,7 @@ fun TreeFormScreen(
 }
 
 @Composable
-private fun SpeciesAutocompleteCard(
+internal fun SpeciesAutocompleteCard(
     query: String,
     suggestions: List<String>,
     onSelected: (String) -> Unit
@@ -571,7 +787,7 @@ private fun SpeciesAutocompleteCard(
 }
 
 @Composable
-private fun CultivarAutocompleteCard(
+internal fun CultivarAutocompleteCard(
     query: String,
     suggestions: List<CultivarAutocompleteOption>,
     onSelected: (CultivarAutocompleteOption) -> Unit
@@ -590,9 +806,10 @@ private fun CultivarAutocompleteCard(
                         Text(
                             buildString {
                                 append(suggestion.species)
-                                if (suggestion.aliases.isNotEmpty()) {
+                                val aliasPreview = previewCultivarAliases(query, suggestion.aliases)
+                                if (aliasPreview.isNotEmpty()) {
                                     append(" | also known as ")
-                                    append(suggestion.aliases.take(2).joinToString(", "))
+                                    append(aliasPreview.joinToString(", "))
                                 }
                             },
                             style = MaterialTheme.typography.bodySmall
@@ -656,7 +873,7 @@ private fun createTreeCaptureUri(context: android.content.Context): Uri {
     )
 }
 
-private fun autocompleteSpeciesOptions(
+internal fun autocompleteSpeciesOptions(
     query: String,
     options: List<String>,
     limit: Int = 8
@@ -676,7 +893,7 @@ private fun autocompleteSpeciesOptions(
         .take(limit)
 }
 
-private fun existingCultivarAutocompleteOptions(
+internal fun existingCultivarAutocompleteOptions(
     query: String,
     speciesQuery: String,
     trees: List<TreeEntity>,
@@ -704,7 +921,7 @@ private fun existingCultivarAutocompleteOptions(
         .take(limit)
 }
 
-private fun resolveExistingCultivarAutocomplete(
+internal fun resolveExistingCultivarAutocomplete(
     query: String,
     trees: List<TreeEntity>
 ): CultivarAutocompleteOption? {
@@ -738,7 +955,46 @@ private fun autocompleteMatchScore(query: String, candidate: String): Int? = whe
     else -> null
 }
 
-private fun normalizeAutocomplete(value: String): String = value
+private fun com.dillon.orcharddex.ui.viewmodel.TreeFormState.hasAdvancedFieldValues(): Boolean =
+    nickname.isNotBlank() ||
+        source.isNotBlank() ||
+        rootstock.isNotBlank() ||
+        purchaseDate != null ||
+        plantType != PlantType.IN_GROUND ||
+        containerSize.isNotBlank() ||
+        sunExposure.isNotBlank() ||
+        frostSensitivity != FrostSensitivityLevel.MEDIUM ||
+        frostSensitivityNote.isNotBlank() ||
+        irrigationNote.isNotBlank() ||
+        status != TreeStatus.ACTIVE ||
+        tags.isNotBlank() ||
+        notes.isNotBlank() ||
+        bloomTimingMode != com.dillon.orcharddex.data.model.BloomTimingMode.AUTO ||
+        customBloomStartMonth.isNotBlank() ||
+        customBloomStartDay.isNotBlank() ||
+        customBloomDurationDays.isNotBlank() ||
+        selfCompatibilityOverride != null ||
+        pollinationModeOverride != null ||
+        pollinationOverrideNote.isNotBlank()
+
+internal fun previewCultivarAliases(
+    query: String,
+    aliases: List<String>,
+    limit: Int = 2
+): List<String> {
+    val normalizedQuery = normalizeAutocomplete(query)
+    val distinctAliases = aliases.distinctBy(::normalizeAutocomplete)
+    if (normalizedQuery.isBlank()) return distinctAliases.take(limit)
+    return distinctAliases
+        .sortedWith(
+            compareByDescending<String> {
+                autocompleteMatchScore(normalizedQuery, normalizeAutocomplete(it)) ?: 0
+            }.thenBy { it.lowercase() }
+        )
+        .take(limit)
+}
+
+internal fun normalizeAutocomplete(value: String): String = value
     .trim()
     .lowercase()
     .replace("&", "and")
@@ -749,21 +1005,70 @@ private fun normalizeAutocomplete(value: String): String = value
 @Composable
 fun TreeDetailScreen(
     viewModel: TreeDetailViewModel,
+    settings: AppSettings,
     onBack: () -> Unit,
     onEditTree: (String) -> Unit,
     onAddEvent: (String) -> Unit,
     onAddHarvest: (String) -> Unit,
-    onAddReminder: (String) -> Unit
+    onAddReminder: (String) -> Unit,
+    onOpenLog: (ActivityKind, String) -> Unit
 ) {
     val context = LocalContext.current
     val detail by viewModel.detail.collectAsStateWithLifecycle()
     val photoLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(maxItems = 8)
     ) { uris -> viewModel.addPhotos(uris) }
-    var addMenuVisible by rememberSaveable { mutableStateOf(false) }
     val item = detail ?: return Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text("Tree not found.")
     }
+    val locationProfile = remember(item.location, settings) {
+        item.location?.toForecastLocationProfile() ?: settings.forecastLocationProfile()
+    }
+    val catalogPollination = remember(item.tree.species, item.tree.cultivar) {
+        BloomForecastEngine.pollinationProfileFor(item.tree.species, item.tree.cultivar)
+    }
+    val effectivePollination = remember(item.tree, catalogPollination) {
+        PollinationProfile(
+            selfCompatibility = item.tree.selfCompatibilityOverride
+                ?: catalogPollination?.selfCompatibility
+                ?: SelfCompatibility.UNKNOWN,
+            pollinationMode = item.tree.pollinationModeOverride
+                ?: catalogPollination?.pollinationMode
+                ?: PollinationMode.UNKNOWN
+        )
+    }
+    val customBloomTimingSummary = remember(item.tree) {
+        BloomForecastEngine.customBloomTimingSummaryLabel(item.tree)
+    }
+    val activityPhotoPathsByOwner = remember(item.activityPhotos) {
+        item.activityPhotos
+            .groupBy { it.ownerKind to it.ownerId }
+            .mapValues { (_, photos) ->
+                photos.sortedBy { photo -> photo.sortOrder }.map { photo -> photo.relativePath }
+            }
+    }
+    val phenologyObservations = remember(item.events, item.harvests) {
+        item.events.map { event ->
+            PhenologyObservation(
+                treeId = item.tree.id,
+                dateMillis = event.eventDate,
+                eventType = event.eventType
+            )
+        } + item.harvests.map { harvest ->
+            PhenologyObservation(
+                treeId = item.tree.id,
+                dateMillis = harvest.harvestDate,
+                isHarvest = true
+            )
+        }
+    }
+    val forecastSummary = remember(item.tree, locationProfile, phenologyObservations) {
+        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile, phenologyObservations)
+    }
+    val heroPhoto = remember(item.photos) { item.photos.heroOrLatestPhoto() }
+    val harvestSummary = remember(item.harvests) { item.harvests.toHarvestSummary() }
+    var showPlantPhotos by rememberSaveable(item.tree.id) { mutableStateOf(false) }
+    var timelineFilter by rememberSaveable(item.tree.id) { mutableStateOf(TreeTimelineFilter.ALL) }
 
     if (viewModel.confirmDelete) {
         AlertDialog(
@@ -783,125 +1088,207 @@ fun TreeDetailScreen(
         )
     }
 
-    if (addMenuVisible) {
-        AlertDialog(
-            onDismissRequest = { addMenuVisible = false },
-            title = { Text("Plant actions") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddEvent(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add event") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddHarvest(item.tree.id)
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("add_harvest")
-                    ) { Text("Add harvest") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            onAddReminder(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add reminder") }
-                    Button(
-                        onClick = {
-                            addMenuVisible = false
-                            photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Add photo") }
-                    OutlinedButton(
-                        onClick = {
-                            addMenuVisible = false
-                            onEditTree(item.tree.id)
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text("Edit plant") }
-                }
-            },
-            confirmButton = {
-                TextButton(onClick = { addMenuVisible = false }) { Text("Close") }
-            }
-        )
-    }
-
-    val historyByYear = remember(item.events, item.harvests) {
+    val timelineEntries = remember(item.events, item.harvests, activityPhotoPathsByOwner) {
         (
             item.events.map { event ->
-                TreeHistoryEntry(
+                val photoPaths = activityPhotoPathsByOwner["EVENT" to event.id].orEmpty()
+                TreeTimelineEntry(
+                    id = event.id,
+                    kind = ActivityKind.EVENT,
                     date = event.eventDate,
-                    label = buildString {
-                        append(event.eventType.name.lowercase().replace("_", " "))
-                        if (event.notes.isNotBlank()) append(" • ${event.notes}")
-                    },
+                    title = event.eventType.treeLabel(),
+                    summary = buildEventTimelineSummary(event),
                     eventType = event.eventType,
-                    isHarvest = false
+                    photoPaths = photoPaths.ifEmpty { listOfNotNull(event.photoPath) }
                 )
             } +
                 item.harvests.map { harvest ->
-                    TreeHistoryEntry(
+                    val photoPaths = activityPhotoPathsByOwner["HARVEST" to harvest.id].orEmpty()
+                    TreeTimelineEntry(
+                        id = harvest.id,
+                        kind = ActivityKind.HARVEST,
                         date = harvest.harvestDate,
-                        label = buildString {
-                            append("harvest • ${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}")
-                            if (harvest.firstFruit) append(" • First fruit")
-                            if (harvest.notes.isNotBlank()) append(" • ${harvest.notes}")
-                        },
-                        eventType = null,
+                        title = if (harvest.firstFruit) "First fruit harvest" else "Harvest",
+                        summary = buildHarvestTimelineSummary(harvest),
+                        photoPaths = photoPaths.ifEmpty { listOfNotNull(harvest.photoPath) },
                         isHarvest = true
                     )
                 }
-            ).groupBy { entry ->
-            Instant.ofEpochMilli(entry.date).atZone(ZoneId.systemDefault()).year
-        }.toSortedMap(compareByDescending { it })
+            ).sortedByDescending(TreeTimelineEntry::date)
+    }
+    val seasonRollups = remember(timelineEntries) {
+        timelineEntries
+            .groupBy { Instant.ofEpochMilli(it.date).atZone(OrchardTime.zoneId()).year }
+            .map { (year, entries) ->
+                TreeSeasonRollup(
+                    year = year,
+                    budCount = entries.count { it.eventType == EventType.BUD },
+                    bloomCount = entries.count { it.eventType == EventType.BLOOM },
+                    fruitSetCount = entries.count { it.eventType == EventType.FRUIT_SET },
+                    harvestCount = entries.count(TreeTimelineEntry::isHarvest),
+                    photoCount = entries.count { it.photoPaths.isNotEmpty() }
+                )
+            }
+            .sortedByDescending(TreeSeasonRollup::year)
+    }
+    val filteredTimeline = remember(timelineEntries, timelineFilter) {
+        timelineEntries.filter { timelineFilter.matches(it) }
+    }
+    val filteredTimelineByYear = remember(filteredTimeline) {
+        filteredTimeline
+            .groupBy { Instant.ofEpochMilli(it.date).atZone(OrchardTime.zoneId()).year }
+            .toSortedMap(compareByDescending { it })
     }
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { addMenuVisible = true },
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier.testTag("tree_actions")
-            ) {
-                Icon(Icons.Outlined.Add, contentDescription = "Plant actions")
-            }
-        }
-    ) { innerPadding ->
+    Scaffold { innerPadding ->
         LazyColumn(
             modifier = Modifier.padding(innerPadding),
-            contentPadding = PaddingValues(16.dp),
+            contentPadding = PaddingValues(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
         item {
-            SectionCard(item.tree.displayName()) {
-                Text(item.tree.speciesCultivarLabel())
-                Text(item.tree.sectionName.ifBlank { "No section assigned" })
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    CompactFact("Planting", item.tree.plantType.name.replace("_", "-").lowercase())
-                    CompactFact("Status", item.tree.status.name.lowercase())
-                    CompactFact("Planted", item.tree.plantedDate.toDateLabel())
-                    CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
-                    CompactFact("Sun", item.tree.sunExposure.orEmpty())
-                    CompactFact("Source", item.tree.source.orEmpty())
-                }
-                LocalPhotoStrip(
-                    existingPaths = item.photos.map { photo ->
-                        photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TreeActionButton(label = "Add event", onClick = { onAddEvent(item.tree.id) })
+                TreeActionButton(
+                    label = "Add harvest",
+                    onClick = { onAddHarvest(item.tree.id) },
+                    modifier = Modifier.testTag("add_harvest")
+                )
+                TreeActionButton(label = "Add reminder", onClick = { onAddReminder(item.tree.id) })
+                TreeActionButton(
+                    label = "Add photo",
+                    onClick = {
+                        photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                 )
             }
         }
         item {
-            SectionCard("Notes") {
-                Text(item.tree.notes.ifBlank { "No notes yet." })
+            SectionCard("Plant snapshot") {
+                Text(item.tree.displayName(), style = MaterialTheme.typography.titleLarge)
+                Text(item.tree.speciesCultivarLabel())
+                (item.location?.name ?: item.tree.orchardName).takeIf(String::isNotBlank)?.let { locationName ->
+                    Text(locationName)
+                }
+                Text(item.tree.sectionName.ifBlank { "No section assigned" })
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    CompactFact("Planting", item.tree.plantType.name.replace("_", "-").lowercase())
+                    if (item.tree.status != TreeStatus.ACTIVE) {
+                        CompactFact("Status", item.tree.status.name.lowercase())
+                    }
+                    CompactFact("Planted", item.tree.plantedDate.toDateLabel())
+                    CompactFact("Fruited", "yes".takeIf { item.tree.hasFruitedBefore || item.harvests.isNotEmpty() }.orEmpty())
+                    CompactFact("Sun", item.tree.sunExposure.orEmpty())
+                    CompactFact("Source", item.tree.source.orEmpty())
+                    CompactFact("Bloom dates", "Custom".takeIf { customBloomTimingSummary != null }.orEmpty())
+                    if (effectivePollination.selfCompatibility != SelfCompatibility.UNKNOWN) {
+                        CompactFact("Compatibility", effectivePollination.selfCompatibility.label)
+                    }
+                    if (effectivePollination.pollinationMode != PollinationMode.UNKNOWN) {
+                        CompactFact("Pollination", effectivePollination.pollinationMode.label)
+                    }
+                }
+                forecastSummary?.let { summary ->
+                    Text(
+                        text = "Bloom forecast: ${summary.headline}",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = summary.supportingLine,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                customBloomTimingSummary?.let {
+                    Text(
+                        text = "Custom bloom window: $it",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                heroPhoto?.let { photo ->
+                    Card(shape = RoundedCornerShape(24.dp)) {
+                        AsyncImage(
+                            model = File(context.filesDir, "photos/${photo.relativePath}"),
+                            contentDescription = "Tree hero photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(220.dp)
+                        )
+                    }
+                    Text(
+                        text = "Hero photo • ${photo.createdAt.toDateLabel()}",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (item.photos.isNotEmpty()) {
+                    OutlinedButton(
+                        onClick = { showPlantPhotos = !showPlantPhotos },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (showPlantPhotos) "Hide plant photos" else "View plant photos (${item.photos.size})")
+                    }
+                    if (showPlantPhotos) {
+                        Text(
+                            text = "Tap any photo below to make it the hero image.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LocalPhotoStrip(
+                            existingPaths = item.photos.map { photo ->
+                                photo.id to File(context.filesDir, "photos/${photo.relativePath}").absolutePath
+                            },
+                            selectedExistingId = heroPhoto?.id,
+                            onSelectExisting = viewModel::setHeroPhoto
+                        )
+                    }
+                }
+                item.tree.pollinationOverrideNote?.takeIf(String::isNotBlank)?.let { note ->
+                    Text(text = "Pollination note: $note", style = MaterialTheme.typography.bodySmall)
+                }
+                item.tree.notes.takeIf(String::isNotBlank)?.let { notes ->
+                    Text(text = notes, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        }
+        item {
+            SectionCard("Production summary") {
+                if (harvestSummary.totalHarvests == 0 && !item.tree.hasFruitedBefore) {
+                    Text("No harvests logged yet.")
+                } else {
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CompactFact("Total harvests", harvestSummary.totalHarvests.toString())
+                        harvestSummary.latestHarvestDate?.let { CompactFact("Latest", it.toDateLabel()) }
+                        harvestSummary.firstFruitDate?.let { CompactFact("First fruit", it.toDateLabel()) }
+                        CompactFact("Verified", harvestSummary.verifiedHarvestCount.toString())
+                        if (item.tree.hasFruitedBefore && harvestSummary.firstFruitDate == null) {
+                            CompactFact("History", "Previously fruited")
+                        }
+                    }
+                    if (harvestSummary.totalsByUnit.isNotEmpty()) {
+                        Text("Logged totals", style = MaterialTheme.typography.labelLarge)
+                        harvestSummary.totalsByUnit.forEach { total ->
+                            Text("${total.quantity.displayAmount()} ${total.unit}")
+                        }
+                    }
+                    if (seasonRollups.isNotEmpty()) {
+                        Text("Recent seasons", style = MaterialTheme.typography.labelLarge)
+                        seasonRollups.take(3).forEach { rollup ->
+                            Text(
+                                "${rollup.year} - ${rollup.budCount} buds - ${rollup.bloomCount} blooms - " +
+                                    "${rollup.fruitSetCount} fruit sets - ${rollup.harvestCount} harvests" +
+                                    if (rollup.photoCount > 0) " - ${rollup.photoCount} photos" else ""
+                            )
+                        }
+                    }
+                }
             }
         }
         item {
@@ -917,70 +1304,186 @@ fun TreeDetailScreen(
             }
         }
         item {
-            SectionCard("Season history") {
-                if (historyByYear.isEmpty()) {
-                    Text("No bloom, fruit set, or harvest history yet.")
-                } else {
-                    historyByYear.forEach { (year, entries) ->
-                        val bloomCount = entries.count { it.eventType == EventType.BLOOM }
-                        val fruitSetCount = entries.count { it.eventType == EventType.FRUIT_SET }
-                        val harvestCount = entries.count(TreeHistoryEntry::isHarvest)
-                        Text(year.toString(), style = MaterialTheme.typography.titleSmall)
-                        Text(
-                            "$bloomCount blooms • $fruitSetCount fruit sets • $harvestCount harvests",
-                            style = MaterialTheme.typography.bodySmall
+            SectionCard("Activity timeline") {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TreeTimelineFilter.entries.forEach { filter ->
+                        FilterChip(
+                            selected = timelineFilter == filter,
+                            onClick = { timelineFilter = filter },
+                            label = { Text(filter.label) }
                         )
-                        entries.sortedByDescending(TreeHistoryEntry::date).forEach { entry ->
-                            Text("${entry.date.toDateLabel()} • ${entry.label}")
+                    }
+                }
+                if (filteredTimelineByYear.isEmpty()) {
+                    Text("No activity on this tree yet.")
+                } else {
+                    filteredTimelineByYear.forEach { (year, entries) ->
+                        val rollup = seasonRollups.firstOrNull { it.year == year }
+                        Text(year.toString(), style = MaterialTheme.typography.titleSmall)
+                        rollup?.let {
+                            Text(
+                                "${it.budCount} buds - ${it.bloomCount} blooms - ${it.fruitSetCount} fruit sets - ${it.harvestCount} harvests",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        entries.forEach { entry ->
+                            OutlinedCard(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { onOpenLog(entry.kind, entry.id) },
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(14.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = entry.title,
+                                            style = MaterialTheme.typography.titleMedium
+                                        )
+                                        Text(
+                                            text = entry.date.toDateLabel(),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = entry.summary,
+                                            style = MaterialTheme.typography.bodySmall
+                                        )
+                                    }
+                                    entry.photoPath?.let { photoPath ->
+                                        Box {
+                                            Card(
+                                                modifier = Modifier.size(72.dp),
+                                                shape = RoundedCornerShape(18.dp)
+                                            ) {
+                                                AsyncImage(
+                                                    model = File(context.filesDir, "photos/$photoPath"),
+                                                    contentDescription = "Log photo",
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                            if (entry.photoPaths.size > 1) {
+                                                Text(
+                                                    text = "+${entry.photoPaths.size - 1}",
+                                                    modifier = Modifier
+                                                        .align(Alignment.BottomEnd)
+                                                        .padding(6.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onPrimary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
             }
         }
         item {
-            SectionCard("Harvest history") {
-                if (item.harvests.isEmpty()) {
-                    Text("No harvests yet.")
-                } else {
-                    item.harvests.forEach { harvest ->
-                        Text(
-                            "${harvest.harvestDate.toDateLabel()} • ${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}" +
-                                if (harvest.firstFruit) " • First fruit" else ""
-                        )
-                    }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onEditTree(item.tree.id) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Edit plant")
                 }
-            }
-        }
-        item {
-            SectionCard("Activity log") {
-                val timeline = (
-                    item.events.map { it.eventDate to "${it.eventType.name.lowercase().replace("_", " ")} • ${it.notes}" } +
-                        item.harvests.map { it.harvestDate to "harvest • ${it.quantityValue.displayAmount()} ${it.quantityUnit}" }
-                    ).sortedByDescending { it.first }
-                if (timeline.isEmpty()) {
-                    Text("No activity on this tree yet.")
-                } else {
-                    timeline.forEach { entry ->
-                        Text("${entry.first.toDateLabel()} • ${entry.second}")
-                    }
+                OutlinedButton(
+                    onClick = viewModel::requestDeleteConfirmation,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Delete tree")
                 }
-            }
-        }
-        item {
-            OutlinedButton(onClick = viewModel::requestDeleteConfirmation, modifier = Modifier.fillMaxWidth()) {
-                Text("Delete tree")
             }
         }
         }
     }
 }
 
-private data class TreeHistoryEntry(
+@Composable
+private fun TreeActionButton(
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.height(36.dp),
+        shape = RoundedCornerShape(12.dp),
+        contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.bodySmall)
+    }
+}
+
+private enum class TreeTimelineFilter(val label: String) {
+    ALL("All"),
+    SEASONAL("Seasonal"),
+    HARVESTS("Harvests"),
+    ISSUES("Issues"),
+    CARE("Care"),
+    OBSERVATIONS("Observations")
+}
+
+private data class TreeTimelineEntry(
+    val id: String,
+    val kind: ActivityKind,
     val date: Long,
-    val label: String,
-    val eventType: EventType?,
-    val isHarvest: Boolean
+    val title: String,
+    val summary: String,
+    val eventType: EventType? = null,
+    val photoPaths: List<String> = emptyList(),
+    val photoPath: String? = photoPaths.firstOrNull(),
+    val isHarvest: Boolean = false
 )
+
+private data class TreeSeasonRollup(
+    val year: Int,
+    val budCount: Int,
+    val bloomCount: Int,
+    val fruitSetCount: Int,
+    val harvestCount: Int,
+    val photoCount: Int
+)
+
+private data class HarvestUnitTotal(
+    val unit: String,
+    val quantity: Double
+)
+
+private data class TreeHarvestSummary(
+    val totalHarvests: Int,
+    val latestHarvestDate: Long?,
+    val firstFruitDate: Long?,
+    val verifiedHarvestCount: Int,
+    val totalsByUnit: List<HarvestUnitTotal>
+)
+
+private fun treeLocationLabel(location: GrowingLocationEntity): String = buildString {
+    append(location.name)
+    if (location.countryCode.isNotBlank()) {
+        append(" (")
+        append(location.countryCode)
+        append(")")
+    }
+}
 
 @Composable
 private fun TreeThumbnail(relativePath: String?) {
@@ -1000,3 +1503,66 @@ private fun TreeThumbnail(relativePath: String?) {
         }
     }
 }
+
+private fun List<TreePhotoEntity>.heroOrLatestPhoto(): TreePhotoEntity? =
+    firstOrNull(TreePhotoEntity::isHero)
+        ?: maxWithOrNull(compareBy<TreePhotoEntity> { it.createdAt }.thenBy { it.sortOrder })
+
+private fun List<HarvestEntity>.toHarvestSummary(): TreeHarvestSummary {
+    val orderedHarvests = sortedByDescending(HarvestEntity::harvestDate)
+    return TreeHarvestSummary(
+        totalHarvests = size,
+        latestHarvestDate = orderedHarvests.firstOrNull()?.harvestDate,
+        firstFruitDate = filter(HarvestEntity::firstFruit).minByOrNull(HarvestEntity::harvestDate)?.harvestDate,
+        verifiedHarvestCount = count(HarvestEntity::verified),
+        totalsByUnit = groupBy { harvest ->
+            harvest.quantityUnit.trim().ifBlank { "unit" }
+        }.map { (unit, harvests) ->
+            HarvestUnitTotal(
+                unit = unit,
+                quantity = harvests.sumOf(HarvestEntity::quantityValue)
+            )
+        }.sortedByDescending(HarvestUnitTotal::quantity)
+    )
+}
+
+private fun TreeTimelineFilter.matches(entry: TreeTimelineEntry): Boolean = when (this) {
+    TreeTimelineFilter.ALL -> true
+    TreeTimelineFilter.SEASONAL -> entry.isHarvest || entry.eventType in setOf(EventType.BUD, EventType.BLOOM, EventType.FRUIT_SET)
+    TreeTimelineFilter.HARVESTS -> entry.isHarvest
+    TreeTimelineFilter.ISSUES -> entry.eventType in setOf(
+        EventType.PEST_OBSERVED,
+        EventType.DISEASE_OBSERVED,
+        EventType.FROST_DAMAGE,
+        EventType.HEAT_STRESS
+    )
+    TreeTimelineFilter.CARE -> entry.eventType in setOf(
+        EventType.PLANTED,
+        EventType.REPOTTED,
+        EventType.PRUNED,
+        EventType.FERTILIZED,
+        EventType.SPRAYED,
+        EventType.GRAFTED,
+        EventType.WATERED
+    )
+    TreeTimelineFilter.OBSERVATIONS -> entry.eventType == EventType.NOTE
+}
+
+private fun EventType.treeLabel(): String = name.lowercase()
+    .replace("_", " ")
+    .replaceFirstChar(Char::uppercase)
+
+private fun buildEventTimelineSummary(event: com.dillon.orcharddex.data.local.EventEntity): String = listOfNotNull(
+    event.quantityValue?.let { quantity ->
+        listOf(quantity.displayAmount(), event.quantityUnit.orEmpty()).joinToString(" ").trim().takeIf(String::isNotBlank)
+    },
+    event.cost?.let { "Cost $${it.displayAmount()}" },
+    event.notes.takeIf(String::isNotBlank)
+).joinToString(" - ").ifBlank { "No extra details." }
+
+private fun buildHarvestTimelineSummary(harvest: HarvestEntity): String = listOfNotNull(
+    "${harvest.quantityValue.displayAmount()} ${harvest.quantityUnit}".trim(),
+    "Quality ${harvest.qualityRating}/5",
+    "First fruit".takeIf { harvest.firstFruit },
+    harvest.notes.takeIf(String::isNotBlank)
+).joinToString(" - ")

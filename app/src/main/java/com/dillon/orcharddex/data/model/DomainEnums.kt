@@ -26,12 +26,19 @@ enum class FrostSensitivityLevel {
 }
 
 @Serializable
+enum class BloomTimingMode {
+    AUTO,
+    CUSTOM
+}
+
+@Serializable
 enum class EventType {
     PLANTED,
     REPOTTED,
     PRUNED,
     FERTILIZED,
     SPRAYED,
+    BUD,
     BLOOM,
     FRUIT_SET,
     HARVEST,
@@ -72,6 +79,7 @@ val CommonSpeciesSuggestions = listOf(
     "Avocado",
     "Citrus",
     "Lychee",
+    "Longan",
     "Guava",
     "Fig",
     "Loquat",

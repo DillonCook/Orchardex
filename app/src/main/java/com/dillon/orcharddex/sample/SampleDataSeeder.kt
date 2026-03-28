@@ -1,23 +1,28 @@
 package com.dillon.orcharddex.sample
 
 import com.dillon.orcharddex.data.local.EventEntity
+import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.ReminderEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.WishlistCultivarEntity
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
+import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistPriority
+import com.dillon.orcharddex.time.OrchardTime
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.util.UUID
 
 data class SamplePayload(
+    val locations: List<GrowingLocationEntity>,
     val trees: List<TreeEntity>,
     val events: List<EventEntity>,
     val harvests: List<HarvestEntity>,
@@ -27,21 +32,27 @@ data class SamplePayload(
 
 class SampleDataSeeder {
     fun build(nowMillis: Long = System.currentTimeMillis()): SamplePayload {
-        val zone = ZoneId.systemDefault()
+        val zone = OrchardTime.zoneId()
         val today = Instant.ofEpochMilli(nowMillis).atZone(zone).toLocalDate()
+        val locations = listOf(
+            sampleLocation("Sunridge", zone.id, nowMillis),
+            sampleLocation("Backyard", zone.id, nowMillis + 1),
+            sampleLocation("Trial Block", zone.id, nowMillis + 2)
+        )
+        val locationIdsByName = locations.associate { it.name to it.id }
         val trees = listOf(
-            sampleTree("Sunridge", "South fence row", "Mango", "Carrie", plantedDaysAgo = 680),
-            sampleTree("Sunridge", "South fence row", "Mango", "Sweet Tart", plantedDaysAgo = 540),
-            sampleTree("Sunridge", "Container pad", "Avocado", "Reed", plantedDaysAgo = 400, plantType = PlantType.CONTAINER, container = "25 gal"),
-            sampleTree("Sunridge", "North trellis", "Passionfruit", "Panama Red", plantedDaysAgo = 220),
-            sampleTree("Backyard", "Patio", "Guava", "Ruby Supreme", plantedDaysAgo = 365),
-            sampleTree("Backyard", "Greenhouse", "Jaboticaba", "Sabara", plantedDaysAgo = 120, plantType = PlantType.CONTAINER, container = "15 gal"),
-            sampleTree("Backyard", "East berm", "Lychee", "Mauritius", plantedDaysAgo = 860),
-            sampleTree("Backyard", "East berm", "Loquat", "Big Jim", plantedDaysAgo = 620),
-            sampleTree("Trial Block", "Row A", "Dragon fruit", "American Beauty", plantedDaysAgo = 210),
-            sampleTree("Trial Block", "Row B", "Fig", "Black Madeira", plantedDaysAgo = 190),
-            sampleTree("Trial Block", "Row C", "Sapodilla", "Makok", plantedDaysAgo = 280),
-            sampleTree("Trial Block", "Container row", "Mulberry", "Pakistan", plantedDaysAgo = 145, plantType = PlantType.CONTAINER, container = "20 gal")
+            sampleTree("Sunridge", locationIdsByName.getValue("Sunridge"), "South fence row", "Mango", "Carrie", plantedDaysAgo = 680),
+            sampleTree("Sunridge", locationIdsByName.getValue("Sunridge"), "South fence row", "Mango", "Sweet Tart", plantedDaysAgo = 540),
+            sampleTree("Sunridge", locationIdsByName.getValue("Sunridge"), "Container pad", "Avocado", "Reed", plantedDaysAgo = 400, plantType = PlantType.CONTAINER, container = "25 gal"),
+            sampleTree("Sunridge", locationIdsByName.getValue("Sunridge"), "North trellis", "Passionfruit", "Panama Red", plantedDaysAgo = 220),
+            sampleTree("Backyard", locationIdsByName.getValue("Backyard"), "Patio", "Guava", "Ruby Supreme", plantedDaysAgo = 365),
+            sampleTree("Backyard", locationIdsByName.getValue("Backyard"), "Greenhouse", "Jaboticaba", "Sabara", plantedDaysAgo = 120, plantType = PlantType.CONTAINER, container = "15 gal"),
+            sampleTree("Backyard", locationIdsByName.getValue("Backyard"), "East berm", "Lychee", "Mauritius", plantedDaysAgo = 860),
+            sampleTree("Backyard", locationIdsByName.getValue("Backyard"), "East berm", "Loquat", "Big Jim", plantedDaysAgo = 620),
+            sampleTree("Trial Block", locationIdsByName.getValue("Trial Block"), "Row A", "Dragon fruit", "American Beauty", plantedDaysAgo = 210),
+            sampleTree("Trial Block", locationIdsByName.getValue("Trial Block"), "Row B", "Fig", "Black Madeira", plantedDaysAgo = 190),
+            sampleTree("Trial Block", locationIdsByName.getValue("Trial Block"), "Row C", "Sapodilla", "Makok", plantedDaysAgo = 280),
+            sampleTree("Trial Block", locationIdsByName.getValue("Trial Block"), "Container row", "Mulberry", "Pakistan", plantedDaysAgo = 145, plantType = PlantType.CONTAINER, container = "20 gal")
         )
 
         val events = trees.flatMapIndexed { index, tree ->
@@ -95,6 +106,7 @@ class SampleDataSeeder {
         )
 
         return SamplePayload(
+            locations = locations,
             trees = trees,
             events = events,
             harvests = harvests,
@@ -105,6 +117,7 @@ class SampleDataSeeder {
 
     private fun sampleTree(
         orchard: String,
+        locationId: String,
         section: String,
         species: String,
         cultivar: String,
@@ -116,6 +129,7 @@ class SampleDataSeeder {
         val plantedAt = System.currentTimeMillis() - plantedDaysAgo * 24 * 60 * 60 * 1000
         return TreeEntity(
             id = UUID.randomUUID().toString(),
+            locationId = locationId,
             orchardName = orchard,
             sectionName = section,
             nickname = null,
@@ -139,6 +153,27 @@ class SampleDataSeeder {
         )
     }
 
+    private fun sampleLocation(
+        name: String,
+        timezoneId: String,
+        timestamp: Long
+    ): GrowingLocationEntity = GrowingLocationEntity(
+        id = UUID.randomUUID().toString(),
+        name = name,
+        countryCode = "US",
+        timezoneId = timezoneId,
+        hemisphere = Hemisphere.NORTHERN,
+        latitudeDeg = null,
+        longitudeDeg = null,
+        elevationM = null,
+        usdaZoneCode = "10b",
+        chillHoursBand = ChillHoursBand.UNKNOWN,
+        microclimateFlags = emptySet(),
+        notes = "",
+        createdAt = timestamp,
+        updatedAt = timestamp
+    )
+
     private fun sampleHarvest(
         treeId: String,
         date: java.time.LocalDate,
@@ -150,11 +185,12 @@ class SampleDataSeeder {
     ): HarvestEntity = HarvestEntity(
         id = UUID.randomUUID().toString(),
         treeId = treeId,
-        harvestDate = atHour(date, 9, ZoneId.systemDefault()),
+        harvestDate = atHour(date, 9, OrchardTime.zoneId()),
         quantityValue = quantity,
         quantityUnit = unit,
         qualityRating = quality,
         firstFruit = firstFruit,
+        verified = true,
         notes = notes,
         photoPath = null,
         createdAt = System.currentTimeMillis()
@@ -173,7 +209,7 @@ class SampleDataSeeder {
             treeId = treeId,
             title = title,
             notes = "",
-            dueAt = atHour(date, 8, ZoneId.systemDefault()),
+            dueAt = atHour(date, 8, OrchardTime.zoneId()),
             hasTime = false,
             recurrenceType = recurrenceType,
             recurrenceIntervalDays = recurrenceIntervalDays,

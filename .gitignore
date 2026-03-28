@@ -6,6 +6,9 @@
 /app/build/
 /captures/
 /local.properties
+/release-signing.properties
+*.jks
+*.keystore
 /.idea/
 *.iml
 app/release/

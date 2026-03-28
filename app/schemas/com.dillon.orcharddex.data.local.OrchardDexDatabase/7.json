@@ -1,0 +1,845 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 7,
+    "identityHash": "48ccb96763e8ae38e53b9aa43bf06de1",
+    "entities": [
+      {
+        "tableName": "growing_locations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `countryCode` TEXT NOT NULL, `timezoneId` TEXT NOT NULL, `hemisphere` TEXT NOT NULL, `latitudeDeg` REAL, `longitudeDeg` REAL, `elevationM` REAL, `usdaZoneCode` TEXT, `chillHoursBand` TEXT NOT NULL, `microclimateFlags` TEXT NOT NULL, `notes` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "countryCode",
+            "columnName": "countryCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "timezoneId",
+            "columnName": "timezoneId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hemisphere",
+            "columnName": "hemisphere",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "latitudeDeg",
+            "columnName": "latitudeDeg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "longitudeDeg",
+            "columnName": "longitudeDeg",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "elevationM",
+            "columnName": "elevationM",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "usdaZoneCode",
+            "columnName": "usdaZoneCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "chillHoursBand",
+            "columnName": "chillHoursBand",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "microclimateFlags",
+            "columnName": "microclimateFlags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_growing_locations_name",
+            "unique": false,
+            "columnNames": [
+              "name"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_growing_locations_name` ON `${TABLE_NAME}` (`name`)"
+          }
+        ]
+      },
+      {
+        "tableName": "trees",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `locationId` TEXT, `orchardName` TEXT NOT NULL, `sectionName` TEXT NOT NULL, `nickname` TEXT, `species` TEXT NOT NULL, `cultivar` TEXT NOT NULL, `rootstock` TEXT, `source` TEXT, `purchaseDate` INTEGER, `plantedDate` INTEGER NOT NULL, `plantType` TEXT NOT NULL, `containerSize` TEXT, `sunExposure` TEXT, `frostSensitivity` TEXT NOT NULL, `frostSensitivityNote` TEXT, `irrigationNote` TEXT, `status` TEXT NOT NULL, `hasFruitedBefore` INTEGER NOT NULL, `notes` TEXT NOT NULL, `tags` TEXT NOT NULL, `bloomTimingMode` TEXT NOT NULL, `customBloomStartMonth` INTEGER, `customBloomStartDay` INTEGER, `customBloomDurationDays` INTEGER, `selfCompatibilityOverride` TEXT, `pollinationModeOverride` TEXT, `pollinationOverrideNote` TEXT, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`locationId`) REFERENCES `growing_locations`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "locationId",
+            "columnName": "locationId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "orchardName",
+            "columnName": "orchardName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sectionName",
+            "columnName": "sectionName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "nickname",
+            "columnName": "nickname",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "species",
+            "columnName": "species",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cultivar",
+            "columnName": "cultivar",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rootstock",
+            "columnName": "rootstock",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "source",
+            "columnName": "source",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "purchaseDate",
+            "columnName": "purchaseDate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "plantedDate",
+            "columnName": "plantedDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "plantType",
+            "columnName": "plantType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "containerSize",
+            "columnName": "containerSize",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "sunExposure",
+            "columnName": "sunExposure",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "frostSensitivity",
+            "columnName": "frostSensitivity",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frostSensitivityNote",
+            "columnName": "frostSensitivityNote",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "irrigationNote",
+            "columnName": "irrigationNote",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasFruitedBefore",
+            "columnName": "hasFruitedBefore",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tags",
+            "columnName": "tags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bloomTimingMode",
+            "columnName": "bloomTimingMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customBloomStartMonth",
+            "columnName": "customBloomStartMonth",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "customBloomStartDay",
+            "columnName": "customBloomStartDay",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "customBloomDurationDays",
+            "columnName": "customBloomDurationDays",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "selfCompatibilityOverride",
+            "columnName": "selfCompatibilityOverride",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pollinationModeOverride",
+            "columnName": "pollinationModeOverride",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pollinationOverrideNote",
+            "columnName": "pollinationOverrideNote",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trees_species",
+            "unique": false,
+            "columnNames": [
+              "species"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trees_species` ON `${TABLE_NAME}` (`species`)"
+          },
+          {
+            "name": "index_trees_cultivar",
+            "unique": false,
+            "columnNames": [
+              "cultivar"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trees_cultivar` ON `${TABLE_NAME}` (`cultivar`)"
+          },
+          {
+            "name": "index_trees_orchardName",
+            "unique": false,
+            "columnNames": [
+              "orchardName"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trees_orchardName` ON `${TABLE_NAME}` (`orchardName`)"
+          },
+          {
+            "name": "index_trees_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trees_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_trees_locationId",
+            "unique": false,
+            "columnNames": [
+              "locationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trees_locationId` ON `${TABLE_NAME}` (`locationId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "growing_locations",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "locationId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tree_photos",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `treeId` TEXT NOT NULL, `relativePath` TEXT NOT NULL, `caption` TEXT, `createdAt` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, `isHero` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`treeId`) REFERENCES `trees`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeId",
+            "columnName": "treeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "relativePath",
+            "columnName": "relativePath",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "caption",
+            "columnName": "caption",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sortOrder",
+            "columnName": "sortOrder",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isHero",
+            "columnName": "isHero",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tree_photos_treeId",
+            "unique": false,
+            "columnNames": [
+              "treeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tree_photos_treeId` ON `${TABLE_NAME}` (`treeId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trees",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "treeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "events",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `treeId` TEXT NOT NULL, `eventType` TEXT NOT NULL, `eventDate` INTEGER NOT NULL, `notes` TEXT NOT NULL, `cost` REAL, `quantityValue` REAL, `quantityUnit` TEXT, `photoPath` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`treeId`) REFERENCES `trees`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeId",
+            "columnName": "treeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventType",
+            "columnName": "eventType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "eventDate",
+            "columnName": "eventDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cost",
+            "columnName": "cost",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "quantityValue",
+            "columnName": "quantityValue",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "quantityUnit",
+            "columnName": "quantityUnit",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "photoPath",
+            "columnName": "photoPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_events_treeId",
+            "unique": false,
+            "columnNames": [
+              "treeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_events_treeId` ON `${TABLE_NAME}` (`treeId`)"
+          },
+          {
+            "name": "index_events_eventDate",
+            "unique": false,
+            "columnNames": [
+              "eventDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_events_eventDate` ON `${TABLE_NAME}` (`eventDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trees",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "treeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "harvests",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `treeId` TEXT NOT NULL, `harvestDate` INTEGER NOT NULL, `quantityValue` REAL NOT NULL, `quantityUnit` TEXT NOT NULL, `qualityRating` INTEGER NOT NULL, `firstFruit` INTEGER NOT NULL, `verified` INTEGER NOT NULL, `notes` TEXT NOT NULL, `photoPath` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`treeId`) REFERENCES `trees`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeId",
+            "columnName": "treeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "harvestDate",
+            "columnName": "harvestDate",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantityValue",
+            "columnName": "quantityValue",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "quantityUnit",
+            "columnName": "quantityUnit",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qualityRating",
+            "columnName": "qualityRating",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstFruit",
+            "columnName": "firstFruit",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "verified",
+            "columnName": "verified",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "photoPath",
+            "columnName": "photoPath",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_harvests_treeId",
+            "unique": false,
+            "columnNames": [
+              "treeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_harvests_treeId` ON `${TABLE_NAME}` (`treeId`)"
+          },
+          {
+            "name": "index_harvests_harvestDate",
+            "unique": false,
+            "columnNames": [
+              "harvestDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_harvests_harvestDate` ON `${TABLE_NAME}` (`harvestDate`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trees",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "treeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "reminders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `treeId` TEXT, `title` TEXT NOT NULL, `notes` TEXT NOT NULL, `dueAt` INTEGER NOT NULL, `hasTime` INTEGER NOT NULL, `recurrenceType` TEXT NOT NULL, `recurrenceIntervalDays` INTEGER, `enabled` INTEGER NOT NULL, `completedAt` INTEGER, `leadTimeMode` TEXT NOT NULL, `customLeadTimeHours` INTEGER, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), FOREIGN KEY(`treeId`) REFERENCES `trees`(`id`) ON UPDATE NO ACTION ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "treeId",
+            "columnName": "treeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueAt",
+            "columnName": "dueAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hasTime",
+            "columnName": "hasTime",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recurrenceType",
+            "columnName": "recurrenceType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "recurrenceIntervalDays",
+            "columnName": "recurrenceIntervalDays",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "completedAt",
+            "columnName": "completedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "leadTimeMode",
+            "columnName": "leadTimeMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customLeadTimeHours",
+            "columnName": "customLeadTimeHours",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_reminders_treeId",
+            "unique": false,
+            "columnNames": [
+              "treeId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_treeId` ON `${TABLE_NAME}` (`treeId`)"
+          },
+          {
+            "name": "index_reminders_dueAt",
+            "unique": false,
+            "columnNames": [
+              "dueAt"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_reminders_dueAt` ON `${TABLE_NAME}` (`dueAt`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "trees",
+            "onDelete": "SET NULL",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "treeId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "wishlist_cultivars",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `species` TEXT NOT NULL, `cultivar` TEXT NOT NULL, `priority` TEXT NOT NULL, `notes` TEXT NOT NULL, `acquired` INTEGER NOT NULL, `linkedTreeId` TEXT, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "species",
+            "columnName": "species",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cultivar",
+            "columnName": "cultivar",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "notes",
+            "columnName": "notes",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "acquired",
+            "columnName": "acquired",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "linkedTreeId",
+            "columnName": "linkedTreeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_wishlist_cultivars_species",
+            "unique": false,
+            "columnNames": [
+              "species"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_wishlist_cultivars_species` ON `${TABLE_NAME}` (`species`)"
+          },
+          {
+            "name": "index_wishlist_cultivars_cultivar",
+            "unique": false,
+            "columnNames": [
+              "cultivar"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_wishlist_cultivars_cultivar` ON `${TABLE_NAME}` (`cultivar`)"
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '48ccb96763e8ae38e53b9aa43bf06de1')"
+    ]
+  }
+}
