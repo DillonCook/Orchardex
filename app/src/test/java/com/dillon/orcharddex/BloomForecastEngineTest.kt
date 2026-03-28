@@ -7,6 +7,7 @@ import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.LocationClimateFingerprint
 import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeStatus
@@ -2951,5 +2952,102 @@ class BloomForecastEngineTest {
         assertThat(windows.single().source).isEqualTo(ForecastSource.HISTORY_LEARNED)
         assertThat(windows.single().confidence).isEqualTo(ForecastConfidence.MEDIUM)
         assertThat(windows.single().startDate.monthValue).isEqualTo(3)
+    }
+
+    @Test
+    fun predictMonth_prefersClimateFingerprintOverUsdaZoneWhenBothExist() {
+        val appleTree = TreeEntity(
+            id = "apple-climate-fingerprint",
+            orchardName = "Home",
+            sectionName = "Test",
+            nickname = null,
+            species = "Apple",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(appleTree),
+            yearMonth = YearMonth.of(2026, 4),
+            locationProfile = ForecastLocationProfile(
+                hemisphere = Hemisphere.NORTHERN,
+                usdaZoneCode = "9a",
+                climateFingerprint = LocationClimateFingerprint(
+                    source = "NASA POWER",
+                    fetchedAt = 1L,
+                    meanMonthlyTempC = listOf(0.0, 1.0, 4.0, 8.0, 13.0, 17.0, 20.0, 19.0, 15.0, 10.0, 5.0, 1.0),
+                    meanMonthlyMinTempC = listOf(-4.0, -3.0, 0.0, 3.0, 7.0, 11.0, 14.0, 13.0, 9.0, 4.0, 0.0, -3.0),
+                    meanMonthlyMaxTempC = listOf(4.0, 6.0, 9.0, 14.0, 19.0, 23.0, 26.0, 25.0, 21.0, 15.0, 9.0, 5.0)
+                )
+            )
+        )
+
+        assertThat(windows).hasSize(1)
+        assertThat(windows.single().source).isEqualTo(ForecastSource.CLIMATE_BAND)
+        assertThat(windows.single().startDate).isEqualTo(LocalDate.of(2026, 4, 19))
+    }
+
+    @Test
+    fun predictMonth_usesWarmSeasonClimateFingerprintForDragonFruit() {
+        val dragonFruitTree = TreeEntity(
+            id = "dragon-fruit-climate-fingerprint",
+            orchardName = "Home",
+            sectionName = "Test",
+            nickname = null,
+            species = "Dragon fruit",
+            cultivar = "",
+            rootstock = null,
+            source = null,
+            purchaseDate = null,
+            plantedDate = 1_700_000_000_000,
+            plantType = PlantType.IN_GROUND,
+            containerSize = null,
+            sunExposure = null,
+            frostSensitivity = FrostSensitivityLevel.MEDIUM,
+            frostSensitivityNote = null,
+            irrigationNote = null,
+            status = TreeStatus.ACTIVE,
+            hasFruitedBefore = false,
+            notes = "",
+            tags = "",
+            createdAt = 1L,
+            updatedAt = 1L
+        )
+
+        val windows = BloomForecastEngine.predictMonth(
+            trees = listOf(dragonFruitTree),
+            yearMonth = YearMonth.of(2026, 6),
+            locationProfile = ForecastLocationProfile(
+                hemisphere = Hemisphere.NORTHERN,
+                climateFingerprint = LocationClimateFingerprint(
+                    source = "NASA POWER",
+                    fetchedAt = 1L,
+                    meanMonthlyTempC = listOf(12.0, 14.0, 16.0, 18.0, 21.0, 24.0, 27.0, 27.0, 25.0, 21.0, 17.0, 13.0),
+                    meanMonthlyMinTempC = listOf(7.0, 8.0, 10.0, 12.0, 15.0, 18.0, 21.0, 21.0, 19.0, 15.0, 10.0, 8.0),
+                    meanMonthlyMaxTempC = listOf(18.0, 20.0, 22.0, 25.0, 28.0, 32.0, 35.0, 35.0, 33.0, 29.0, 23.0, 19.0)
+                )
+            )
+        )
+
+        assertThat(windows).hasSize(1)
+        assertThat(windows.single().source).isEqualTo(ForecastSource.CLIMATE_BAND)
+        assertThat(windows.single().confidence).isEqualTo(ForecastConfidence.MEDIUM)
+        assertThat(windows.single().startDate).isEqualTo(LocalDate.of(2026, 4, 1))
+        assertThat(windows.single().endDate).isEqualTo(LocalDate.of(2026, 10, 31))
     }
 }

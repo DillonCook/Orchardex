@@ -32,7 +32,7 @@ abstract class OrchardDexDatabase : RoomDatabase() {
     abstract fun wishlistDao(): WishlistDao
 
     companion object {
-        const val DB_VERSION = 8
+        const val DB_VERSION = 9
         const val DB_NAME = "orcharddex.db"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -276,6 +276,41 @@ abstract class OrchardDexDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_8_9 = object : Migration(8, 9) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    ALTER TABLE growing_locations
+                    ADD COLUMN climateSource TEXT
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE growing_locations
+                    ADD COLUMN climateFetchedAt INTEGER
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE growing_locations
+                    ADD COLUMN climateMeanMonthlyTempC TEXT NOT NULL DEFAULT ''
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE growing_locations
+                    ADD COLUMN climateMeanMonthlyMinTempC TEXT NOT NULL DEFAULT ''
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE growing_locations
+                    ADD COLUMN climateMeanMonthlyMaxTempC TEXT NOT NULL DEFAULT ''
+                    """.trimIndent()
+                )
+            }
+        }
+
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -283,7 +318,8 @@ abstract class OrchardDexDatabase : RoomDatabase() {
             MIGRATION_4_5,
             MIGRATION_5_6,
             MIGRATION_6_7,
-            MIGRATION_7_8
+            MIGRATION_7_8,
+            MIGRATION_8_9
         )
     }
 }

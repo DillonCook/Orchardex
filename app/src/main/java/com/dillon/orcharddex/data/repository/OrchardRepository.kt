@@ -24,6 +24,8 @@ import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.GrowingLocationInput
 import com.dillon.orcharddex.data.model.HarvestInput
 import com.dillon.orcharddex.data.model.HistoryEntryModel
+import com.dillon.orcharddex.data.model.LocationClimateFingerprint
+import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.normalizedName
 import com.dillon.orcharddex.data.model.RecentActivityItem
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -37,6 +39,8 @@ import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.WishlistInput
 import com.dillon.orcharddex.data.preferences.SettingsRepository
 import com.dillon.orcharddex.data.preferences.forecastLocationProfile
+import com.dillon.orcharddex.data.remote.ClimateFingerprintService
+import com.dillon.orcharddex.data.remote.LocationSearchService
 import com.dillon.orcharddex.notifications.ReminderScheduler
 import com.dillon.orcharddex.sample.SampleDataSeeder
 import com.dillon.orcharddex.time.OrchardTime
@@ -57,7 +61,9 @@ class OrchardRepository(
     private val settingsRepository: SettingsRepository,
     private val photoStorage: PhotoStorage,
     private val reminderScheduler: ReminderScheduler,
-    private val sampleDataSeeder: SampleDataSeeder
+    private val sampleDataSeeder: SampleDataSeeder,
+    private val locationSearchService: LocationSearchService,
+    private val climateFingerprintService: ClimateFingerprintService
 ) {
     private val growingLocationDao = database.growingLocationDao()
     private val treeDao = database.treeDao()
@@ -739,10 +745,15 @@ class OrchardRepository(
         wishlistDao.delete(wishlistId)
     }
 
+    suspend fun searchGrowingLocations(query: String): List<LocationSearchResult> = withContext(Dispatchers.IO) {
+        locationSearchService.search(query)
+    }
+
     suspend fun saveGrowingLocation(input: GrowingLocationInput): GrowingLocationEntity = withContext(Dispatchers.IO) {
         val now = System.currentTimeMillis()
         val existing = input.id?.let { locationId -> growingLocationDao.getLocation(locationId) }
-        val entity = GrowingLocationEntity(
+        val coordinatesChanged = existing?.latitudeDeg != input.latitudeDeg || existing?.longitudeDeg != input.longitudeDeg
+        var entity = GrowingLocationEntity(
             id = input.id ?: UUID.randomUUID().toString(),
             name = input.name.trim().ifBlank { "Growing location" },
             countryCode = input.countryCode.trim(),
@@ -754,10 +765,20 @@ class OrchardRepository(
             usdaZoneCode = input.usdaZoneCode?.trim()?.ifBlank { null },
             chillHoursBand = input.chillHoursBand,
             microclimateFlags = input.microclimateFlags,
+            climateSource = if (input.latitudeDeg == null || input.longitudeDeg == null) null else existing?.climateSource,
+            climateFetchedAt = if (input.latitudeDeg == null || input.longitudeDeg == null) null else existing?.climateFetchedAt,
+            climateMeanMonthlyTempC = if (input.latitudeDeg == null || input.longitudeDeg == null) emptyList() else existing?.climateMeanMonthlyTempC.orEmpty(),
+            climateMeanMonthlyMinTempC = if (input.latitudeDeg == null || input.longitudeDeg == null) emptyList() else existing?.climateMeanMonthlyMinTempC.orEmpty(),
+            climateMeanMonthlyMaxTempC = if (input.latitudeDeg == null || input.longitudeDeg == null) emptyList() else existing?.climateMeanMonthlyMaxTempC.orEmpty(),
             notes = input.notes.trim(),
             createdAt = existing?.createdAt ?: now,
             updatedAt = now
         )
+        if (input.latitudeDeg != null && input.longitudeDeg != null && (coordinatesChanged || existing?.climateFetchedAt == null)) {
+            fetchLocationClimate(input.latitudeDeg, input.longitudeDeg)?.let { climate ->
+                entity = entity.withClimate(climate)
+            }
+        }
         growingLocationDao.insert(entity)
         treeDao.updateOrchardNameForLocation(entity.id, entity.name)
         entity
@@ -788,6 +809,16 @@ class OrchardRepository(
             settingsRepository.updateForecastLocation(defaultLocation.toForecastLocationProfile())
         }
         treeDao.assignLocationToTreesWithoutLocation(defaultLocation.id)
+    }
+
+    suspend fun refreshLocationClimate(locationId: String): GrowingLocationEntity? = withContext(Dispatchers.IO) {
+        val location = growingLocationDao.getLocation(locationId) ?: return@withContext null
+        val latitude = location.latitudeDeg ?: return@withContext location
+        val longitude = location.longitudeDeg ?: return@withContext location
+        val fingerprint = fetchLocationClimate(latitude, longitude) ?: return@withContext location
+        val updated = location.withClimate(fingerprint).copy(updatedAt = System.currentTimeMillis())
+        growingLocationDao.insert(updated)
+        updated
     }
 
     suspend fun loadSampleDataReplaceAll() = withContext(Dispatchers.IO) {
@@ -887,7 +918,7 @@ class OrchardRepository(
             return existingLocations.first()
         }
         val fallbackName = settings.forecastLocationProfile().normalizedName(
-            fallback = settings.orchardName.trim().ifBlank { "Primary orchard" }
+            fallback = settings.orchardName.trim().ifBlank { "Growing location" }
         )
         val created = GrowingLocationEntity(
             id = UUID.randomUUID().toString(),
@@ -901,6 +932,11 @@ class OrchardRepository(
             usdaZoneCode = settings.usdaZone.takeIf(String::isNotBlank),
             chillHoursBand = settings.chillHoursBand,
             microclimateFlags = settings.microclimateFlags,
+            climateSource = null,
+            climateFetchedAt = null,
+            climateMeanMonthlyTempC = emptyList(),
+            climateMeanMonthlyMinTempC = emptyList(),
+            climateMeanMonthlyMaxTempC = emptyList(),
             notes = "",
             createdAt = timestamp,
             updatedAt = timestamp
@@ -920,6 +956,13 @@ class OrchardRepository(
             growingLocationDao.getLocation(requestedLocationId)
         } ?: fallbackLocation
     }
+
+    private suspend fun fetchLocationClimate(
+        latitudeDeg: Double,
+        longitudeDeg: Double
+    ): LocationClimateFingerprint? = runCatching {
+        climateFingerprintService.fetch(latitudeDeg, longitudeDeg)
+    }.getOrNull()
 
     private suspend fun countMatchingTrees(species: String, cultivar: String): Int = treeDao.getAllTrees().count {
         it.species.normalized() == species.normalized() &&
@@ -1046,6 +1089,14 @@ class OrchardRepository(
         )
     }
 }
+
+private fun GrowingLocationEntity.withClimate(climate: LocationClimateFingerprint): GrowingLocationEntity = copy(
+    climateSource = climate.source.ifBlank { climateSource },
+    climateFetchedAt = climate.fetchedAt,
+    climateMeanMonthlyTempC = climate.meanMonthlyTempC,
+    climateMeanMonthlyMinTempC = climate.meanMonthlyMinTempC,
+    climateMeanMonthlyMaxTempC = climate.meanMonthlyMaxTempC
+)
 
 fun TreeEntity.displayName(): String = when {
     !nickname.isNullOrBlank() && cultivar.isNotBlank() -> "$nickname ($cultivar)"

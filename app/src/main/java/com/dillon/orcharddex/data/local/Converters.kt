@@ -98,4 +98,14 @@ class Converters {
             .mapNotNull { token -> token.takeIf(String::isNotBlank) }
             .mapNotNull { token -> runCatching { MicroclimateFlag.valueOf(token) }.getOrNull() }
             .toSet()
+
+    @TypeConverter
+    fun fromDoubleList(value: List<Double>): String =
+        value.joinToString("|") { number -> number.toString() }
+
+    @TypeConverter
+    fun toDoubleList(value: String): List<Double> =
+        value.split("|")
+            .mapNotNull { token -> token.takeIf(String::isNotBlank) }
+            .mapNotNull(String::toDoubleOrNull)
 }

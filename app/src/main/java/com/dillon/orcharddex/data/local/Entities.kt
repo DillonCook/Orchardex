@@ -39,6 +39,11 @@ data class GrowingLocationEntity(
     val usdaZoneCode: String?,
     val chillHoursBand: ChillHoursBand,
     val microclimateFlags: Set<MicroclimateFlag>,
+    val climateSource: String? = null,
+    val climateFetchedAt: Long? = null,
+    val climateMeanMonthlyTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMinTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMaxTempC: List<Double> = emptyList(),
     val notes: String,
     val createdAt: Long,
     val updatedAt: Long
@@ -253,5 +258,14 @@ fun GrowingLocationEntity.toForecastLocationProfile(): ForecastLocationProfile =
     usdaZoneCode = usdaZoneCode,
     chillHoursBand = chillHoursBand,
     microclimateFlags = microclimateFlags,
+    climateFingerprint = climateSource?.takeIf(String::isNotBlank)?.let { source ->
+        com.dillon.orcharddex.data.model.LocationClimateFingerprint(
+            source = source,
+            fetchedAt = climateFetchedAt ?: 0L,
+            meanMonthlyTempC = climateMeanMonthlyTempC,
+            meanMonthlyMinTempC = climateMeanMonthlyMinTempC,
+            meanMonthlyMaxTempC = climateMeanMonthlyMaxTempC
+        )
+    },
     notes = notes
 )

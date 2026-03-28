@@ -31,6 +31,7 @@ import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.HarvestInput
 import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.PollinationMode
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -847,6 +848,11 @@ class DexViewModel(
         SharingStarted.WhileSubscribed(5_000),
         emptyList()
     )
+    val history = repository.observeHistory().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        emptyList()
+    )
     val dex = repository.observeDex().stateIn(
         viewModelScope,
         SharingStarted.WhileSubscribed(5_000),
@@ -1158,6 +1164,18 @@ class SettingsViewModel(
     var confirmLoadSample by mutableStateOf(false)
         private set
 
+    var locationSearchQuery by mutableStateOf("")
+        private set
+
+    var locationSearchResults by mutableStateOf<List<LocationSearchResult>>(emptyList())
+        private set
+
+    var locationSearchBusy by mutableStateOf(false)
+        private set
+
+    var locationSearchError by mutableStateOf<String?>(null)
+        private set
+
     fun updateTheme(mode: AppThemeMode) {
         viewModelScope.launch {
             settingsRepository.updateTheme(mode)
@@ -1172,30 +1190,35 @@ class SettingsViewModel(
 
     fun updateOrchardProfile(name: String, locationProfile: ForecastLocationProfile) {
         viewModelScope.launch {
-            val snapshot = settingsRepository.snapshot()
-            val existingDefaultLocation = snapshot.defaultLocationId
-                .takeIf(String::isNotBlank)
-                ?.let { locationId -> repository.getGrowingLocation(locationId) }
-            val savedLocation = repository.saveGrowingLocation(
-                GrowingLocationInput(
-                    id = snapshot.defaultLocationId.takeIf(String::isNotBlank),
-                    name = name.trim(),
-                    countryCode = locationProfile.countryCode,
-                    timezoneId = locationProfile.timezoneId,
-                    hemisphere = locationProfile.hemisphere,
-                    latitudeDeg = locationProfile.latitudeDeg,
-                    longitudeDeg = locationProfile.longitudeDeg,
-                    elevationM = locationProfile.elevationM,
-                    usdaZoneCode = locationProfile.usdaZoneCode,
-                    chillHoursBand = locationProfile.chillHoursBand,
-                    microclimateFlags = locationProfile.microclimateFlags,
-                    notes = existingDefaultLocation?.notes ?: locationProfile.notes
+            busy = true
+            try {
+                val snapshot = settingsRepository.snapshot()
+                val existingDefaultLocation = snapshot.defaultLocationId
+                    .takeIf(String::isNotBlank)
+                    ?.let { locationId -> repository.getGrowingLocation(locationId) }
+                val savedLocation = repository.saveGrowingLocation(
+                    GrowingLocationInput(
+                        id = snapshot.defaultLocationId.takeIf(String::isNotBlank),
+                        name = name.trim(),
+                        countryCode = locationProfile.countryCode,
+                        timezoneId = locationProfile.timezoneId,
+                        hemisphere = locationProfile.hemisphere,
+                        latitudeDeg = locationProfile.latitudeDeg,
+                        longitudeDeg = locationProfile.longitudeDeg,
+                        elevationM = locationProfile.elevationM,
+                        usdaZoneCode = locationProfile.usdaZoneCode,
+                        chillHoursBand = locationProfile.chillHoursBand,
+                        microclimateFlags = locationProfile.microclimateFlags,
+                        notes = existingDefaultLocation?.notes ?: locationProfile.notes
+                    )
                 )
-            )
-            settingsRepository.updateDefaultLocationId(savedLocation.id)
-            settingsRepository.updateOrchardName(savedLocation.name)
-            settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
-            settingsRepository.updateOrchardRegion("")
+                settingsRepository.updateDefaultLocationId(savedLocation.id)
+                settingsRepository.updateOrchardName(savedLocation.name)
+                settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
+                settingsRepository.updateOrchardRegion("")
+            } finally {
+                busy = false
+            }
         }
     }
 
@@ -1218,24 +1241,87 @@ class SettingsViewModel(
 
     fun saveGrowingLocation(input: GrowingLocationInput) {
         viewModelScope.launch {
-            val savedLocation = repository.saveGrowingLocation(input)
-            val snapshot = settingsRepository.snapshot()
-            if (snapshot.defaultLocationId.isBlank() || snapshot.defaultLocationId == savedLocation.id) {
-                settingsRepository.updateDefaultLocationId(savedLocation.id)
-                settingsRepository.updateOrchardName(savedLocation.name)
-                settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
-                settingsRepository.updateOrchardRegion("")
+            busy = true
+            try {
+                val savedLocation = repository.saveGrowingLocation(input)
+                val snapshot = settingsRepository.snapshot()
+                if (snapshot.defaultLocationId.isBlank() || snapshot.defaultLocationId == savedLocation.id) {
+                    settingsRepository.updateDefaultLocationId(savedLocation.id)
+                    settingsRepository.updateOrchardName(savedLocation.name)
+                    settingsRepository.updateForecastLocation(savedLocation.toForecastLocationProfile())
+                    settingsRepository.updateOrchardRegion("")
+                }
+            } finally {
+                busy = false
             }
         }
     }
 
     fun setDefaultGrowingLocation(locationId: String) {
         viewModelScope.launch {
-            val location = repository.getGrowingLocation(locationId) ?: return@launch
-            settingsRepository.updateDefaultLocationId(location.id)
-            settingsRepository.updateOrchardName(location.name)
-            settingsRepository.updateForecastLocation(location.toForecastLocationProfile())
-            settingsRepository.updateOrchardRegion("")
+            busy = true
+            try {
+                val location = repository.getGrowingLocation(locationId) ?: return@launch
+                settingsRepository.updateDefaultLocationId(location.id)
+                settingsRepository.updateOrchardName(location.name)
+                settingsRepository.updateForecastLocation(location.toForecastLocationProfile())
+                settingsRepository.updateOrchardRegion("")
+            } finally {
+                busy = false
+            }
+        }
+    }
+
+    fun updateLocationSearchQuery(query: String) {
+        locationSearchQuery = query
+        locationSearchResults = emptyList()
+        locationSearchError = null
+    }
+
+    fun clearLocationSearch() {
+        locationSearchQuery = ""
+        locationSearchResults = emptyList()
+        locationSearchError = null
+        locationSearchBusy = false
+    }
+
+    fun searchLocationMatches(query: String = locationSearchQuery) {
+        viewModelScope.launch {
+            val trimmed = query.trim()
+            locationSearchQuery = query
+            if (trimmed.length < 2) {
+                locationSearchResults = emptyList()
+                locationSearchError = "Enter at least 2 characters."
+                return@launch
+            }
+            locationSearchBusy = true
+            locationSearchError = null
+            try {
+                locationSearchResults = repository.searchGrowingLocations(trimmed)
+                if (locationSearchResults.isEmpty()) {
+                    locationSearchError = "No matches found."
+                }
+            } catch (_: Exception) {
+                locationSearchResults = emptyList()
+                locationSearchError = "Location search is unavailable right now."
+            } finally {
+                locationSearchBusy = false
+            }
+        }
+    }
+
+    fun refreshLocationClimate(locationId: String) {
+        viewModelScope.launch {
+            busy = true
+            try {
+                val refreshed = repository.refreshLocationClimate(locationId) ?: return@launch
+                val snapshot = settingsRepository.snapshot()
+                if (snapshot.defaultLocationId == refreshed.id) {
+                    settingsRepository.updateForecastLocation(refreshed.toForecastLocationProfile())
+                }
+            } finally {
+                busy = false
+            }
         }
     }
 

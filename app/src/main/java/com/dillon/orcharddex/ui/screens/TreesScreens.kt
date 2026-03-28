@@ -266,9 +266,6 @@ fun TreeFormScreen(
         }
         pendingCameraUri = null
     }
-    var showRootstockField by rememberSaveable(state.id, state.rootstock.isNotBlank()) {
-        mutableStateOf(state.rootstock.isNotBlank())
-    }
     var showAdvancedFields by rememberSaveable(state.id) {
         mutableStateOf(state.hasAdvancedFieldValues())
     }
@@ -318,7 +315,7 @@ fun TreeFormScreen(
     val locationOptions = remember(locations) { locations.map(::treeLocationLabel) }
     val selectedLocationLabel = remember(locations, state.locationId, state.orchardName) {
         locations.firstOrNull { it.id == state.locationId }?.let(::treeLocationLabel)
-            ?: state.orchardName.ifBlank { "Primary orchard" }
+            ?: state.orchardName.ifBlank { locations.firstOrNull()?.let(::treeLocationLabel) ?: "Growing location" }
     }
 
     LazyColumn(
@@ -368,37 +365,6 @@ fun TreeFormScreen(
                     )
                 }
                 OutlinedTextField(
-                    value = state.sectionName,
-                    onValueChange = { viewModel.update { copy(sectionName = it) } },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Section / bed (optional)") }
-                )
-                OutlinedTextField(
-                    value = state.species,
-                    onValueChange = { input ->
-                        suppressSpeciesAutocomplete = false
-                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
-                            ?: speciesCatalog.firstOrNull {
-                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
-                            }
-                        viewModel.update { copy(species = exactSpecies ?: input) }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("tree_species"),
-                    label = { Text("Species") }
-                )
-                if (!suppressSpeciesAutocomplete) {
-                    SpeciesAutocompleteCard(
-                        query = state.species,
-                        suggestions = speciesSuggestions,
-                        onSelected = { suggestion ->
-                            suppressSpeciesAutocomplete = true
-                            viewModel.update { copy(species = suggestion) }
-                        }
-                    )
-                }
-                OutlinedTextField(
                     value = state.cultivar,
                     onValueChange = { input ->
                         suppressCultivarAutocomplete = false
@@ -431,6 +397,31 @@ fun TreeFormScreen(
                             viewModel.update {
                                 copy(species = suggestion.species, cultivar = suggestion.cultivar)
                             }
+                        }
+                    )
+                }
+                OutlinedTextField(
+                    value = state.species,
+                    onValueChange = { input ->
+                        suppressSpeciesAutocomplete = false
+                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
+                            ?: speciesCatalog.firstOrNull {
+                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
+                            }
+                        viewModel.update { copy(species = exactSpecies ?: input) }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("tree_species"),
+                    label = { Text("Species") }
+                )
+                if (!suppressSpeciesAutocomplete) {
+                    SpeciesAutocompleteCard(
+                        query = state.species,
+                        suggestions = speciesSuggestions,
+                        onSelected = { suggestion ->
+                            suppressSpeciesAutocomplete = true
+                            viewModel.update { copy(species = suggestion) }
                         }
                     )
                 }
@@ -508,26 +499,18 @@ fun TreeFormScreen(
                         modifier = Modifier.fillMaxWidth(),
                         label = { Text("Source / nursery (optional)") }
                     )
-                    if (showRootstockField) {
-                        OutlinedTextField(
-                            value = state.rootstock,
-                            onValueChange = { viewModel.update { copy(rootstock = it) } },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Rootstock") }
-                        )
-                        TextButton(
-                            onClick = {
-                                viewModel.update { copy(rootstock = "") }
-                                showRootstockField = false
-                            }
-                        ) {
-                            Text("Hide rootstock")
-                        }
-                    } else {
-                        TextButton(onClick = { showRootstockField = true }) {
-                            Text("Add rootstock")
-                        }
-                    }
+                    OutlinedTextField(
+                        value = state.rootstock,
+                        onValueChange = { viewModel.update { copy(rootstock = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Rootstock (optional)") }
+                    )
+                    OutlinedTextField(
+                        value = state.sectionName,
+                        onValueChange = { viewModel.update { copy(sectionName = it) } },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Section / bed (optional)") }
+                    )
                     if (state.purchaseDate != null) {
                         DateField(
                             label = "Purchase date",
@@ -1181,7 +1164,6 @@ fun TreeDetailScreen(
                         photoLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                     }
                 )
-                TreeActionButton(label = "Edit plant", onClick = { onEditTree(item.tree.id) })
             }
         }
         item {
@@ -1413,8 +1395,22 @@ fun TreeDetailScreen(
             }
         }
         item {
-            OutlinedButton(onClick = viewModel::requestDeleteConfirmation, modifier = Modifier.fillMaxWidth()) {
-                Text("Delete tree")
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                OutlinedButton(
+                    onClick = { onEditTree(item.tree.id) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Edit plant")
+                }
+                OutlinedButton(
+                    onClick = viewModel::requestDeleteConfirmation,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Delete tree")
+                }
             }
         }
         }

@@ -58,6 +58,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,10 +71,14 @@ import com.dillon.orcharddex.data.local.toForecastLocationProfile
 import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.DexCultivarEntry
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
+import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.GrowingLocationInput
 import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.MicroclimateFlag
+import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.phenology.CatalogSpeciesReferenceEntry
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.RecurrenceType
@@ -81,6 +86,7 @@ import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
+import com.dillon.orcharddex.data.phenology.BloomForecastSummary
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.data.preferences.forecastLocationProfile
@@ -115,7 +121,13 @@ fun DexScreen(
 ) {
     val dex by viewModel.dex.collectAsStateWithLifecycle()
     val plants by viewModel.trees.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
     val defaultLocationProfile = remember(settings) { settings.forecastLocationProfile() }
+    val observationsByTreeId = remember(history) {
+        history
+            .mapNotNull(::historyEntryToPhenologyObservation)
+            .groupBy(PhenologyObservation::treeId)
+    }
     var search by rememberSaveable { mutableStateOf("") }
     var wishlistVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
@@ -240,6 +252,7 @@ fun DexScreen(
                     DexPlantCard(
                         item = item,
                         defaultLocationProfile = defaultLocationProfile,
+                        observations = observationsByTreeId[item.tree.id].orEmpty(),
                         onClick = { onTreeClick(item.tree.id) },
                         onQuickAdd = { onQuickLog(item.tree.id) }
                     )
@@ -344,20 +357,31 @@ private fun DexCultivarCard(entry: DexCultivarEntry, onClick: (() -> Unit)?) {
 private fun DexPlantCard(
     item: TreeListItem,
     defaultLocationProfile: ForecastLocationProfile,
+    observations: List<PhenologyObservation>,
     onClick: () -> Unit,
     onQuickAdd: () -> Unit
 ) {
     val context = LocalContext.current
-    val title = item.tree.dexPrimaryTitle()
-    val subtitle = item.tree.dexSecondaryTitle()
-    val supportingLine = item.tree.dexSupportingLine()
     val thumbnailLabel = item.tree.cultivar.takeIf(String::isNotBlank)?.take(2)
         ?: item.tree.species.take(2)
+    val cultivarLabel = item.tree.dexCultivarLabel()
+    val speciesLabel = item.tree.dexSpeciesLabel()
     val locationProfile = remember(item.location, defaultLocationProfile) {
         item.location?.toForecastLocationProfile() ?: defaultLocationProfile
     }
-    val nextBloomSummary = remember(item.tree, locationProfile) {
-        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile)
+    val nextBloomSummary = remember(item.tree, locationProfile, observations) {
+        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile, observations)
+    }
+    val compactForecastLabel = remember(nextBloomSummary) {
+        compactBloomForecastLabel(nextBloomSummary)
+    }
+    val forecastSupportingLine = remember(item.tree, nextBloomSummary) {
+        buildList {
+            if (item.tree.status != TreeStatus.ACTIVE) {
+                add(item.tree.status.name.lowercase().replace('_', ' '))
+            }
+            nextBloomSummary?.supportingLine?.takeIf(String::isNotBlank)?.let(::add)
+        }.joinToString(" • ").ifBlank { "Forecast unavailable" }
     }
 
     OutlinedCard(
@@ -404,29 +428,22 @@ private fun DexPlantCard(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                subtitle?.let {
+                cultivarLabel?.let { cultivar ->
                     Text(
-                        text = it,
+                        text = cultivar,
                         style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-                supportingLine?.let {
-                    Text(
-                        text = it,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        fontWeight = FontWeight.Normal,
+                        fontStyle = FontStyle.Italic,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                Text(
+                    text = speciesLabel,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    fontStyle = FontStyle.Normal,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
             }
             FilledTonalIconButton(
                 onClick = onQuickAdd,
@@ -439,36 +456,34 @@ private fun DexPlantCard(
                     contentDescription = "Add log"
                 )
             }
-            nextBloomSummary?.let { summary ->
-                Column(
-                    horizontalAlignment = Alignment.End,
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = "Bloom forecast",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    tonalElevation = 1.dp
                 ) {
                     Text(
-                        text = "Bloom forecast",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        tonalElevation = 1.dp
-                    ) {
-                        Text(
-                            text = summary.headline,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                        )
-                    }
-                    Text(
-                        text = summary.supportingLine,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        text = compactForecastLabel,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSecondaryContainer
                     )
                 }
+                Text(
+                    text = bloomSourceLabel(nextBloomSummary),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
     }
@@ -490,6 +505,49 @@ private fun com.dillon.orcharddex.data.local.TreeEntity.dexPrimaryTitle(): Strin
 private fun com.dillon.orcharddex.data.local.TreeEntity.dexSecondaryTitle(): String? = species
     .trim()
     .takeIf { cultivar.isNotBlank() && it.isNotBlank() }
+
+private fun com.dillon.orcharddex.data.local.TreeEntity.dexCardTitle(): String = when {
+    cultivar.isNotBlank() && species.isNotBlank() -> "${cultivar.trim()} ${species.trim()}"
+    cultivar.isNotBlank() -> cultivar.trim()
+    else -> species.trim()
+}
+
+private fun TreeEntity.dexCultivarLabel(): String? = cultivar.trim().takeIf(String::isNotBlank)
+
+private fun TreeEntity.dexSpeciesLabel(): String = species.trim()
+
+private fun historyEntryToPhenologyObservation(entry: HistoryEntryModel): PhenologyObservation? = when {
+    entry.kind == com.dillon.orcharddex.data.model.ActivityKind.HARVEST -> PhenologyObservation(
+        treeId = entry.treeId,
+        dateMillis = entry.date,
+        isHarvest = true
+    )
+    entry.eventType != null -> PhenologyObservation(
+        treeId = entry.treeId,
+        dateMillis = entry.date,
+        eventType = entry.eventType
+    )
+    else -> null
+}
+
+private fun bloomSourceLabel(summary: BloomForecastSummary?): String = when (summary?.source) {
+    ForecastSource.CUSTOM -> "Overridden"
+    ForecastSource.HISTORY_LEARNED -> "Learned"
+    null -> "Unavailable"
+    else -> "Cataloged"
+}
+
+private fun compactBloomForecastLabel(summary: BloomForecastSummary?): String {
+    val headline = summary?.headline?.trim().orEmpty()
+    return when {
+        summary == null -> "Unknown"
+        summary.isCurrentWindow -> "Now"
+        summary.daysUntilStart != null && summary.daysUntilStart >= 0 -> "${summary.daysUntilStart}d"
+        headline.equals("Ongoing", ignoreCase = true) -> "Now"
+        headline.isBlank() -> "Unknown"
+        else -> "Unknown"
+    }
+}
 
 private enum class ReminderFilterTab(val label: String) {
     ALL("All"),
@@ -809,8 +867,23 @@ fun SettingsScreen(
     editingLocation?.let { draft ->
         GrowingLocationEditorDialog(
             state = draft,
+            searchQuery = viewModel.locationSearchQuery,
+            searchResults = viewModel.locationSearchResults,
+            searchBusy = viewModel.locationSearchBusy,
+            searchError = viewModel.locationSearchError,
             onStateChange = { editingLocation = it },
-            onDismiss = { editingLocation = null },
+            onSearchQueryChange = viewModel::updateLocationSearchQuery,
+            onSearch = viewModel::searchLocationMatches,
+            onApplySearchResult = { result ->
+                editingLocation = draft.applySearchResult(result)
+            },
+            onRefreshClimate = draft.id?.let { locationId ->
+                { viewModel.refreshLocationClimate(locationId) }
+            },
+            onDismiss = {
+                editingLocation = null
+                viewModel.clearLocationSearch()
+            },
             onSave = {
                 val timezoneId = draft.timezoneId.trim().ifBlank { settings.timezoneId }
                 viewModel.saveGrowingLocation(
@@ -820,6 +893,7 @@ fun SettingsScreen(
                     )
                 )
                 editingLocation = null
+                viewModel.clearLocationSearch()
             }
         )
     }
@@ -1026,13 +1100,24 @@ fun SettingsScreen(
                                     CompactFact("Hemisphere", location.hemisphere.label)
                                     location.latitudeDeg?.let { CompactFact("Latitude", it.toString()) }
                                     location.elevationM?.let { CompactFact("Elevation", "${it.toInt()} m") }
+                                    CompactFact("Climate", location.climateSource ?: "Not cached")
                                 }
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     OutlinedButton(
-                                        onClick = { editingLocation = GrowingLocationEditorState.from(location) },
+                                        onClick = {
+                                            viewModel.clearLocationSearch()
+                                            editingLocation = GrowingLocationEditorState.from(location)
+                                        },
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         Text("Edit")
+                                    }
+                                    OutlinedButton(
+                                        onClick = { viewModel.refreshLocationClimate(location.id) },
+                                        modifier = Modifier.weight(1f),
+                                        enabled = location.latitudeDeg != null && location.longitudeDeg != null && !viewModel.busy
+                                    ) {
+                                        Text("Refresh climate")
                                     }
                                     OutlinedButton(
                                         onClick = { viewModel.setDefaultGrowingLocation(location.id) },
@@ -1048,6 +1133,7 @@ fun SettingsScreen(
                 }
                 OutlinedButton(
                     onClick = {
+                        viewModel.clearLocationSearch()
                         editingLocation = GrowingLocationEditorState.from(
                             currentDefaultLocation,
                             settings
@@ -1118,7 +1204,7 @@ fun SettingsScreen(
         item {
             SectionCard("About") {
                 Text("Version ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                Text("Local-only app. No account, analytics, ads, or cloud sync.")
+                Text("Offline-first app. No account, analytics, or cloud sync. Optional online location search and climate lookup are used only when you trigger them.")
                 TextButton(onClick = onPrivacy) { Text("Privacy policy") }
                 if (viewModel.busy) Text("Working...")
             }
@@ -1155,6 +1241,16 @@ private data class GrowingLocationEditorState(
         notes = notes.trim()
     )
 
+    fun applySearchResult(result: LocationSearchResult): GrowingLocationEditorState = copy(
+        name = name.ifBlank { result.displayLabel.ifBlank { result.name } },
+        countryCode = result.countryCode.ifBlank { countryCode },
+        timezoneId = result.timezoneId.ifBlank { timezoneId },
+        hemisphere = hemisphereForLatitude(result.latitudeDeg),
+        latitudeDeg = result.latitudeDeg.toString(),
+        longitudeDeg = result.longitudeDeg.toString(),
+        elevationM = result.elevationM?.toString() ?: elevationM
+    )
+
     companion object {
         fun from(location: GrowingLocationEntity?, settings: AppSettings? = null): GrowingLocationEditorState {
             val fallbackProfile = settings?.forecastLocationProfile()
@@ -1181,7 +1277,15 @@ private data class GrowingLocationEditorState(
 @Composable
 private fun GrowingLocationEditorDialog(
     state: GrowingLocationEditorState,
+    searchQuery: String,
+    searchResults: List<LocationSearchResult>,
+    searchBusy: Boolean,
+    searchError: String?,
     onStateChange: (GrowingLocationEditorState) -> Unit,
+    onSearchQueryChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    onApplySearchResult: (LocationSearchResult) -> Unit,
+    onRefreshClimate: (() -> Unit)?,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
@@ -1198,6 +1302,77 @@ private fun GrowingLocationEditorDialog(
                     .heightIn(max = 420.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                item {
+                    OutlinedTextField(
+                        value = searchQuery,
+                        onValueChange = onSearchQueryChange,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Search place") },
+                        supportingText = {
+                            Text("Uses online place search to autofill coordinates, timezone, and elevation.")
+                        }
+                    )
+                }
+                item {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = onSearch,
+                            enabled = searchQuery.trim().length >= 2 && !searchBusy
+                        ) {
+                            Text(if (searchBusy) "Searching..." else "Search")
+                        }
+                        onRefreshClimate?.let { refresh ->
+                            OutlinedButton(
+                                onClick = refresh,
+                                enabled = state.latitudeDeg.isNotBlank() && state.longitudeDeg.isNotBlank() && !searchBusy
+                            ) {
+                                Text("Refresh climate")
+                            }
+                        }
+                    }
+                }
+                if (searchError != null) {
+                    item {
+                        Text(
+                            text = searchError,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                if (searchResults.isNotEmpty()) {
+                    item {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            searchResults.forEach { result ->
+                                OutlinedCard(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { onApplySearchResult(result) },
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = result.displayLabel,
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(
+                                            text = buildString {
+                                                append("${result.latitudeDeg}, ${result.longitudeDeg}")
+                                                result.elevationM?.let { append(" · ${it.toInt()} m") }
+                                                if (result.timezoneId.isNotBlank()) append(" · ${result.timezoneId}")
+                                            },
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 item {
                     OutlinedTextField(
                         value = state.name,
@@ -1335,6 +1510,12 @@ private fun GrowingLocationEditorDialog(
             }
         }
     )
+}
+
+private fun hemisphereForLatitude(latitudeDeg: Double): Hemisphere = when {
+    latitudeDeg > 12.0 -> Hemisphere.NORTHERN
+    latitudeDeg < -12.0 -> Hemisphere.SOUTHERN
+    else -> Hemisphere.EQUATORIAL
 }
 
 @Composable

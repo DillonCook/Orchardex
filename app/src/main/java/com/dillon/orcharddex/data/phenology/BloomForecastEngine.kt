@@ -104,7 +104,9 @@ data class BloomForecastSummary(
     val headline: String,
     val supportingLine: String,
     val source: ForecastSource,
-    val confidence: ForecastConfidence
+    val confidence: ForecastConfidence,
+    val daysUntilStart: Long? = null,
+    val isCurrentWindow: Boolean = false
 )
 
 data class SupportedCultivarCatalogEntry(
@@ -2408,7 +2410,9 @@ object BloomForecastEngine {
                 headline = "Unknown",
                 supportingLine = "Custom bloom window",
                 source = ForecastSource.CUSTOM,
-                confidence = ForecastConfidence.HIGH
+                confidence = ForecastConfidence.HIGH,
+                daysUntilStart = null,
+                isCurrentWindow = false
             )
         }
 
@@ -2419,13 +2423,17 @@ object BloomForecastEngine {
                 headline = "Ongoing",
                 supportingLine = "Repeat-bearing · medium confidence",
                 source = ForecastSource.SPECIES_BASELINE,
-                confidence = ForecastConfidence.MEDIUM
+                confidence = ForecastConfidence.MEDIUM,
+                daysUntilStart = 0,
+                isCurrentWindow = true
             )
             BloomForecastBehavior.WINDOW -> BloomForecastSummary(
                 headline = "Unknown",
                 supportingLine = "Catalog window unavailable · low confidence",
                 source = ForecastSource.SPECIES_BASELINE,
-                confidence = ForecastConfidence.LOW
+                confidence = ForecastConfidence.LOW,
+                daysUntilStart = null,
+                isCurrentWindow = false
             )
         }
     }
@@ -2478,17 +2486,24 @@ object BloomForecastEngine {
             } else {
                 speciesProfile
             }
+            val climateShiftDays = climateShiftDaysFor(rotatedProfile, locationProfile)
+            val preferClimateFingerprint = locationProfile.climateFingerprint?.isComplete() == true
             val source = when {
                 locationProfile.hemisphere == Hemisphere.SOUTHERN &&
                     speciesProfile.key !in hemisphereShiftUnsafeKeys -> ForecastSource.HEMISPHERE_SHIFTED
-                targetZone == null && climateShiftDaysFor(rotatedProfile, locationProfile) != 0L -> ForecastSource.CLIMATE_BAND
+                preferClimateFingerprint -> ForecastSource.CLIMATE_BAND
+                targetZone == null && climateShiftDays != 0L -> ForecastSource.CLIMATE_BAND
                 profileMatch.cultivarMatched -> ForecastSource.CULTIVAR_ADJUSTED
                 else -> ForecastSource.SPECIES_BASELINE
             }
-            val shiftDays = targetZone?.let { zone ->
-                val referenceZone = UsdaZoneCatalog.resolve(rotatedProfile.referenceZoneCode)
-                (referenceZone.index - zone.index) * rotatedProfile.shiftDaysPerHalfZone
-            } ?: climateShiftDaysFor(rotatedProfile, locationProfile)
+            val shiftDays = when {
+                preferClimateFingerprint -> climateShiftDays
+                targetZone != null -> {
+                    val referenceZone = UsdaZoneCatalog.resolve(rotatedProfile.referenceZoneCode)
+                    (referenceZone.index - targetZone.index) * rotatedProfile.shiftDaysPerHalfZone
+                }
+                else -> climateShiftDays
+            }
             val confidence = forecastConfidenceFor(
                 profile = speciesProfile,
                 locationProfile = locationProfile,
@@ -2652,6 +2667,7 @@ object BloomForecastEngine {
         year: Int,
         locationProfile: ForecastLocationProfile
     ): PredictedBloomWindow {
+        val warmSeasonWindow = locationProfile.warmSeasonWindow()
         val climateBand = locationProfile.climateBand()
         val (northStartMonth, northStartDay, durationDays) = when (climateBand) {
             ClimateBand.EQUATORIAL -> Triple(3, 15, 210L)
@@ -2661,25 +2677,37 @@ object BloomForecastEngine {
             ClimateBand.COOL -> Triple(6, 15, 100L)
             null -> Triple(5, 1, 155L)
         }
+        val climateStartDate = warmSeasonWindow?.let { window ->
+            LocalDate.of(year, window.startMonth, 1)
+        }
+        val climateEndDate = climateStartDate?.plusMonths(warmSeasonWindow.monthCount.toLong())?.minusDays(1)
         val baseStartDate = LocalDate.of(year, northStartMonth, northStartDay)
-        val startDate = when (locationProfile.hemisphere) {
+        val startDate = climateStartDate ?: when (locationProfile.hemisphere) {
             Hemisphere.SOUTHERN -> baseStartDate.plusMonths(6)
             Hemisphere.EQUATORIAL -> LocalDate.of(year, 4, 1)
             Hemisphere.NORTHERN -> baseStartDate
+        }
+        val endDate = climateEndDate ?: startDate.plusDays(durationDays)
+        val hasMicroclimateRisk = locationProfile.microclimateFlags.any {
+            it == MicroclimateFlag.GREENHOUSE || it == MicroclimateFlag.FROST_POCKET
         }
         return PredictedBloomWindow(
             treeId = tree.id,
             treeLabel = tree.displayName(),
             speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
             startDate = startDate,
-            endDate = startDate.plusDays(durationDays),
+            endDate = endDate,
             phase = BloomPhase.MID,
-            source = if (locationProfile.latitudeDeg != null) {
+            source = if (warmSeasonWindow != null || locationProfile.latitudeDeg != null) {
                 ForecastSource.CLIMATE_BAND
             } else {
                 ForecastSource.SPECIES_BASELINE
             },
-            confidence = ForecastConfidence.LOW
+            confidence = when {
+                hasMicroclimateRisk -> ForecastConfidence.LOW
+                warmSeasonWindow != null || locationProfile.latitudeDeg != null -> ForecastConfidence.MEDIUM
+                else -> ForecastConfidence.LOW
+            }
         )
     }
 
@@ -2878,33 +2906,35 @@ object BloomForecastEngine {
         cultivarMatched: Boolean,
         source: ForecastSource
     ): ForecastConfidence {
-        var confidence = if (cultivarMatched && !locationProfile.usdaZoneCode.isNullOrBlank()) {
-            ForecastConfidence.HIGH
-        } else {
-            ForecastConfidence.MEDIUM
+        if (source == ForecastSource.CUSTOM) {
+            return ForecastConfidence.HIGH
         }
 
-        if (locationProfile.hemisphere == Hemisphere.SOUTHERN) {
+        val hasClimateFingerprint = locationProfile.climateFingerprint?.isComplete() == true
+        var confidence = when {
+            cultivarMatched && (hasClimateFingerprint || !locationProfile.usdaZoneCode.isNullOrBlank()) -> ForecastConfidence.HIGH
+            hasClimateFingerprint -> ForecastConfidence.MEDIUM
+            else -> ForecastConfidence.MEDIUM
+        }
+
+        if (locationProfile.hemisphere == Hemisphere.SOUTHERN && !hasClimateFingerprint && locationProfile.latitudeDeg == null) {
             confidence = ForecastConfidence.LOW
         }
-        if (profile.key in hemisphereShiftUnsafeKeys) {
+        if (profile.key in hemisphereShiftUnsafeKeys && !hasClimateFingerprint) {
             confidence = ForecastConfidence.LOW
         }
         if (locationProfile.microclimateFlags.any { it == MicroclimateFlag.GREENHOUSE || it == MicroclimateFlag.FROST_POCKET }) {
             confidence = ForecastConfidence.LOW
         }
         if (profile.key in chillSensitiveKeys) {
-            confidence = when (locationProfile.chillHoursBand) {
+            confidence = when (locationProfile.effectiveChillHoursBand()) {
                 ChillHoursBand.UNKNOWN -> ForecastConfidence.LOW
                 ChillHoursBand.UNDER_100 -> ForecastConfidence.LOW
                 else -> confidence
             }
         }
-        if (locationProfile.latitudeDeg == null && locationProfile.usdaZoneCode.isNullOrBlank()) {
+        if (locationProfile.latitudeDeg == null && locationProfile.usdaZoneCode.isNullOrBlank() && !hasClimateFingerprint) {
             confidence = ForecastConfidence.LOW
-        }
-        if (source == ForecastSource.CUSTOM) {
-            return ForecastConfidence.HIGH
         }
         return confidence
     }
@@ -2959,11 +2989,13 @@ object BloomForecastEngine {
 
     private fun PredictedBloomWindow.toSummary(today: LocalDate): BloomForecastSummary {
         val coarseWindow = coarseWindowLabel()
+        val isCurrentWindow = !today.isBefore(startDate) && !today.isAfter(endDate)
+        val daysUntilStart = if (isCurrentWindow) 0L else ChronoUnit.DAYS.between(today, startDate)
         val headline = when {
-            !today.isBefore(startDate) && !today.isAfter(endDate) && confidence == ForecastConfidence.LOW -> "Likely now"
-            !today.isBefore(startDate) && !today.isAfter(endDate) -> "Now"
+            isCurrentWindow && confidence == ForecastConfidence.LOW -> "Likely now"
+            isCurrentWindow -> "Now"
             confidence == ForecastConfidence.LOW -> "Likely $coarseWindow"
-            else -> "${ChronoUnit.DAYS.between(today, startDate)}d"
+            else -> "${daysUntilStart}d"
         }
         val supportingLine = buildString {
             append(
@@ -2982,7 +3014,9 @@ object BloomForecastEngine {
             headline = headline,
             supportingLine = supportingLine,
             source = source,
-            confidence = confidence
+            confidence = confidence,
+            daysUntilStart = daysUntilStart,
+            isCurrentWindow = isCurrentWindow
         )
     }
 

@@ -9,11 +9,15 @@ import com.dillon.orcharddex.data.local.WishlistCultivarEntity
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.LocationClimateFingerprint
+import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.TreeInput
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.WishlistPriority
 import com.dillon.orcharddex.data.preferences.SettingsRepository
+import com.dillon.orcharddex.data.remote.ClimateFingerprintService
+import com.dillon.orcharddex.data.remote.LocationSearchService
 import com.dillon.orcharddex.data.repository.OrchardRepository
 import com.dillon.orcharddex.data.repository.PhotoStorage
 import com.dillon.orcharddex.notifications.ReminderScheduler
@@ -44,7 +48,13 @@ class OrchardRepositoryTest {
             settingsRepository = settingsRepository,
             photoStorage = PhotoStorage(context),
             reminderScheduler = ReminderScheduler(context),
-            sampleDataSeeder = SampleDataSeeder()
+            sampleDataSeeder = SampleDataSeeder(),
+            locationSearchService = object : LocationSearchService {
+                override suspend fun search(query: String): List<LocationSearchResult> = emptyList()
+            },
+            climateFingerprintService = object : ClimateFingerprintService {
+                override suspend fun fetch(latitudeDeg: Double, longitudeDeg: Double): LocationClimateFingerprint? = null
+            }
         )
     }
 
