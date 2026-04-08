@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -12,6 +13,7 @@ import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
+import com.dillon.orcharddex.data.model.LocationClimateFingerprint
 import com.dillon.orcharddex.data.model.MicroclimateFlag
 import com.dillon.orcharddex.data.model.SettingsSnapshot
 import kotlinx.coroutines.flow.Flow
@@ -30,6 +32,7 @@ enum class AppThemeMode {
 data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
     val dynamicColor: Boolean = true,
+    val showSalesTools: Boolean = false,
     val defaultLeadTimeMode: LeadTimeMode = LeadTimeMode.SAME_DAY,
     val defaultCustomLeadHours: Int = 6,
     val orchardName: String = "",
@@ -42,9 +45,15 @@ data class AppSettings(
     val elevationM: Double? = null,
     val chillHoursBand: ChillHoursBand = ChillHoursBand.UNKNOWN,
     val microclimateFlags: Set<MicroclimateFlag> = emptySet(),
+    val climateSource: String = "",
+    val climateFetchedAt: Long? = null,
+    val climateMeanMonthlyTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMinTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMaxTempC: List<Double> = emptyList(),
     val defaultLocationId: String = "",
     val orchardRegion: String = "",
-    val onboardingComplete: Boolean = false
+    val onboardingComplete: Boolean = false,
+    val walkthroughComplete: Boolean = false
 )
 
 fun AppSettings.forecastLocationProfile(): ForecastLocationProfile = ForecastLocationProfile(
@@ -57,13 +66,23 @@ fun AppSettings.forecastLocationProfile(): ForecastLocationProfile = ForecastLoc
     elevationM = elevationM,
     usdaZoneCode = usdaZone.takeIf(String::isNotBlank),
     chillHoursBand = chillHoursBand,
-    microclimateFlags = microclimateFlags
+    microclimateFlags = microclimateFlags,
+    climateFingerprint = climateSource.takeIf(String::isNotBlank)?.let { source ->
+        LocationClimateFingerprint(
+            source = source,
+            fetchedAt = climateFetchedAt ?: 0L,
+            meanMonthlyTempC = climateMeanMonthlyTempC,
+            meanMonthlyMinTempC = climateMeanMonthlyMinTempC,
+            meanMonthlyMaxTempC = climateMeanMonthlyMaxTempC
+        )
+    }
 )
 
 class SettingsRepository(private val context: Context) {
     private object Keys {
         val themeMode = stringPreferencesKey("theme_mode")
         val dynamicColor = booleanPreferencesKey("dynamic_color")
+        val showSalesTools = booleanPreferencesKey("show_sales_tools")
         val defaultLeadTimeMode = stringPreferencesKey("default_lead_time_mode")
         val defaultCustomLeadHours = intPreferencesKey("default_custom_lead_hours")
         val orchardName = stringPreferencesKey("orchard_name")
@@ -76,9 +95,15 @@ class SettingsRepository(private val context: Context) {
         val elevationM = stringPreferencesKey("elevation_m")
         val chillHoursBand = stringPreferencesKey("chill_hours_band")
         val microclimateFlags = stringSetPreferencesKey("microclimate_flags")
+        val climateSource = stringPreferencesKey("climate_source")
+        val climateFetchedAt = longPreferencesKey("climate_fetched_at")
+        val climateMeanMonthlyTempC = stringPreferencesKey("climate_mean_monthly_temp_c")
+        val climateMeanMonthlyMinTempC = stringPreferencesKey("climate_mean_monthly_min_temp_c")
+        val climateMeanMonthlyMaxTempC = stringPreferencesKey("climate_mean_monthly_max_temp_c")
         val defaultLocationId = stringPreferencesKey("default_location_id")
         val orchardRegion = stringPreferencesKey("orchard_region")
         val onboardingComplete = booleanPreferencesKey("onboarding_complete")
+        val walkthroughComplete = booleanPreferencesKey("walkthrough_complete")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map(::preferencesToSettings)
@@ -89,6 +114,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateDynamicColor(enabled: Boolean) {
         context.dataStore.edit { it[Keys.dynamicColor] = enabled }
+    }
+
+    suspend fun updateShowSalesTools(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.showSalesTools] = enabled }
     }
 
     suspend fun updateDefaultLeadTime(mode: LeadTimeMode, customHours: Int) {
@@ -117,6 +146,16 @@ class SettingsRepository(private val context: Context) {
             preferences[Keys.usdaZone] = profile.usdaZoneCode.orEmpty().trim().lowercase()
             preferences[Keys.chillHoursBand] = profile.chillHoursBand.name
             preferences[Keys.microclimateFlags] = profile.microclimateFlags.mapTo(linkedSetOf(), MicroclimateFlag::name)
+            val climateFingerprint = profile.climateFingerprint
+            preferences[Keys.climateSource] = climateFingerprint?.source.orEmpty()
+            if (climateFingerprint == null) {
+                preferences.remove(Keys.climateFetchedAt)
+            } else {
+                preferences[Keys.climateFetchedAt] = climateFingerprint.fetchedAt
+            }
+            preferences[Keys.climateMeanMonthlyTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyTempC.orEmpty())
+            preferences[Keys.climateMeanMonthlyMinTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyMinTempC.orEmpty())
+            preferences[Keys.climateMeanMonthlyMaxTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyMaxTempC.orEmpty())
         }
     }
 
@@ -126,6 +165,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun updateOrchardRegion(regionCode: String) {
         context.dataStore.edit { it[Keys.orchardRegion] = regionCode.trim().lowercase() }
+    }
+
+    suspend fun markWalkthroughComplete() {
+        context.dataStore.edit { it[Keys.walkthroughComplete] = true }
     }
 
     suspend fun completeOnboarding(
@@ -144,8 +187,19 @@ class SettingsRepository(private val context: Context) {
             it[Keys.elevationM] = locationProfile.elevationM?.toString().orEmpty()
             it[Keys.chillHoursBand] = locationProfile.chillHoursBand.name
             it[Keys.microclimateFlags] = locationProfile.microclimateFlags.mapTo(linkedSetOf(), MicroclimateFlag::name)
+            val climateFingerprint = locationProfile.climateFingerprint
+            it[Keys.climateSource] = climateFingerprint?.source.orEmpty()
+            if (climateFingerprint == null) {
+                it.remove(Keys.climateFetchedAt)
+            } else {
+                it[Keys.climateFetchedAt] = climateFingerprint.fetchedAt
+            }
+            it[Keys.climateMeanMonthlyTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyTempC.orEmpty())
+            it[Keys.climateMeanMonthlyMinTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyMinTempC.orEmpty())
+            it[Keys.climateMeanMonthlyMaxTempC] = encodeDoubleList(climateFingerprint?.meanMonthlyMaxTempC.orEmpty())
             it[Keys.orchardRegion] = orchardRegion.trim().lowercase()
             it[Keys.onboardingComplete] = true
+            it[Keys.walkthroughComplete] = false
         }
     }
 
@@ -154,6 +208,7 @@ class SettingsRepository(private val context: Context) {
         return SettingsSnapshot(
             themeMode = current.themeMode.name,
             dynamicColor = current.dynamicColor,
+            showSalesTools = current.showSalesTools,
             defaultLeadTimeMode = current.defaultLeadTimeMode.name,
             defaultCustomLeadHours = current.defaultCustomLeadHours,
             orchardName = current.orchardName,
@@ -166,9 +221,15 @@ class SettingsRepository(private val context: Context) {
             elevationM = current.elevationM,
             chillHoursBand = current.chillHoursBand,
             microclimateFlags = current.microclimateFlags,
+            climateSource = current.climateSource,
+            climateFetchedAt = current.climateFetchedAt,
+            climateMeanMonthlyTempC = current.climateMeanMonthlyTempC,
+            climateMeanMonthlyMinTempC = current.climateMeanMonthlyMinTempC,
+            climateMeanMonthlyMaxTempC = current.climateMeanMonthlyMaxTempC,
             defaultLocationId = current.defaultLocationId,
             orchardRegion = current.orchardRegion,
-            onboardingComplete = current.onboardingComplete
+            onboardingComplete = current.onboardingComplete,
+            walkthroughComplete = current.walkthroughComplete
         )
     }
 
@@ -176,6 +237,7 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit {
             it[Keys.themeMode] = snapshot.themeMode
             it[Keys.dynamicColor] = snapshot.dynamicColor
+            it[Keys.showSalesTools] = snapshot.showSalesTools
             it[Keys.defaultLeadTimeMode] = snapshot.defaultLeadTimeMode
             it[Keys.defaultCustomLeadHours] = snapshot.defaultCustomLeadHours
             it[Keys.orchardName] = snapshot.orchardName
@@ -188,15 +250,26 @@ class SettingsRepository(private val context: Context) {
             it[Keys.elevationM] = snapshot.elevationM?.toString().orEmpty()
             it[Keys.chillHoursBand] = snapshot.chillHoursBand.name
             it[Keys.microclimateFlags] = snapshot.microclimateFlags.mapTo(linkedSetOf(), MicroclimateFlag::name)
+            it[Keys.climateSource] = snapshot.climateSource
+            if (snapshot.climateFetchedAt == null) {
+                it.remove(Keys.climateFetchedAt)
+            } else {
+                it[Keys.climateFetchedAt] = snapshot.climateFetchedAt
+            }
+            it[Keys.climateMeanMonthlyTempC] = encodeDoubleList(snapshot.climateMeanMonthlyTempC)
+            it[Keys.climateMeanMonthlyMinTempC] = encodeDoubleList(snapshot.climateMeanMonthlyMinTempC)
+            it[Keys.climateMeanMonthlyMaxTempC] = encodeDoubleList(snapshot.climateMeanMonthlyMaxTempC)
             it[Keys.defaultLocationId] = snapshot.defaultLocationId
             it[Keys.orchardRegion] = snapshot.orchardRegion
             it[Keys.onboardingComplete] = snapshot.onboardingComplete
+            it[Keys.walkthroughComplete] = snapshot.walkthroughComplete
         }
     }
 
     private fun preferencesToSettings(preferences: Preferences): AppSettings = AppSettings(
         themeMode = preferences[Keys.themeMode]?.let(AppThemeMode::valueOf) ?: AppThemeMode.SYSTEM,
         dynamicColor = preferences[Keys.dynamicColor] ?: true,
+        showSalesTools = preferences[Keys.showSalesTools] ?: false,
         defaultLeadTimeMode = preferences[Keys.defaultLeadTimeMode]?.let(LeadTimeMode::valueOf)
             ?: LeadTimeMode.SAME_DAY,
         defaultCustomLeadHours = preferences[Keys.defaultCustomLeadHours] ?: 6,
@@ -213,11 +286,24 @@ class SettingsRepository(private val context: Context) {
             ?.mapNotNull { value -> runCatching { MicroclimateFlag.valueOf(value) }.getOrNull() }
             ?.toSet()
             .orEmpty(),
+        climateSource = preferences[Keys.climateSource].orEmpty(),
+        climateFetchedAt = preferences[Keys.climateFetchedAt],
+        climateMeanMonthlyTempC = decodeDoubleList(preferences[Keys.climateMeanMonthlyTempC]),
+        climateMeanMonthlyMinTempC = decodeDoubleList(preferences[Keys.climateMeanMonthlyMinTempC]),
+        climateMeanMonthlyMaxTempC = decodeDoubleList(preferences[Keys.climateMeanMonthlyMaxTempC]),
         defaultLocationId = preferences[Keys.defaultLocationId].orEmpty(),
         orchardRegion = preferences[Keys.orchardRegion].orEmpty(),
-        onboardingComplete = preferences[Keys.onboardingComplete] ?: false
+        onboardingComplete = preferences[Keys.onboardingComplete] ?: false,
+        walkthroughComplete = preferences[Keys.walkthroughComplete] ?: false
     )
 }
+
+private fun encodeDoubleList(values: List<Double>): String = values.joinToString(",")
+
+private fun decodeDoubleList(serialized: String?): List<Double> = serialized
+    .orEmpty()
+    .split(',')
+    .mapNotNull { token -> token.trim().takeIf(String::isNotBlank)?.toDoubleOrNull() }
 
 private fun normalizeTimezoneId(value: String): String = runCatching {
     ZoneId.of(value.trim()).id

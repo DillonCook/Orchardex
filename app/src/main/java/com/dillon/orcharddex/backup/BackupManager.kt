@@ -10,6 +10,7 @@ import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
 import com.dillon.orcharddex.data.local.ReminderEntity
+import com.dillon.orcharddex.data.local.SaleEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.WishlistCultivarEntity
@@ -34,6 +35,7 @@ data class BackupValidation(
     val treeCount: Int,
     val eventCount: Int,
     val harvestCount: Int,
+    val saleCount: Int,
     val reminderCount: Int,
     val wishlistCount: Int,
     val photoCount: Int
@@ -41,7 +43,7 @@ data class BackupValidation(
 
 @Serializable
 data class BackupManifest(
-    val archiveVersion: Int = 2,
+    val archiveVersion: Int = 3,
     val appVersion: String,
     val schemaVersion: Int,
     val exportedAt: Long
@@ -63,6 +65,7 @@ class BackupManager(
         val activityPhotos = database.activityPhotoDao().getAllPhotos()
         val events = database.eventDao().getAllEvents()
         val harvests = database.harvestDao().getAllHarvests()
+        val sales = database.saleDao().getAllSales()
         val reminders = database.reminderDao().getAllReminders()
         val wishlist = database.wishlistDao().getAll()
         val settings = settingsRepository.snapshot()
@@ -90,6 +93,7 @@ class BackupManager(
                 writeJson(zip, "activity_photos.json", activityPhotos)
                 writeJson(zip, "events.json", events)
                 writeJson(zip, "harvests.json", harvests)
+                writeJson(zip, "sales.json", sales)
                 writeJson(zip, "reminders.json", reminders)
                 writeJson(zip, "wishlist.json", wishlist)
                 writeJson(zip, "settings.json", settings)
@@ -115,6 +119,10 @@ class BackupManager(
         val trees = json.decodeFromString<List<TreeEntity>>(entries.getRequiredText("trees.json"))
         val events = json.decodeFromString<List<EventEntity>>(entries.getRequiredText("events.json"))
         val harvests = json.decodeFromString<List<HarvestEntity>>(entries.getRequiredText("harvests.json"))
+        val sales = entries["sales.json"]
+            ?.toString(Charsets.UTF_8)
+            ?.let { json.decodeFromString<List<SaleEntity>>(it) }
+            .orEmpty()
         val reminders = json.decodeFromString<List<ReminderEntity>>(entries.getRequiredText("reminders.json"))
         val wishlist = json.decodeFromString<List<WishlistCultivarEntity>>(entries.getRequiredText("wishlist.json"))
         BackupValidation(
@@ -124,6 +132,7 @@ class BackupManager(
             treeCount = trees.size,
             eventCount = events.size,
             harvestCount = harvests.size,
+            saleCount = sales.size,
             reminderCount = reminders.size,
             wishlistCount = wishlist.size,
             photoCount = entries.keys.count { it.startsWith("photos/") }
@@ -140,6 +149,10 @@ class BackupManager(
         val treePhotos = json.decodeFromString<List<TreePhotoEntity>>(entries.getRequiredText("tree_photos.json"))
         val events = json.decodeFromString<List<EventEntity>>(entries.getRequiredText("events.json"))
         val harvests = json.decodeFromString<List<HarvestEntity>>(entries.getRequiredText("harvests.json"))
+        val sales = entries["sales.json"]
+            ?.toString(Charsets.UTF_8)
+            ?.let { json.decodeFromString<List<SaleEntity>>(it) }
+            .orEmpty()
         val activityPhotos = entries["activity_photos.json"]
             ?.toString(Charsets.UTF_8)
             ?.let { json.decodeFromString<List<ActivityPhotoEntity>>(it) }
@@ -155,6 +168,7 @@ class BackupManager(
             database.activityPhotoDao().clearAll()
             database.eventDao().clearAll()
             database.harvestDao().clearAll()
+            database.saleDao().clearAll()
             database.reminderDao().clearAll()
             database.treePhotoDao().clearAll()
             database.treeDao().clearAll()
@@ -167,6 +181,7 @@ class BackupManager(
             database.activityPhotoDao().insertAll(activityPhotos)
             database.eventDao().insertAll(events)
             database.harvestDao().insertAll(harvests)
+            database.saleDao().insertAll(sales)
             database.reminderDao().insertAll(reminders)
             database.wishlistDao().insertAll(wishlist)
         }
@@ -185,6 +200,7 @@ class BackupManager(
             database.activityPhotoDao().clearAll()
             database.eventDao().clearAll()
             database.harvestDao().clearAll()
+            database.saleDao().clearAll()
             database.reminderDao().clearAll()
             database.treePhotoDao().clearAll()
             database.treeDao().clearAll()

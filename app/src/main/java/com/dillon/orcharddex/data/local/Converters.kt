@@ -8,11 +8,17 @@ import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.MicroclimateFlag
+import com.dillon.orcharddex.data.model.BloomPatternType
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.PollinationMode
+import com.dillon.orcharddex.data.model.PropagationMethod
 import com.dillon.orcharddex.data.model.RecurrenceType
+import com.dillon.orcharddex.data.model.SaleChannel
+import com.dillon.orcharddex.data.model.SaleKind
 import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeStatus
+import com.dillon.orcharddex.data.model.TreeOriginType
+import com.dillon.orcharddex.data.model.NurseryStage
 import com.dillon.orcharddex.data.model.WishlistPriority
 
 class Converters {
@@ -39,6 +45,12 @@ class Converters {
 
     @TypeConverter
     fun toBloomTimingMode(value: String): BloomTimingMode = BloomTimingMode.valueOf(value)
+
+    @TypeConverter
+    fun fromBloomPatternType(value: BloomPatternType?): String? = value?.name
+
+    @TypeConverter
+    fun toBloomPatternType(value: String?): BloomPatternType? = value?.let(BloomPatternType::valueOf)
 
     @TypeConverter
     fun fromEventType(value: EventType): String = value.name
@@ -77,6 +89,36 @@ class Converters {
     fun toPollinationMode(value: String?): PollinationMode? = value?.let(PollinationMode::valueOf)
 
     @TypeConverter
+    fun fromNurseryStage(value: NurseryStage): String = value.name
+
+    @TypeConverter
+    fun toNurseryStage(value: String): NurseryStage = NurseryStage.valueOf(value)
+
+    @TypeConverter
+    fun fromTreeOriginType(value: TreeOriginType): String = value.name
+
+    @TypeConverter
+    fun toTreeOriginType(value: String): TreeOriginType = TreeOriginType.valueOf(value)
+
+    @TypeConverter
+    fun fromPropagationMethod(value: PropagationMethod?): String? = value?.name
+
+    @TypeConverter
+    fun toPropagationMethod(value: String?): PropagationMethod? = value?.let(PropagationMethod::valueOf)
+
+    @TypeConverter
+    fun fromSaleKind(value: SaleKind): String = value.name
+
+    @TypeConverter
+    fun toSaleKind(value: String): SaleKind = SaleKind.valueOf(value)
+
+    @TypeConverter
+    fun fromSaleChannel(value: SaleChannel): String = value.name
+
+    @TypeConverter
+    fun toSaleChannel(value: String): SaleChannel = SaleChannel.valueOf(value)
+
+    @TypeConverter
     fun fromHemisphere(value: Hemisphere): String = value.name
 
     @TypeConverter
@@ -108,4 +150,14 @@ class Converters {
         value.split("|")
             .mapNotNull { token -> token.takeIf(String::isNotBlank) }
             .mapNotNull(String::toDoubleOrNull)
+
+    @TypeConverter
+    fun fromIntList(value: List<Int>): String =
+        value.joinToString("|") { number -> number.toString() }
+
+    @TypeConverter
+    fun toIntList(value: String): List<Int> =
+        value.split("|")
+            .mapNotNull { token -> token.takeIf(String::isNotBlank) }
+            .mapNotNull(String::toIntOrNull)
 }

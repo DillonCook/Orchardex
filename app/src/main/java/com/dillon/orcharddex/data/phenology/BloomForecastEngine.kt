@@ -2,17 +2,21 @@ package com.dillon.orcharddex.data.phenology
 
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.model.BloomTimingMode
+import com.dillon.orcharddex.data.model.BloomPatternType
 import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.ClimateBand
 import com.dillon.orcharddex.data.model.ForecastConfidence
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.Hemisphere
+import com.dillon.orcharddex.data.model.LocationClimateFingerprint
 import com.dillon.orcharddex.data.model.MicroclimateFlag
+import com.dillon.orcharddex.data.model.PhenologyModelType
 import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.PollinationMode
 import com.dillon.orcharddex.data.model.PollinationProfile
 import com.dillon.orcharddex.data.model.SelfCompatibility
+import com.dillon.orcharddex.data.model.bloomMonthLabels
 import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.time.OrchardTime
@@ -29,6 +33,7 @@ import kotlin.math.cos
 import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sin
+import kotlinx.serialization.Serializable
 
 enum class BloomPhase(val label: String, val startOffsetDays: Int) {
     EARLY("Early", -10),
@@ -54,6 +59,13 @@ enum class PollinationRequirement(val label: String) {
     UNKNOWN("Unknown")
 }
 
+@Serializable
+enum class SpeciesReviewTier {
+    BASELINE,
+    REVIEWED,
+    VALIDATED
+}
+
 data class SpeciesBloomProfile(
     val key: String,
     val aliases: Set<String>,
@@ -64,8 +76,20 @@ data class SpeciesBloomProfile(
     val shiftDaysPerHalfZone: Long = 4,
     val defaultPhase: BloomPhase = BloomPhase.MID,
     val forecastBehavior: BloomForecastBehavior = BloomForecastBehavior.WINDOW,
+    val patternType: BloomPatternType = when (forecastBehavior) {
+        BloomForecastBehavior.WINDOW -> BloomPatternType.SINGLE_ANNUAL
+        BloomForecastBehavior.MANUAL_ONLY -> BloomPatternType.CONTINUOUS
+        BloomForecastBehavior.SUPPRESSED -> BloomPatternType.SUPPRESSED
+    },
+    val modelType: PhenologyModelType = when (forecastBehavior) {
+        BloomForecastBehavior.WINDOW -> PhenologyModelType.CLIMATE_WINDOW
+        BloomForecastBehavior.MANUAL_ONLY -> PhenologyModelType.MANUAL_ONLY
+        BloomForecastBehavior.SUPPRESSED -> PhenologyModelType.MANUAL_ONLY
+    },
+    val reviewTier: SpeciesReviewTier = SpeciesReviewTier.BASELINE,
     val pollinationRequirement: PollinationRequirement = PollinationRequirement.UNKNOWN,
-    val catalogSpeciesLabel: String = key
+    val catalogSpeciesLabel: String = key,
+    val uncertaintyNote: String? = null
 )
 
 data class RegionalBloomOverride(
@@ -94,6 +118,7 @@ data class PredictedBloomWindow(
     val startDate: LocalDate,
     val endDate: LocalDate,
     val phase: BloomPhase,
+    val patternType: BloomPatternType,
     val source: ForecastSource,
     val confidence: ForecastConfidence,
     val sourceLabel: String = source.label,
@@ -105,6 +130,10 @@ data class BloomForecastSummary(
     val supportingLine: String,
     val source: ForecastSource,
     val confidence: ForecastConfidence,
+    val patternType: BloomPatternType = BloomPatternType.SINGLE_ANNUAL,
+    val patternLabel: String = "",
+    val timingLabel: String? = null,
+    val exactCountdownAllowed: Boolean = patternType == BloomPatternType.SINGLE_ANNUAL,
     val daysUntilStart: Long? = null,
     val isCurrentWindow: Boolean = false
 )
@@ -160,9 +189,11 @@ object BloomForecastEngine {
     private val catalogMonthDayFormatter = DateTimeFormatter.ofPattern("MMM d")
     private const val catalogSeparator = " - "
     private val hemisphereShiftUnsafeKeys = setOf("dragon fruit")
+    private val winterBloomKeys = setOf("loquat")
     private val chillSensitiveKeys = setOf(
         "apple",
         "pear",
+        "european pear",
         "asian pear",
         "peach",
         "nectarine",
@@ -178,45 +209,14 @@ object BloomForecastEngine {
 
     private val baseSpeciesProfiles = listOf(
         SpeciesBloomProfile(
-            "apple",
-            setOf("apple", "malus", "malus domestica"),
+            "peach",
+            setOf("peach"),
             "7a",
-            4,
-            5,
+            3,
+            20,
             12,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        SpeciesBloomProfile(
-            "pear",
-            setOf("pear", "european pear"),
-            "7a",
-            3,
-            30,
-            10,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        SpeciesBloomProfile(
-            "asian pear",
-            setOf("asian pear", "nashi"),
-            "7a",
-            3,
-            27,
-            10,
-            defaultPhase = BloomPhase.EARLY,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        SpeciesBloomProfile("peach", setOf("peach"), "7a", 3, 20, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("nectarine", setOf("nectarine"), "7a", 3, 18, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("plum", setOf("plum", "japanese plum", "european plum"), "7a", 3, 18, 12),
-        SpeciesBloomProfile(
-            "apricot",
-            setOf("apricot"),
-            "7a",
-            3,
-            8,
-            10,
-            defaultPhase = BloomPhase.EARLY,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Peach bloom is strongly affected by chill completion and frost timing, so the catalog window is best treated as a seasonal expectation, not a guarantee."
         ),
         SpeciesBloomProfile(
             "sweet cherry",
@@ -225,7 +225,8 @@ object BloomForecastEngine {
             3,
             24,
             10,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
+            uncertaintyNote = "Most sweet cherries need pollinizers, but self-fertile exceptions and regional chill differences make the generic bloom lane intentionally conservative."
         ),
         SpeciesBloomProfile(
             "sour cherry",
@@ -235,18 +236,66 @@ object BloomForecastEngine {
             28,
             10,
             defaultPhase = BloomPhase.MID_LATE,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Sour cherries are commonly self-fruitful, but spring weather and nearby pollinizers can still shift the real crop quality away from the nominal bloom lane."
         ),
-        SpeciesBloomProfile("blueberry", setOf("blueberry"), "7a", 3, 29, 18, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
-        SpeciesBloomProfile("grape", setOf("grape", "grapes", "grape vine"), "7a", 5, 20, 12, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("raspberry", setOf("raspberry"), "7a", 5, 10, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("blackberry", setOf("blackberry"), "7a", 5, 12, 20, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("strawberry", setOf("strawberry"), "7a", 4, 10, 25, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("fig", setOf("fig"), "8a", 5, 10, 20, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("persimmon", setOf("persimmon"), "7b", 5, 15, 14),
-        SpeciesBloomProfile("mulberry", setOf("mulberry"), "7a", 4, 15, 14),
-        SpeciesBloomProfile("pomegranate", setOf("pomegranate"), "8b", 5, 8, 18, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
-        SpeciesBloomProfile("avocado", setOf("avocado"), "10a", 3, 1, 45, pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
+        SpeciesBloomProfile(
+            "blueberry",
+            setOf("blueberry"),
+            "7a",
+            3,
+            29,
+            18,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Rabbiteye and highbush bloom overlap is not uniform, so cross-pollination guidance is stronger than the generic species timing."
+        ),
+        SpeciesBloomProfile(
+            "grape",
+            setOf("grape", "grapes", "grape vine"),
+            "7a",
+            5,
+            20,
+            12,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "The baseline mostly fits bunch grapes, while muscadine and wild-grape fertility behavior can differ enough that the species row stays intentionally broad."
+        ),
+        SpeciesBloomProfile(
+            "kiwiberry",
+            setOf(
+                "kiwiberry",
+                "kiwi berry",
+                "hardy kiwi",
+                "hardy kiwifruit",
+                "baby kiwi",
+                "cocktail kiwi",
+                "actinidia arguta"
+            ),
+            "6a",
+            5,
+            25,
+            10,
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
+            uncertaintyNote = "Most kiwiberry vines need a compatible male pollinizer, while partially self-fertile exceptions like Issai still crop better when cross-pollinated."
+        ),
+        SpeciesBloomProfile(
+            "strawberry",
+            setOf("strawberry"),
+            "7a",
+            4,
+            10,
+            25,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Cultivated strawberries are self-fertile, but pollinator activity still affects berry fullness enough that the seasonal window should stay coarse."
+        ),
+        SpeciesBloomProfile(
+            "persimmon",
+            setOf("persimmon"),
+            "7b",
+            5,
+            15,
+            14,
+            uncertaintyNote = "American and Oriental persimmons do not share one fertility rule, so the generic persimmon row should stay cautious about both timing and pollination."
+        ),
         SpeciesBloomProfile(
             "mango",
             setOf("mango", "mangifera indica"),
@@ -254,7 +303,8 @@ object BloomForecastEngine {
             12,
             1,
             150,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Mango usually blooms in one main annual flush, but bloom strength and set still move with weather, pollinator activity, and local cultivar behavior."
         ),
         SpeciesBloomProfile(
             "lychee",
@@ -263,7 +313,8 @@ object BloomForecastEngine {
             2,
             20,
             20,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Bloom induction depends heavily on local cool-season conditions, and cultivar fruit set can vary even when flowering looks strong."
         ),
         SpeciesBloomProfile(
             "longan",
@@ -281,7 +332,8 @@ object BloomForecastEngine {
             2,
             25,
             70,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Longan flowering depends heavily on cool, dry-season conditions, so the species baseline should stay seasonal but not overly precise."
         ),
         SpeciesBloomProfile(
             "mamoncillo",
@@ -301,7 +353,8 @@ object BloomForecastEngine {
             4,
             1,
             61,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
+            uncertaintyNote = "Often treated as functionally dioecious in backyard use; avoid assuming a lone tree will crop well."
         ),
         SpeciesBloomProfile(
             "atemoya",
@@ -316,7 +369,8 @@ object BloomForecastEngine {
             4,
             1,
             105,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Natural set can be weak. Hand pollination or strong beetle activity often improves crops."
         ),
         SpeciesBloomProfile(
             "soursop",
@@ -333,7 +387,8 @@ object BloomForecastEngine {
             4,
             1,
             90,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Soursop flowering is warm-season driven, but pollination detail and flush strength still vary enough that the generic window should stay conservative."
         ),
         SpeciesBloomProfile(
             "abiu",
@@ -354,7 +409,8 @@ object BloomForecastEngine {
             1,
             92,
             pollinationRequirement = PollinationRequirement.UNKNOWN,
-            catalogSpeciesLabel = "Abiu"
+            catalogSpeciesLabel = "Abiu",
+            uncertaintyNote = "Florida flowering behavior is documented better than pollination biology; keep the fertility default conservative."
         ),
         SpeciesBloomProfile(
             "ambarella",
@@ -371,7 +427,8 @@ object BloomForecastEngine {
             1,
             92,
             pollinationRequirement = PollinationRequirement.UNKNOWN,
-            catalogSpeciesLabel = "Ambarella (June plum)"
+            catalogSpeciesLabel = "Ambarella (June plum)",
+            uncertaintyNote = "Ambarella seasonality is clearer than its backyard fertility behavior, so the app should keep the pollination default conservative."
         ),
         SpeciesBloomProfile(
             "cashew",
@@ -386,7 +443,8 @@ object BloomForecastEngine {
             1,
             60,
             pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
-            catalogSpeciesLabel = "Cashew (cashew apple)"
+            catalogSpeciesLabel = "Cashew (cashew apple)",
+            uncertaintyNote = "Cashew bloom timing is usable as a seasonal cue, but cultivar fertility behavior is mixed enough that the app should keep both pollination and countdown precision conservative."
         ),
         SpeciesBloomProfile(
             "caimito",
@@ -404,7 +462,8 @@ object BloomForecastEngine {
             1,
             92,
             pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
-            catalogSpeciesLabel = "Caimito (star apple)"
+            catalogSpeciesLabel = "Caimito (star apple)",
+            uncertaintyNote = "Some cultivars can set alone, while others benefit from or require cross-pollination."
         ),
         SpeciesBloomProfile(
             "coconut",
@@ -420,7 +479,8 @@ object BloomForecastEngine {
             1,
             365,
             forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
-            pollinationRequirement = PollinationRequirement.UNKNOWN
+            pollinationRequirement = PollinationRequirement.UNKNOWN,
+            uncertaintyNote = "Coconut flowering is effectively continuous in warm climates and fertility varies by dwarf, tall, and hybrid types, so exact timing and a single species-wide pollination rule would both be misleading."
         ),
         SpeciesBloomProfile(
             "star fruit",
@@ -429,7 +489,10 @@ object BloomForecastEngine {
             4,
             15,
             50,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Star fruit often flowers in repeated flushes, but cultivar fertility and flush strength vary enough that local observations should outrank the baseline."
         ),
         SpeciesBloomProfile(
             "sugar apple",
@@ -438,7 +501,8 @@ object BloomForecastEngine {
             3,
             15,
             95,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Natural set can be weak and hand pollination often changes outcomes, so the species window is more useful as a watch period than a precise forecast."
         ),
         SpeciesBloomProfile(
             "jackfruit",
@@ -447,7 +511,8 @@ object BloomForecastEngine {
             1,
             20,
             55,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Warm-climate bloom can stretch in multiple flushes, and pollination biology is documented less cleanly than the cultivar list."
         ),
         SpeciesBloomProfile(
             "tamarind",
@@ -456,7 +521,8 @@ object BloomForecastEngine {
             5,
             15,
             100,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION,
+            uncertaintyNote = "Pollination guidance is stronger than the exact bloom calendar here; warm-season timing can still drift by climate and tree vigor."
         ),
         SpeciesBloomProfile(
             "pineapple",
@@ -465,7 +531,8 @@ object BloomForecastEngine {
             2,
             15,
             75,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Pineapple flowering can be induced and staggered by stress or management, so the catalog window is only a broad seasonal cue."
         ),
         SpeciesBloomProfile(
             "barbados cherry",
@@ -483,7 +550,10 @@ object BloomForecastEngine {
             1,
             210,
             forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Acerola can flower in repeated warm-season flushes, so the model is more useful for watch windows than exact dates."
         ),
         SpeciesBloomProfile(
             "jamaican cherry",
@@ -503,10 +573,29 @@ object BloomForecastEngine {
             1,
             240,
             forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            patternType = BloomPatternType.CONTINUOUS,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Jamaican cherry can flower almost continuously in warm climates, so exact countdowns would be fake precision."
         ),
-        SpeciesBloomProfile("loquat", setOf("loquat"), "9b", 11, 20, 45),
-        SpeciesBloomProfile("guava", setOf("guava"), "10a", 4, 20, 30, pollinationRequirement = PollinationRequirement.SELF_FERTILE),
+        SpeciesBloomProfile(
+            "coffee",
+            setOf(
+                "coffee",
+                "coffee tree",
+                "arabica coffee",
+                "coffee arabica",
+                "coffea arabica"
+            ),
+            "10b",
+            3,
+            1,
+            200,
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "The app models the common Arabica-type home-coffee lane here; bloom often comes in rain-triggered flushes, so local moisture patterns should outrank the generic warm-season watch window."
+        ),
         SpeciesBloomProfile(
             "passionfruit",
             setOf(
@@ -523,7 +612,10 @@ object BloomForecastEngine {
             3,
             15,
             260,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Purple, yellow, and hybrid passionfruit lines do not share one fertility rule, and pruning plus climate can shift repeat flush timing."
         ),
         SpeciesBloomProfile(
             "dragon fruit",
@@ -532,9 +624,11 @@ object BloomForecastEngine {
             6,
             1,
             70,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.WARM_SEASON_PHOTOPERIOD,
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Pollination coverage is strong, but cultivar bloom timing still varies by climate and repeat-wave behavior; local history should outrank the catalog window."
         ),
-        SpeciesBloomProfile("sapodilla", setOf("sapodilla"), "10b", 4, 1, 45),
         SpeciesBloomProfile(
             "mamey sapote",
             setOf(
@@ -551,7 +645,8 @@ object BloomForecastEngine {
             6,
             1,
             275,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Mamey sapote bloom and fruiting cycles are long and climate-sensitive, so local observation history should outrank the generic season."
         ),
         SpeciesBloomProfile(
             "canistel",
@@ -572,7 +667,8 @@ object BloomForecastEngine {
             1,
             15,
             165,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS,
+            uncertaintyNote = "Canistel bloom timing is seasonally useful, but set and flowering intensity still vary enough that the baseline should stay coarse."
         ),
         SpeciesBloomProfile(
             "black sapote",
@@ -591,7 +687,8 @@ object BloomForecastEngine {
             3,
             15,
             170,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Black sapote fertility and flowering behavior vary by cultivar, so both pollination guidance and timing should stay conservative."
         ),
         SpeciesBloomProfile(
             "green sapote",
@@ -611,7 +708,8 @@ object BloomForecastEngine {
             2,
             15,
             75,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Green sapote is less consistently documented than white or mamey sapote, so the catalog season should be treated as a coarse baseline."
         ),
         SpeciesBloomProfile(
             "white sapote",
@@ -620,9 +718,20 @@ object BloomForecastEngine {
             11,
             15,
             170,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
+            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED,
+            uncertaintyNote = "Pollination is cultivar-dependent and sources conflict, so the long bloom season should be treated as a coarse watch window."
         ),
-        SpeciesBloomProfile("jaboticaba", setOf("jaboticaba"), "10b", 3, 15, 60),
+        SpeciesBloomProfile(
+            "jaboticaba",
+            setOf("jaboticaba"),
+            "10b",
+            3,
+            15,
+            60,
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            uncertaintyNote = "Jaboticaba is better modeled as a repeat bloomer than a single seasonal tree, but species-level fertility guidance is still too thin for a stronger claim."
+        ),
         SpeciesBloomProfile(
             "saccharum spp.",
             setOf(
@@ -639,7 +748,8 @@ object BloomForecastEngine {
             30,
             forecastBehavior = BloomForecastBehavior.SUPPRESSED,
             pollinationRequirement = PollinationRequirement.UNKNOWN,
-            catalogSpeciesLabel = "Sugarcane (cultivated hybrid complex)"
+            catalogSpeciesLabel = "Sugarcane (cultivated hybrid complex)",
+            uncertaintyNote = "Cultivated sugar cane is usually grown vegetatively and flowering is often suppressed, so bloom forecasting is intentionally de-emphasized here."
         ),
         SpeciesBloomProfile(
             "papaya",
@@ -649,51 +759,36 @@ object BloomForecastEngine {
             1,
             90,
             forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
-            pollinationRequirement = PollinationRequirement.UNKNOWN
+            patternType = BloomPatternType.CONTINUOUS,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.UNKNOWN,
+            uncertaintyNote = "Sex expression and planting type drive papaya fruit set more than cultivar name alone, so the species model should stay coarse and history-led."
         )
-    ) + BananaBloomCatalog.speciesProfiles + CitrusBloomCatalog.speciesProfiles
+    ) +
+        AppleBloomCatalog.speciesProfiles +
+        PearBloomCatalog.speciesProfiles +
+        CaneberryBloomCatalog.speciesProfiles +
+        PomegranateBloomCatalog.speciesProfiles +
+        FigBloomCatalog.speciesProfiles +
+        MulberryBloomCatalog.speciesProfiles +
+        PlumBloomCatalog.speciesProfiles +
+        AvocadoBloomCatalog.speciesProfiles +
+        StoneFruitBloomCatalog.speciesProfiles +
+        KiwiBloomCatalog.speciesProfiles +
+        BlueberryBloomCatalog.speciesProfiles +
+        BerryBloomCatalog.speciesProfiles +
+        BerryMelonBloomCatalog.speciesProfiles +
+        MediterraneanBloomCatalog.speciesProfiles +
+        NutBloomCatalog.speciesProfiles +
+        SpecialtyTreeBloomCatalog.speciesProfiles +
+        WarmClimateTreeBloomCatalog.speciesProfiles +
+        PawpawBloomCatalog.speciesProfiles +
+        BananaBloomCatalog.speciesProfiles +
+        CitrusBloomCatalog.speciesProfiles
 
     // The first catalog is phase-based so it can scale to thousands of cultivars by adding rows,
     // without changing the date engine itself.
     private val baseCultivarProfiles = listOf(
-        CultivarBloomProfile("apple", "Anna", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("apple", "Gala", aliases = setOf("Royal Gala"), phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Fuji", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "McIntosh", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("apple", "Ambrosia", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Braeburn", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Cortland", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Empire", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Ginger Gold", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Honeycrisp", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Liberty", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Granny Smith", phase = BloomPhase.MID),
-        CultivarBloomProfile(
-            "apple",
-            "Golden Delicious",
-            phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
-        ),
-        CultivarBloomProfile("apple", "Pink Lady", aliases = setOf("Cripps Pink"), phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Pristine", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Red Delicious", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Jonagold", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Mutsu", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Winesap", phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Zestar!", aliases = setOf("Zestar"), phase = BloomPhase.MID),
-        CultivarBloomProfile("apple", "Arkansas Black", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Enterprise", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Grimes Golden", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Macoun", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Rome Beauty", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "SunCrisp", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("apple", "Sweet Sixteen", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("pear", "Hosui", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("pear", "Bartlett", aliases = setOf("Max-Red Bartlett"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("pear", "Anjou", aliases = setOf("Red Anjou"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("pear", "Bosc", aliases = setOf("Beurre Bosc"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("pear", "Comice", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("pear", "Kieffer", phase = BloomPhase.LATE),
         CultivarBloomProfile("peach", "Early Redhaven", phase = BloomPhase.EARLY),
         CultivarBloomProfile("peach", "Eva's Pride", phase = BloomPhase.EARLY),
         CultivarBloomProfile("peach", "Florida Prince", aliases = setOf("Flordaprince", "Florda Prince", "UF Prince", "USF Prince"), phase = BloomPhase.EARLY),
@@ -758,106 +853,6 @@ object BloomForecastEngine {
             pollinationRequirement = PollinationRequirement.SELF_FERTILE
         ),
         CultivarBloomProfile("sour cherry", "Montmorency", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile(
-            "plum",
-            "Methley",
-            phase = BloomPhase.EARLY,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Shiro",
-            phase = BloomPhase.EARLY,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Gulfbeauty",
-            aliases = setOf("Gulf Beauty"),
-            phase = BloomPhase.EARLY_MID,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Gulfblaze",
-            aliases = setOf("Gulf Blaze"),
-            phase = BloomPhase.MID,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Gulfrose",
-            aliases = setOf("Gulf Rose"),
-            phase = BloomPhase.MID_LATE,
-            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Santa Rosa",
-            phase = BloomPhase.MID_LATE,
-            pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Stanley",
-            phase = BloomPhase.LATE,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
-        ),
-        CultivarBloomProfile(
-            "plum",
-            "Damson",
-            phase = BloomPhase.LATE,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
-        ),
-        CultivarBloomProfile("apricot", "Blenheim", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("apricot", "Goldcot", phase = BloomPhase.MID),
-        CultivarBloomProfile("apricot", "Moorpark", phase = BloomPhase.MID),
-        CultivarBloomProfile("apricot", "Harcot", phase = BloomPhase.LATE),
-        CultivarBloomProfile("nectarine", "Early Glo", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("nectarine", "Sunbest", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("nectarine", "UFRoyal", aliases = setOf("UF Royal"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("nectarine", "Fantasia", phase = BloomPhase.MID),
-        CultivarBloomProfile("nectarine", "UFQueen", aliases = setOf("UF Queen"), phase = BloomPhase.MID),
-        CultivarBloomProfile("nectarine", "Sunraycer", phase = BloomPhase.MID),
-        CultivarBloomProfile("nectarine", "Sunmist", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("nectarine", "Suncoast", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("nectarine", "Snow Queen", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("nectarine", "Redgold", aliases = setOf("RedGold"), phase = BloomPhase.LATE),
-        CultivarBloomProfile("blueberry", "Patriot", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Beckyblue", aliases = setOf("Becky Blue"), phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Bonita", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Climax", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Snowchaser", aliases = setOf("Snow Chaser"), phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Arcadia", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Chickadee", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Kestrel", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Optimus", phase = BloomPhase.EARLY),
-        CultivarBloomProfile("blueberry", "Bluecrop", aliases = setOf("Blue Crop"), phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Chandler", phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Emerald", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("blueberry", "Farthing", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("blueberry", "Jewel", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("blueberry", "Springhigh", aliases = setOf("Spring High"), phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("blueberry", "Star", phase = BloomPhase.EARLY_MID),
-        CultivarBloomProfile("blueberry", "Biloxi", phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Legacy", phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Misty", phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "O'Neal", aliases = setOf("ONeal"), phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Sharpblue", aliases = setOf("Sharp Blue"), phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Rubel", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Sweetcrisp", aliases = setOf("Sweet Crisp"), phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Windsor", phase = BloomPhase.MID),
-        CultivarBloomProfile("blueberry", "Alapaha", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Austin", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Duke", phase = BloomPhase.LATE),
-        CultivarBloomProfile("blueberry", "Brightwell", phase = BloomPhase.LATE),
-        CultivarBloomProfile("blueberry", "Elliott", aliases = setOf("Elliot"), phase = BloomPhase.LATE)
-        ,
-        CultivarBloomProfile("blueberry", "Powderblue", aliases = setOf("Powder Blue"), phase = BloomPhase.LATE),
-        CultivarBloomProfile("blueberry", "Premier", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Tifblue", aliases = setOf("Tif Blue"), phase = BloomPhase.LATE),
-        CultivarBloomProfile("blueberry", "Vernon", phase = BloomPhase.MID_LATE),
-        CultivarBloomProfile("blueberry", "Woodard", phase = BloomPhase.LATE),
         CultivarBloomProfile(
             "lychee",
             "Mauritius",
@@ -1528,8 +1523,31 @@ object BloomForecastEngine {
         ),
         passionFruit(
             "Possum Purple",
-            aliases = setOf("Purple Possum"),
+            aliases = setOf("Purple Possum", "Purple Possom", "Possom Purple"),
             pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        kiwiberry(
+            "Issai",
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE_CROSS_BENEFITS
+        ),
+        kiwiberry(
+            "Ananasnaya",
+            aliases = setOf("Anna"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        kiwiberry(
+            "Ken's Red",
+            aliases = setOf("Kens Red"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        kiwiberry(
+            "Jumbo",
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
+        ),
+        kiwiberry(
+            "Krupnoplodnaya",
+            aliases = setOf("Krupnopladnaya"),
+            pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION
         ),
         passionFruit("Panama Red", pollinationRequirement = PollinationRequirement.CROSS_POLLINATION_RECOMMENDED),
         passionFruit("Sweet Sunrise", pollinationRequirement = PollinationRequirement.NEEDS_CROSS_POLLINATION),
@@ -1775,21 +1793,50 @@ object BloomForecastEngine {
         sugarCane("CP 01-1372", aliases = setOf("CP01-1372")),
         sugarCane("CP 00-1101", aliases = setOf("CP00-1101")),
         sugarCane("CP 89-2143", aliases = setOf("CP89-2143"))
-    ) + DragonFruitCatalog.cultivarProfiles + BananaBloomCatalog.cultivarProfiles + CitrusBloomCatalog.cultivarProfiles
+    ) +
+        AppleBloomCatalog.cultivarProfiles +
+        PearBloomCatalog.cultivarProfiles +
+        CaneberryBloomCatalog.cultivarProfiles +
+        PomegranateBloomCatalog.cultivarProfiles +
+        FigBloomCatalog.cultivarProfiles +
+        MulberryBloomCatalog.cultivarProfiles +
+        PlumBloomCatalog.cultivarProfiles +
+        AvocadoBloomCatalog.cultivarProfiles +
+        StoneFruitBloomCatalog.cultivarProfiles +
+        KiwiBloomCatalog.cultivarProfiles +
+        BlueberryBloomCatalog.cultivarProfiles +
+        BerryBloomCatalog.cultivarProfiles +
+        BerryMelonBloomCatalog.cultivarProfiles +
+        MediterraneanBloomCatalog.cultivarProfiles +
+        NutBloomCatalog.cultivarProfiles +
+        SpecialtyTreeBloomCatalog.cultivarProfiles +
+        WarmClimateTreeBloomCatalog.cultivarProfiles +
+        PawpawBloomCatalog.cultivarProfiles +
+        DragonFruitCatalog.cultivarProfiles +
+        BananaBloomCatalog.cultivarProfiles +
+        CitrusBloomCatalog.cultivarProfiles
 
-    private val speciesProfiles = mergeSpeciesProfiles(
-        base = baseSpeciesProfiles,
-        overlay = PhenologyCatalogAssets.speciesProfiles(),
-        pollinationOverrides = PhenologyCatalogAssets.speciesPollinationOverrides()
-    )
+    private val speciesProfiles: List<SpeciesBloomProfile> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val assetProfiles = PhenologyCatalogAssets.speciesProfiles()
+        val baseProfiles = if (assetProfiles.isNotEmpty()) assetProfiles else baseSpeciesProfiles
+        mergeSpeciesProfiles(
+            base = baseProfiles,
+            overlay = emptyList(),
+            pollinationOverrides = PhenologyCatalogAssets.speciesPollinationOverrides()
+        )
+    }
 
-    private val cultivarProfiles = mergeCultivarProfiles(
-        base = baseCultivarProfiles,
-        overlay = PhenologyCatalogAssets.cultivarProfiles(),
-        pollinationOverrides = PhenologyCatalogAssets.cultivarPollinationOverrides()
-    )
+    private val cultivarProfiles: List<CultivarBloomProfile> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val assetProfiles = PhenologyCatalogAssets.cultivarProfiles()
+        val baseProfiles = if (assetProfiles.isNotEmpty()) assetProfiles else baseCultivarProfiles
+        mergeCultivarProfiles(
+            base = baseProfiles,
+            overlay = emptyList(),
+            pollinationOverrides = PhenologyCatalogAssets.cultivarPollinationOverrides()
+        )
+    }
 
-    private val cultivarCatalogOnlyOptions = listOf(
+    private val baseCatalogOnlyCultivars = listOf(
         mangoCultivar("Rosigold"),
         mangoCultivar("Angie"),
         mangoCultivar("Florigon"),
@@ -1844,15 +1891,49 @@ object BloomForecastEngine {
             aliases = setOf("Honey", "Honey mango", "Champagne", "Champagne mango")
         ),
         mangoCultivar("Southern Blush"),
-        blackberryCultivar("Apache"),
-        blackberryCultivar("Arapaho"),
-        blackberryCultivar("Chester", aliases = setOf("Chester Thornless")),
-        blackberryCultivar("Natchez"),
-        blackberryCultivar("Navaho"),
-        blackberryCultivar("Ouachita"),
-        blackberryCultivar("Prime-Ark Freedom", aliases = setOf("Prime Ark Freedom")),
-        blackberryCultivar("Triple Crown")
+        coffeeCultivar("Typica", aliases = setOf("Kona Typica")),
+        coffeeCultivar("Bourbon"),
+        coffeeCultivar("Caturra"),
+        coffeeCultivar("Yellow Caturra"),
+        coffeeCultivar("Catuai", aliases = setOf("Catuaí")),
+        coffeeCultivar("Red Catuai", aliases = setOf("Red Catuaí")),
+        coffeeCultivar("Yellow Catuai", aliases = setOf("Yellow Catuaí")),
+        coffeeCultivar("Mundo Novo"),
+        coffeeCultivar("Geisha", aliases = setOf("Gesha")),
+        coffeeCultivar("Pacas"),
+        coffeeCultivar("Villa Sarchi"),
+        grapeCultivar("Concord"),
+        grapeCultivar("Niagara"),
+        grapeCultivar("Himrod"),
+        grapeCultivar("Interlaken"),
+        grapeCultivar("Canadice"),
+        grapeCultivar("Reliance"),
+        grapeCultivar("Vanessa"),
+        grapeCultivar("Jupiter"),
+        grapeCultivar("Mars"),
+        grapeCultivar("Price"),
+        grapeCultivar("New York Muscat", aliases = setOf("NY Muscat")),
+        grapeCultivar("Lakemont"),
+        grapeCultivar("Edelweiss"),
+        grapeCultivar("Marquette"),
+        grapeCultivar("Frontenac"),
+        grapeCultivar("La Crescent"),
+        grapeCultivar("Swenson Red"),
+        jaboticabaCultivar("Sabara", aliases = setOf("Sabara", "Sabará")),
+        jaboticabaCultivar("Paulista"),
+        jaboticabaCultivar("Grimal"),
+        jaboticabaCultivar("Red Hybrid"),
+        jaboticabaCultivar("Escarlate", aliases = setOf("Scarlet")),
+        jaboticabaCultivar("Otto Andersen", aliases = setOf("Otto Anderson")),
+        jaboticabaCultivar("Esalq", aliases = setOf("ESALQ")),
+        jaboticabaCultivar("Pingo de Mel", aliases = setOf("Honey Drop")),
+        jaboticabaCultivar("White Jaboticaba", aliases = setOf("Branca"))
     )
+
+    private val cultivarCatalogOnlyOptions: List<CultivarAutocompleteOption> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        val assetOptions = PhenologyCatalogAssets.catalogOnlyCultivars()
+        if (assetOptions.isNotEmpty()) assetOptions else baseCatalogOnlyCultivars
+    }
 
     private fun mangoCultivar(
         cultivar: String,
@@ -1866,16 +1947,51 @@ object BloomForecastEngine {
         pollinationRequirement = PollinationRequirement.SELF_FERTILE
     )
 
-    private fun blackberryCultivar(
+    private fun coffeeCultivar(
         cultivar: String,
         aliases: Set<String> = emptySet()
     ) = CultivarAutocompleteOption(
-        species = "Blackberry",
+        species = "Coffee",
         cultivar = cultivar,
         aliases = aliases
             .filterNot { normalize(it) == normalize(cultivar) }
             .sortedBy(String::lowercase),
         pollinationRequirement = PollinationRequirement.SELF_FERTILE
+    )
+
+    private fun grapeCultivar(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarAutocompleteOption(
+        species = "Grape",
+        cultivar = cultivar,
+        aliases = aliases
+            .filterNot { normalize(it) == normalize(cultivar) }
+            .sortedBy(String::lowercase),
+        pollinationRequirement = PollinationRequirement.SELF_FERTILE
+    )
+
+    private fun jaboticabaCultivar(
+        cultivar: String,
+        aliases: Set<String> = emptySet()
+    ) = CultivarAutocompleteOption(
+        species = "Jaboticaba",
+        cultivar = cultivar,
+        aliases = aliases
+            .filterNot { normalize(it) == normalize(cultivar) }
+            .sortedBy(String::lowercase)
+    )
+
+    private fun kiwiberry(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        pollinationRequirement: PollinationRequirement? = null
+    ) = CultivarBloomProfile(
+        speciesKey = "kiwiberry",
+        cultivar = cultivar,
+        aliases = aliases,
+        phase = BloomPhase.MID,
+        pollinationRequirement = pollinationRequirement
     )
 
     private fun passionFruit(
@@ -2076,6 +2192,11 @@ object BloomForecastEngine {
         val speciesScore: Int
     )
 
+    private data class SpeciesMatchContext(
+        val normalizedQuery: String,
+        val queryProfile: SpeciesBloomProfile?
+    )
+
     private data class ScoredSpeciesOption(
         val option: SpeciesAutocompleteOption,
         val score: Int
@@ -2122,46 +2243,107 @@ object BloomForecastEngine {
         }
     }
 
-    private val citrusSpeciesKeys = CitrusBloomCatalog.speciesProfiles
-        .map(SpeciesBloomProfile::key)
-        .toSet() - "citrus"
+    private val citrusSpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(CitrusBloomCatalog.subgroupSpeciesKeys)
+    }
 
-    private val speciesByKey = speciesProfiles.associateBy(SpeciesBloomProfile::key)
+    private val pearSpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(PearBloomCatalog.subgroupSpeciesKeys)
+    }
 
-    private val speciesByAlias = speciesProfiles.flatMap { profile ->
-        (profile.aliases + profile.key + profile.catalogSpeciesLabel.toCatalogDisplayLabel())
-            .map { alias -> normalize(alias) to profile }
-    }.toMap()
+    private val raspberrySpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(CaneberryBloomCatalog.subgroupSpeciesKeys)
+    }
 
-    private val speciesAutocompleteCatalog = speciesProfiles
-        .map { profile ->
-            val species = profile.catalogSpeciesLabel.toCatalogDisplayLabel()
-            SpeciesAutocompleteOption(
-                species = species,
-                aliases = (profile.aliases + profile.key + profile.catalogSpeciesLabel)
-                    .filterNot { normalize(it) == normalize(species) }
-                    .distinctBy(::normalize)
-                    .sortedBy(String::lowercase)
+    private val blueberrySpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(BlueberryBloomCatalog.subgroupSpeciesKeys)
+    }
+
+    private val plumSpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(PlumBloomCatalog.subgroupSpeciesKeys)
+    }
+
+    private val mulberrySpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(MulberryBloomCatalog.subgroupSpeciesKeys)
+    }
+
+    private val figSpeciesKeys: Set<String> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map(SpeciesBloomProfile::key)
+            .toSet()
+            .intersect(FigBloomCatalog.subgroupSpeciesKeys)
+    }
+
+    private val speciesByKey: Map<String, SpeciesBloomProfile> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles.associateBy(SpeciesBloomProfile::key)
+    }
+
+    private val speciesByAlias: Map<String, SpeciesBloomProfile> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles.flatMap { profile ->
+            (profile.aliases + profile.key + profile.catalogSpeciesLabel.toCatalogDisplayLabel())
+                .map { alias -> normalize(alias) to profile }
+        }.toMap()
+    }
+
+    private val speciesAutocompleteCatalog: List<SpeciesAutocompleteOption> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        speciesProfiles
+            .map { profile ->
+                val species = profile.catalogSpeciesLabel.toCatalogDisplayLabel()
+                SpeciesAutocompleteOption(
+                    species = species,
+                    aliases = (profile.aliases + profile.key + profile.catalogSpeciesLabel)
+                        .filterNot { normalize(it) == normalize(species) }
+                        .distinctBy(::normalize)
+                        .sortedBy(String::lowercase)
+                )
+            }
+            .distinctBy { option -> normalize(option.species) }
+    }
+
+    private val cultivarAutocompleteCatalog: List<CultivarAutocompleteOption> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        (
+            cultivarProfiles.map { profile ->
+                val speciesPollination = speciesByKey[profile.speciesKey]
+                    ?.pollinationRequirement
+                    ?.takeUnless { it == PollinationRequirement.UNKNOWN }
+                CultivarAutocompleteOption(
+                    species = profile.catalogSpeciesLabel.toCatalogDisplayLabel(),
+                    cultivar = profile.cultivar,
+                    aliases = profile.aliases
+                        .filterNot { normalize(it) == normalize(profile.cultivar) }
+                        .sortedBy(String::lowercase),
+                    pollinationRequirement = profile.pollinationRequirement ?: speciesPollination
+                )
+            } + cultivarCatalogOnlyOptions
             )
-        }
-        .distinctBy { option -> normalize(option.species) }
+            .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
+    }
 
-    private val cultivarAutocompleteCatalog = (
-        cultivarProfiles.map { profile ->
-            val speciesPollination = speciesByKey[profile.speciesKey]
-                ?.pollinationRequirement
-                ?.takeUnless { it == PollinationRequirement.UNKNOWN }
-            CultivarAutocompleteOption(
-                species = profile.catalogSpeciesLabel.toCatalogDisplayLabel(),
-                cultivar = profile.cultivar,
-                aliases = profile.aliases
-                    .filterNot { normalize(it) == normalize(profile.cultivar) }
-                    .sortedBy(String::lowercase),
-                pollinationRequirement = profile.pollinationRequirement ?: speciesPollination
-            )
-        } + cultivarCatalogOnlyOptions
-        )
-        .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
+    private val cultivarsBySpeciesLabel: Map<String, List<CultivarAutocompleteOption>> by lazy(LazyThreadSafetyMode.PUBLICATION) {
+        cultivarAutocompleteCatalog
+            .groupBy { normalize(it.species) }
+            .mapValues { (_, options) ->
+                options.sortedWith(compareBy(CultivarAutocompleteOption::cultivar, CultivarAutocompleteOption::species))
+            }
+    }
 
     fun supportedZoneLabels(): List<String> = UsdaZoneCatalog.zones.map(UsdaZoneDefinition::label)
 
@@ -2238,6 +2420,12 @@ object BloomForecastEngine {
         }
         .sortedWith(compareBy({ it.species.lowercase() }, { it.cultivar.lowercase() }))
 
+    internal fun catalogSpeciesProfilesForExport(): List<SpeciesBloomProfile> = baseSpeciesProfiles
+
+    internal fun catalogCultivarProfilesForExport(): List<CultivarBloomProfile> = baseCultivarProfiles
+
+    internal fun catalogOnlyCultivarsForExport(): List<CultivarAutocompleteOption> = baseCatalogOnlyCultivars
+
     fun supportedSpeciesReferenceCatalog(): List<CatalogSpeciesReferenceEntry> = speciesProfiles
         .map { profile ->
             val speciesLabel = profile.catalogSpeciesLabel.toCatalogDisplayLabel()
@@ -2288,8 +2476,78 @@ object BloomForecastEngine {
         }
     }
 
-    fun customBloomTimingSummaryLabel(tree: TreeEntity): String? = tree.customBloomWindowForYear(2026)
-        ?.let { window -> formatCatalogRange(window.startDate, window.endDate) }
+    fun autoBloomTimingLabelFor(
+        speciesInput: String,
+        cultivarInput: String = "",
+        locationProfile: ForecastLocationProfile,
+        orchardRegionCode: String? = null
+    ): String? {
+        val speciesProfile = resolveSpeciesProfile(speciesInput) ?: return null
+        val adjustedProfile = speciesProfile.withRegionalOverride(orchardRegionCode)
+        val cultivarMatch = matchCultivarProfile(speciesProfile, cultivarInput)
+        val phase = cultivarMatch?.phase ?: adjustedProfile.defaultPhase
+        val orchardAwarePrefix = if (locationProfile.hasForecastSignals()) {
+            "This orchard"
+        } else {
+            "Reference season"
+        }
+        return when (adjustedProfile.forecastBehavior) {
+            BloomForecastBehavior.WINDOW -> {
+                if (adjustedProfile.key == "dragon fruit") {
+                    val season = dragonFruitSeasonForYear(
+                        year = 2026,
+                        locationProfile = locationProfile
+                    )
+                    return "$orchardAwarePrefix$catalogSeparator${formatCatalogRange(season.startDate, season.endDate)}"
+                }
+                if (adjustedProfile.modelType == PhenologyModelType.TROPICAL_REPEAT) {
+                    val season = tropicalRepeatSeasonForYear(
+                        profile = adjustedProfile,
+                        year = 2026,
+                        locationProfile = locationProfile
+                    )
+                    return "$orchardAwarePrefix$catalogSeparator" +
+                        "Active season ${formatCatalogRange(season.startDate, season.endDate)}"
+                }
+                val rotatedProfile = if (
+                    locationProfile.hemisphere == Hemisphere.SOUTHERN &&
+                    adjustedProfile.key !in hemisphereShiftUnsafeKeys
+                ) {
+                    adjustedProfile.rotatedSixMonths()
+                } else {
+                    adjustedProfile
+                }
+                val climateShiftDays = climateShiftDaysFor(rotatedProfile, locationProfile)
+                val startDate = LocalDate.of(2026, rotatedProfile.startMonth, rotatedProfile.startDay)
+                    .plusDays(phase.startOffsetDays.toLong())
+                    .plusDays(climateShiftDays)
+                val endDate = startDate.plusDays(rotatedProfile.durationDays)
+                "$orchardAwarePrefix$catalogSeparator${formatCatalogRange(startDate, endDate)}"
+            }
+            BloomForecastBehavior.MANUAL_ONLY ->
+                "$orchardAwarePrefix$catalogSeparator${manualOnlySeasonLabelFor(adjustedProfile, locationProfile)}"
+            BloomForecastBehavior.SUPPRESSED -> "No automatic bloom-season forecast"
+        }
+    }
+
+    fun customBloomTimingSummaryLabel(tree: TreeEntity): String? {
+        tree.exactCustomBloomWindowForYear(2026)?.let { window ->
+            return formatCatalogRange(window.startDate, window.endDate)
+        }
+        val manualProfile = tree.effectiveManualBloomProfile()
+        if (manualProfile.none { it > 0 }) return null
+        val activeMonths = manualProfile
+            .normalizedMonthlyIntensity()
+            .mapIndexedNotNull { index, value -> bloomMonthLabels[index].takeIf { value > 0 } }
+        return when (val patternType = tree.bloomPatternOverride ?: inferPatternFromMonthlyProfile(manualProfile)) {
+            BloomPatternType.CONTINUOUS -> "Continuous / repeat"
+            BloomPatternType.MULTI_WAVE -> activeMonths.joinToString(", ").ifBlank { "Repeat bloomer" }
+            BloomPatternType.ALTERNATE_YEAR -> "Alternate-year pattern"
+            BloomPatternType.MANUAL_ONLY -> "Manual bloom profile"
+            BloomPatternType.SUPPRESSED -> "Suppressed"
+            BloomPatternType.SINGLE_ANNUAL -> activeMonths.joinToString(", ")
+        }
+    }
 
     fun pollinationRequirementFor(
         speciesInput: String,
@@ -2313,7 +2571,56 @@ object BloomForecastEngine {
         limit: Int = 8
     ): List<CultivarAutocompleteOption> {
         val normalizedQuery = normalize(query)
-        if (normalizedQuery.isBlank()) return emptyList()
+        if (normalizedQuery.isBlank()) {
+            resolveScopedSpeciesLabel(speciesQuery)?.let { scopedSpecies ->
+                val exactScopedOptions = cultivarsBySpeciesLabel[normalize(scopedSpecies)].orEmpty()
+                val speciesProfile = resolveSpeciesProfile(speciesQuery)
+                if (
+                    exactScopedOptions.isNotEmpty() &&
+                    speciesProfile != null &&
+                    speciesProfile.supportsFamilyScopedAutocompleteExpansion()
+                ) {
+                    val familyOptions = cultivarAutocompleteCatalog
+                        .filter { option ->
+                            resolveSpeciesProfile(option.species)?.let { optionSpecies ->
+                                speciesCompatible(speciesProfile, optionSpecies.key)
+                            } == true
+                        }
+                        .sortedWith(
+                            compareBy<CultivarAutocompleteOption> { it.species.lowercase() }
+                                .thenBy { it.cultivar.lowercase() }
+                        )
+                    return (exactScopedOptions + familyOptions)
+                        .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
+                        .take(limit)
+                }
+                if (exactScopedOptions.isNotEmpty()) {
+                    return exactScopedOptions.take(limit)
+                }
+            }
+
+            val speciesContext = speciesMatchContext(speciesQuery)
+            val scopedOptions = cultivarAutocompleteCatalog
+                .mapNotNull { option ->
+                    val speciesScore = speciesMatchScore(speciesContext, option.species)
+                    if (speciesScore <= 0) return@mapNotNull null
+                    ScoredCultivarOption(
+                        option = option,
+                        score = 0,
+                        speciesScore = speciesScore
+                    )
+                }
+                .sortedWith(
+                    compareByDescending<ScoredCultivarOption> { it.speciesScore }
+                        .thenBy { it.option.species.lowercase() }
+                        .thenBy { it.option.cultivar.lowercase() }
+                )
+                .map(ScoredCultivarOption::option)
+                .distinctBy { option -> normalize("${option.species}|${option.cultivar}") }
+                .take(limit)
+            return scopedOptions
+        }
+        val speciesContext = speciesMatchContext(speciesQuery)
         return cultivarAutocompleteCatalog
             .mapNotNull { option ->
                 val score = sequenceOf(option.cultivar, *option.aliases.toTypedArray())
@@ -2324,7 +2631,7 @@ object BloomForecastEngine {
                 ScoredCultivarOption(
                     option = option,
                     score = score,
-                    speciesScore = speciesMatchScore(speciesQuery, option.species)
+                    speciesScore = speciesMatchScore(speciesContext, option.species)
                 )
             }
             .sortedWith(
@@ -2366,19 +2673,25 @@ object BloomForecastEngine {
         return exactMatches.singleOrNull()
     }
 
-    fun everbearingPlants(trees: List<TreeEntity>): List<EverbearingPlant> = trees.mapNotNull { tree ->
-        if (tree.bloomTimingMode == BloomTimingMode.CUSTOM) {
-            return@mapNotNull null
-        }
-        val profileMatch = tree.resolveProfileMatch() ?: return@mapNotNull null
-        if (profileMatch.profile.forecastBehavior != BloomForecastBehavior.MANUAL_ONLY) {
+    fun everbearingPlants(
+        trees: List<TreeEntity>,
+        locationProfilesByTreeId: Map<String, ForecastLocationProfile> = emptyMap()
+    ): List<EverbearingPlant> = trees.mapNotNull { tree ->
+        val patternType = when {
+            tree.bloomTimingMode == BloomTimingMode.CUSTOM -> tree.bloomPatternOverride
+                ?: inferPatternFromMonthlyProfile(tree.effectiveManualBloomProfile())
+            else -> tree.resolveProfileMatch()?.profile?.patternType
+        } ?: return@mapNotNull null
+        if (patternType !in setOf(BloomPatternType.MULTI_WAVE, BloomPatternType.CONTINUOUS, BloomPatternType.MANUAL_ONLY)) {
             return@mapNotNull null
         }
         EverbearingPlant(
             treeId = tree.id,
             treeLabel = tree.displayName(),
             speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
-            detailLabel = "Continuous / repeat-bearing"
+            detailLabel = tree.everbearingDetailLabel(
+                locationProfile = locationProfilesByTreeId[tree.id] ?: ForecastLocationProfile()
+            )
         )
     }.sortedWith(compareBy({ it.speciesLabel.lowercase() }, { it.treeLabel.lowercase() }))
 
@@ -2406,11 +2719,30 @@ object BloomForecastEngine {
         }
 
         if (tree.bloomTimingMode == BloomTimingMode.CUSTOM) {
+            val manualPattern = tree.bloomPatternOverride ?: inferPatternFromMonthlyProfile(tree.effectiveManualBloomProfile())
             return BloomForecastSummary(
-                headline = "Unknown",
-                supportingLine = "Custom bloom window",
+                headline = when (manualPattern) {
+                    BloomPatternType.MULTI_WAVE -> "Watch"
+                    BloomPatternType.CONTINUOUS -> "Repeat"
+                    BloomPatternType.ALTERNATE_YEAR -> "Watch"
+                    BloomPatternType.MANUAL_ONLY -> "Manual"
+                    BloomPatternType.SUPPRESSED -> "Unknown"
+                    BloomPatternType.SINGLE_ANNUAL -> "Unknown"
+                },
+                supportingLine = when (manualPattern) {
+                    BloomPatternType.MULTI_WAVE -> "Repeat bloomer | custom | high confidence"
+                    BloomPatternType.CONTINUOUS -> "Active season varies | custom | high confidence"
+                    BloomPatternType.ALTERNATE_YEAR -> "Alternate-year pattern | custom | high confidence"
+                    BloomPatternType.MANUAL_ONLY -> "Manual bloom profile | custom | high confidence"
+                    BloomPatternType.SUPPRESSED -> "Bloom suppressed manually"
+                    BloomPatternType.SINGLE_ANNUAL -> "Custom bloom window"
+                },
                 source = ForecastSource.CUSTOM,
                 confidence = ForecastConfidence.HIGH,
+                patternType = manualPattern,
+                patternLabel = manualPattern.detailPatternLabel(),
+                timingLabel = null,
+                exactCountdownAllowed = false,
                 daysUntilStart = null,
                 isCurrentWindow = false
             )
@@ -2420,18 +2752,35 @@ object BloomForecastEngine {
         return when (profileMatch.profile.forecastBehavior) {
             BloomForecastBehavior.SUPPRESSED -> null
             BloomForecastBehavior.MANUAL_ONLY -> BloomForecastSummary(
-                headline = "Ongoing",
-                supportingLine = "Repeat-bearing · medium confidence",
+                headline = "Repeat",
+                supportingLine = buildString {
+                    append(tree.everbearingDetailLabel(locationProfile))
+                    append(" | ")
+                    append(ForecastSource.CLIMATE_BAND.label)
+                    append(" | ")
+                    append(ForecastConfidence.MEDIUM.label)
+                },
                 source = ForecastSource.SPECIES_BASELINE,
                 confidence = ForecastConfidence.MEDIUM,
+                patternType = profileMatch.profile.patternType,
+                patternLabel = profileMatch.profile.patternType.detailPatternLabel(),
+                timingLabel = tree.everbearingDetailLabel(locationProfile)
+                    .removePrefix("Active season ")
+                    .trim()
+                    .takeIf { it != tree.everbearingDetailLabel(locationProfile).trim() && it.isNotBlank() },
+                exactCountdownAllowed = false,
                 daysUntilStart = 0,
                 isCurrentWindow = true
             )
             BloomForecastBehavior.WINDOW -> BloomForecastSummary(
                 headline = "Unknown",
-                supportingLine = "Catalog window unavailable · low confidence",
+                supportingLine = "Catalog window unavailable | low confidence",
                 source = ForecastSource.SPECIES_BASELINE,
                 confidence = ForecastConfidence.LOW,
+                patternType = profileMatch.profile.patternType,
+                patternLabel = profileMatch.profile.patternType.detailPatternLabel(),
+                timingLabel = null,
+                exactCountdownAllowed = false,
                 daysUntilStart = null,
                 isCurrentWindow = false
             )
@@ -2454,7 +2803,6 @@ object BloomForecastEngine {
         orchardRegionCode: String? = null,
         observations: List<PhenologyObservation> = emptyList()
     ): List<PredictedBloomWindow> {
-        val targetZone = locationProfile.usdaZoneCode?.let(UsdaZoneCatalog::resolve)
         val zoneId = runCatching { ZoneId.of(locationProfile.timezoneId) }.getOrElse { OrchardTime.zoneId() }
         return trees.mapNotNull { tree ->
             tree.customBloomWindowForMonth(yearMonth)?.let { return@mapNotNull it }
@@ -2477,32 +2825,34 @@ object BloomForecastEngine {
                     locationProfile = locationProfile
                 )
             }
+            if (speciesProfile.modelType == PhenologyModelType.TROPICAL_REPEAT) {
+                return@mapNotNull sequenceOf(yearMonth.year - 1, yearMonth.year, yearMonth.year + 1)
+                    .map { year ->
+                        tropicalRepeatWindowForYear(
+                            tree = tree,
+                            profile = speciesProfile,
+                            year = year,
+                            locationProfile = locationProfile
+                        )
+                    }
+                    .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
+            }
             val phase = profileMatch.phase
             val rotatedProfile = if (
                 locationProfile.hemisphere == Hemisphere.SOUTHERN &&
                 speciesProfile.key !in hemisphereShiftUnsafeKeys
             ) {
                 speciesProfile.rotatedSixMonths()
-            } else {
-                speciesProfile
+                } else {
+                    speciesProfile
             }
             val climateShiftDays = climateShiftDaysFor(rotatedProfile, locationProfile)
-            val preferClimateFingerprint = locationProfile.climateFingerprint?.isComplete() == true
             val source = when {
                 locationProfile.hemisphere == Hemisphere.SOUTHERN &&
                     speciesProfile.key !in hemisphereShiftUnsafeKeys -> ForecastSource.HEMISPHERE_SHIFTED
-                preferClimateFingerprint -> ForecastSource.CLIMATE_BAND
-                targetZone == null && climateShiftDays != 0L -> ForecastSource.CLIMATE_BAND
+                climateShiftDays != 0L -> ForecastSource.CLIMATE_BAND
                 profileMatch.cultivarMatched -> ForecastSource.CULTIVAR_ADJUSTED
                 else -> ForecastSource.SPECIES_BASELINE
-            }
-            val shiftDays = when {
-                preferClimateFingerprint -> climateShiftDays
-                targetZone != null -> {
-                    val referenceZone = UsdaZoneCatalog.resolve(rotatedProfile.referenceZoneCode)
-                    (referenceZone.index - targetZone.index) * rotatedProfile.shiftDaysPerHalfZone
-                }
-                else -> climateShiftDays
             }
             val confidence = forecastConfidenceFor(
                 profile = speciesProfile,
@@ -2516,7 +2866,7 @@ object BloomForecastEngine {
                         tree = tree,
                         profile = rotatedProfile,
                         phase = phase,
-                        shiftDays = shiftDays,
+                        shiftDays = climateShiftDays,
                         source = source,
                         confidence = confidence,
                         year = year
@@ -2544,9 +2894,12 @@ object BloomForecastEngine {
     )
 
     private data class LearnedBloomProfile(
-        val peakDayOfYear: Int,
-        val durationDays: Long,
-        val confidence: ForecastConfidence
+        val monthlyIntensity: List<Int>,
+        val patternType: BloomPatternType,
+        val peakDayOfYear: Int? = null,
+        val durationDays: Long? = null,
+        val confidence: ForecastConfidence,
+        val alternateYearAnchor: Int? = null
     )
 
     private fun SpeciesBloomProfile.catalogUsdaBloomTimingLabel(): String {
@@ -2626,17 +2979,34 @@ object BloomForecastEngine {
             startDate = startDate,
             endDate = endDate,
             phase = phase,
+            patternType = profile.patternType,
             source = source,
             confidence = confidence
         )
     }
 
-    private fun TreeEntity.customBloomWindowForMonth(yearMonth: YearMonth): PredictedBloomWindow? =
+    private fun TreeEntity.customBloomWindowForMonth(yearMonth: YearMonth): PredictedBloomWindow? {
+        exactCustomBloomWindowForMonth(yearMonth)?.let { return it }
+        if (bloomTimingMode != BloomTimingMode.CUSTOM) return null
+        val manualProfile = effectiveManualBloomProfile()
+        if (manualProfile.none { it > 0 }) return null
+        return patternWindowForMonth(
+            tree = this,
+            yearMonth = yearMonth,
+            monthlyIntensity = manualProfile,
+            patternType = bloomPatternOverride ?: inferPatternFromMonthlyProfile(manualProfile),
+            source = ForecastSource.CUSTOM,
+            confidence = ForecastConfidence.HIGH,
+            alternateYearAnchor = alternateYearAnchor
+        )
+    }
+
+    private fun TreeEntity.exactCustomBloomWindowForMonth(yearMonth: YearMonth): PredictedBloomWindow? =
         sequenceOf(yearMonth.year - 1, yearMonth.year, yearMonth.year + 1)
-            .mapNotNull { year -> customBloomWindowForYear(year) }
+            .mapNotNull { year -> exactCustomBloomWindowForYear(year) }
             .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
 
-    private fun TreeEntity.customBloomWindowForYear(year: Int): PredictedBloomWindow? {
+    private fun TreeEntity.exactCustomBloomWindowForYear(year: Int): PredictedBloomWindow? {
         if (bloomTimingMode != BloomTimingMode.CUSTOM) return null
         val month = customBloomStartMonth ?: return null
         val day = customBloomStartDay ?: return null
@@ -2649,6 +3019,7 @@ object BloomForecastEngine {
             startDate = startDate,
             endDate = startDate.plusDays(duration.toLong()),
             phase = BloomPhase.MID,
+            patternType = bloomPatternOverride ?: BloomPatternType.SINGLE_ANNUAL,
             source = ForecastSource.CUSTOM,
             confidence = ForecastConfidence.HIGH
         )
@@ -2662,53 +3033,280 @@ object BloomForecastEngine {
         .map { year -> dragonFruitWindowForYear(tree, year, locationProfile) }
         .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
 
+    private data class DragonFruitSeason(
+        val startDate: LocalDate,
+        val endDate: LocalDate,
+        val source: ForecastSource,
+        val confidence: ForecastConfidence
+    )
+
+    private data class SeasonalDateRange(
+        val startDate: LocalDate,
+        val endDate: LocalDate
+    )
+
     private fun dragonFruitWindowForYear(
         tree: TreeEntity,
         year: Int,
         locationProfile: ForecastLocationProfile
     ): PredictedBloomWindow {
-        val warmSeasonWindow = locationProfile.warmSeasonWindow()
-        val climateBand = locationProfile.climateBand()
-        val (northStartMonth, northStartDay, durationDays) = when (climateBand) {
-            ClimateBand.EQUATORIAL -> Triple(3, 15, 210L)
-            ClimateBand.TROPICAL -> Triple(4, 1, 190L)
-            ClimateBand.SUBTROPICAL -> Triple(5, 1, 170L)
-            ClimateBand.TEMPERATE -> Triple(6, 1, 130L)
-            ClimateBand.COOL -> Triple(6, 15, 100L)
-            null -> Triple(5, 1, 155L)
-        }
-        val climateStartDate = warmSeasonWindow?.let { window ->
-            LocalDate.of(year, window.startMonth, 1)
-        }
-        val climateEndDate = climateStartDate?.plusMonths(warmSeasonWindow.monthCount.toLong())?.minusDays(1)
-        val baseStartDate = LocalDate.of(year, northStartMonth, northStartDay)
-        val startDate = climateStartDate ?: when (locationProfile.hemisphere) {
-            Hemisphere.SOUTHERN -> baseStartDate.plusMonths(6)
-            Hemisphere.EQUATORIAL -> LocalDate.of(year, 4, 1)
-            Hemisphere.NORTHERN -> baseStartDate
-        }
-        val endDate = climateEndDate ?: startDate.plusDays(durationDays)
-        val hasMicroclimateRisk = locationProfile.microclimateFlags.any {
-            it == MicroclimateFlag.GREENHOUSE || it == MicroclimateFlag.FROST_POCKET
-        }
+        val season = dragonFruitSeasonForYear(year, locationProfile)
         return PredictedBloomWindow(
             treeId = tree.id,
             treeLabel = tree.displayName(),
             speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
-            startDate = startDate,
-            endDate = endDate,
+            startDate = season.startDate,
+            endDate = season.endDate,
             phase = BloomPhase.MID,
-            source = if (warmSeasonWindow != null || locationProfile.latitudeDeg != null) {
+            patternType = BloomPatternType.MULTI_WAVE,
+            source = season.source,
+            confidence = season.confidence
+        )
+    }
+
+    private fun tropicalRepeatWindowForYear(
+        tree: TreeEntity,
+        profile: SpeciesBloomProfile,
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): PredictedBloomWindow {
+        val season = tropicalRepeatSeasonForYear(
+            profile = profile,
+            year = year,
+            locationProfile = locationProfile
+        )
+        return PredictedBloomWindow(
+            treeId = tree.id,
+            treeLabel = tree.displayName(),
+            speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
+            startDate = season.startDate,
+            endDate = season.endDate,
+            phase = BloomPhase.MID,
+            patternType = profile.patternType,
+            source = if (locationProfile.hasForecastSignals()) {
+                ForecastSource.CLIMATE_BAND
+            } else {
+                ForecastSource.SPECIES_BASELINE
+            },
+            confidence = if (locationProfile.hasForecastSignals()) {
+                ForecastConfidence.MEDIUM
+            } else {
+                ForecastConfidence.LOW
+            }
+        )
+    }
+
+    private fun dragonFruitSeasonForYear(
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): DragonFruitSeason {
+        val climateBand = effectiveClimateBand(locationProfile)
+        val warmSeasonWindow = locationProfile.climateFingerprint?.warmSeasonWindow(
+            minMeanTempC = 20.0,
+            minMaxTempC = 28.0
+        )
+        val baselineSeason = dragonFruitBaselineSeason(
+            year = year,
+            hemisphere = locationProfile.hemisphere,
+            climateBand = climateBand
+        )
+        val climateSeason = warmSeasonWindow?.let { window ->
+            SeasonalDateRange(
+                startDate = LocalDate.of(year, window.startMonth, 1),
+                endDate = LocalDate.of(year, window.startMonth, 1)
+                    .plusMonths(window.monthCount.toLong())
+                    .minusDays(1)
+            )
+        }
+        val effectiveSeason = climateSeason
+            ?.let { season -> clampSeasonRange(season, baselineSeason) }
+            ?: baselineSeason
+        val hasMicroclimateRisk = locationProfile.microclimateFlags.any {
+            it == MicroclimateFlag.GREENHOUSE || it == MicroclimateFlag.FROST_POCKET
+        }
+        return DragonFruitSeason(
+            startDate = effectiveSeason.startDate,
+            endDate = effectiveSeason.endDate,
+            source = if (
+                warmSeasonWindow != null ||
+                locationProfile.latitudeDeg != null ||
+                !locationProfile.usdaZoneCode.isNullOrBlank()
+            ) {
                 ForecastSource.CLIMATE_BAND
             } else {
                 ForecastSource.SPECIES_BASELINE
             },
             confidence = when {
                 hasMicroclimateRisk -> ForecastConfidence.LOW
-                warmSeasonWindow != null || locationProfile.latitudeDeg != null -> ForecastConfidence.MEDIUM
+                warmSeasonWindow != null ||
+                    locationProfile.latitudeDeg != null ||
+                    !locationProfile.usdaZoneCode.isNullOrBlank() -> ForecastConfidence.MEDIUM
                 else -> ForecastConfidence.LOW
             }
         )
+    }
+
+    private fun dragonFruitBaselineSeason(
+        year: Int,
+        hemisphere: Hemisphere,
+        climateBand: ClimateBand?
+    ): SeasonalDateRange {
+        val northernRange = when (climateBand) {
+            ClimateBand.EQUATORIAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 4, 1),
+                endDate = LocalDate.of(year, 11, 30)
+            )
+            ClimateBand.TROPICAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 4, 1),
+                endDate = LocalDate.of(year, 11, 15)
+            )
+            ClimateBand.SUBTROPICAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 5, 1),
+                endDate = LocalDate.of(year, 10, 31)
+            )
+            ClimateBand.TEMPERATE -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 6, 1),
+                endDate = LocalDate.of(year, 9, 30)
+            )
+            ClimateBand.COOL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 6, 15),
+                endDate = LocalDate.of(year, 9, 15)
+            )
+            null -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 5, 1),
+                endDate = LocalDate.of(year, 10, 31)
+            )
+        }
+        return when (hemisphere) {
+            Hemisphere.SOUTHERN -> SeasonalDateRange(
+                startDate = northernRange.startDate.plusMonths(6),
+                endDate = northernRange.endDate.plusMonths(6)
+            )
+            Hemisphere.EQUATORIAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 4, 1),
+                endDate = LocalDate.of(year, 11, 30)
+            )
+            Hemisphere.NORTHERN -> northernRange
+        }
+    }
+
+    private fun clampSeasonRange(
+        climateSeason: SeasonalDateRange,
+        baselineSeason: SeasonalDateRange
+    ): SeasonalDateRange {
+        val clampedStart = maxOf(climateSeason.startDate, baselineSeason.startDate)
+        val clampedEnd = minOf(climateSeason.endDate, baselineSeason.endDate)
+        return if (clampedEnd.isBefore(clampedStart)) baselineSeason else SeasonalDateRange(
+            startDate = clampedStart,
+            endDate = clampedEnd
+        )
+    }
+
+    private fun tropicalRepeatSeasonForYear(
+        profile: SpeciesBloomProfile,
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): SeasonalDateRange {
+        val rotatedProfile = if (
+            locationProfile.hemisphere == Hemisphere.SOUTHERN &&
+            profile.key !in hemisphereShiftUnsafeKeys
+        ) {
+            profile.rotatedSixMonths()
+        } else {
+            profile
+        }
+        val baselineSeason = SeasonalDateRange(
+            startDate = LocalDate.of(year, rotatedProfile.startMonth, rotatedProfile.startDay),
+            endDate = LocalDate.of(year, rotatedProfile.startMonth, rotatedProfile.startDay)
+                .plusDays(rotatedProfile.durationDays)
+        )
+        val climateSeason = warmSeasonDateRange(
+            year = year,
+            locationProfile = locationProfile,
+            minMeanTempC = 18.0,
+            minMaxTempC = 26.0
+        ) ?: climateBandSeasonForYear(year, locationProfile)
+            ?: baselineSeason
+        val startDate = maxOf(baselineSeason.startDate, climateSeason.startDate)
+        val endDate = climateSeason.endDate
+        return if (endDate.isBefore(startDate)) baselineSeason else SeasonalDateRange(
+            startDate = startDate,
+            endDate = endDate
+        )
+    }
+
+    private fun climateBandSeasonForYear(
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): SeasonalDateRange? {
+        val climateBand = effectiveClimateBand(locationProfile)
+            ?: return null
+        return climateBandSeasonForBand(year, climateBand, locationProfile.hemisphere)
+    }
+
+    private fun warmSeasonDateRange(
+        year: Int,
+        locationProfile: ForecastLocationProfile,
+        minMeanTempC: Double,
+        minMaxTempC: Double
+    ): SeasonalDateRange? {
+        val warmSeasonWindow = locationProfile.climateFingerprint?.warmSeasonWindow(
+            minMeanTempC = minMeanTempC,
+            minMaxTempC = minMaxTempC
+        ) ?: return null
+        val startDate = LocalDate.of(year, warmSeasonWindow.startMonth, 1)
+        val endDate = startDate.plusMonths(warmSeasonWindow.monthCount.toLong()).minusDays(1)
+        return SeasonalDateRange(startDate = startDate, endDate = endDate)
+    }
+
+    private fun manualOnlySeasonLabelFor(
+        profile: SpeciesBloomProfile,
+        locationProfile: ForecastLocationProfile
+    ): String {
+        if (!locationProfile.hasForecastSignals()) {
+            return manualOnlyPatternLabel(profile.patternType)
+        }
+        val seasonRange = when (profile.modelType) {
+            PhenologyModelType.TROPICAL_REPEAT ->
+                tropicalRepeatSeasonForYear(profile, 2026, locationProfile)
+            PhenologyModelType.WARM_SEASON_PHOTOPERIOD ->
+                dragonFruitSeasonForYear(2026, locationProfile).let { season ->
+                    SeasonalDateRange(season.startDate, season.endDate)
+                }
+            else -> warmSeasonDateRange(
+                year = 2026,
+                locationProfile = locationProfile,
+                minMeanTempC = 20.0,
+                minMaxTempC = 28.0
+            ) ?: climateBandSeasonForYear(2026, locationProfile)
+        }
+        return seasonRange?.let { range ->
+            "Active season ${formatCatalogRange(range.startDate, range.endDate)}"
+        } ?: manualOnlyPatternLabel(profile.patternType)
+    }
+
+    private fun manualOnlyPatternLabel(patternType: BloomPatternType): String = when (patternType) {
+        BloomPatternType.CONTINUOUS -> "Continuous / repeat-bearing"
+        BloomPatternType.MULTI_WAVE -> "Repeat bloomer"
+        BloomPatternType.MANUAL_ONLY -> "Watch for buds manually"
+        BloomPatternType.ALTERNATE_YEAR -> "Alternate-year bloom pattern"
+        BloomPatternType.SUPPRESSED -> "No automatic bloom-season forecast"
+        BloomPatternType.SINGLE_ANNUAL -> "Manual bloom profile"
+    }
+
+    private fun TreeEntity.everbearingDetailLabel(locationProfile: ForecastLocationProfile): String {
+        if (bloomTimingMode == BloomTimingMode.CUSTOM) {
+            return when (val patternType = bloomPatternOverride ?: inferPatternFromMonthlyProfile(effectiveManualBloomProfile())) {
+                BloomPatternType.CONTINUOUS -> "Continuous / repeat-bearing"
+                BloomPatternType.MULTI_WAVE -> "Repeat bloomer"
+                BloomPatternType.MANUAL_ONLY -> "Watch for buds manually"
+                BloomPatternType.ALTERNATE_YEAR -> "Alternate-year bloom pattern"
+                BloomPatternType.SUPPRESSED -> "No automatic bloom-season forecast"
+                BloomPatternType.SINGLE_ANNUAL -> patternType.label
+            }
+        }
+        val profile = resolveProfileMatch()?.profile ?: return "Repeat bloomer"
+        return manualOnlySeasonLabelFor(profile, locationProfile)
     }
 
     private fun learnedBloomWindowForMonth(
@@ -2716,29 +3314,39 @@ object BloomForecastEngine {
         yearMonth: YearMonth,
         zoneId: ZoneId,
         observations: List<PhenologyObservation>
-    ): PredictedBloomWindow? = sequenceOf(yearMonth.year - 1, yearMonth.year, yearMonth.year + 1)
-        .mapNotNull { year -> learnedBloomWindowForYear(tree, year, zoneId, observations) }
-        .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
-
-    private fun learnedBloomWindowForYear(
-        tree: TreeEntity,
-        year: Int,
-        zoneId: ZoneId,
-        observations: List<PhenologyObservation>
     ): PredictedBloomWindow? {
         val learnedProfile = learnedBloomProfile(tree, zoneId, observations) ?: return null
-        val peakDate = dayOfYearToDate(year, learnedProfile.peakDayOfYear)
-        val startDate = peakDate.minusDays(learnedProfile.durationDays / 2)
-        val endDate = startDate.plusDays(learnedProfile.durationDays)
-        return PredictedBloomWindow(
-            treeId = tree.id,
-            treeLabel = tree.displayName(),
-            speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
-            startDate = startDate,
-            endDate = endDate,
-            phase = BloomPhase.MID,
+        if (learnedProfile.patternType == BloomPatternType.SINGLE_ANNUAL &&
+            learnedProfile.peakDayOfYear != null &&
+            learnedProfile.durationDays != null
+        ) {
+            return sequenceOf(yearMonth.year - 1, yearMonth.year, yearMonth.year + 1)
+                .mapNotNull { year ->
+                    val peakDate = dayOfYearToDate(year, learnedProfile.peakDayOfYear)
+                    val startDate = peakDate.minusDays(learnedProfile.durationDays / 2)
+                    val endDate = startDate.plusDays(learnedProfile.durationDays)
+                    PredictedBloomWindow(
+                        treeId = tree.id,
+                        treeLabel = tree.displayName(),
+                        speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
+                        startDate = startDate,
+                        endDate = endDate,
+                        phase = BloomPhase.MID,
+                        patternType = learnedProfile.patternType,
+                        source = ForecastSource.HISTORY_LEARNED,
+                        confidence = learnedProfile.confidence
+                    )
+                }
+                .firstOrNull { window -> overlaps(window.startDate, window.endDate, yearMonth) }
+        }
+        return patternWindowForMonth(
+            tree = tree,
+            yearMonth = yearMonth,
+            monthlyIntensity = learnedProfile.monthlyIntensity,
+            patternType = learnedProfile.patternType,
             source = ForecastSource.HISTORY_LEARNED,
-            confidence = learnedProfile.confidence
+            confidence = learnedProfile.confidence,
+            alternateYearAnchor = learnedProfile.alternateYearAnchor
         )
     }
 
@@ -2755,23 +3363,118 @@ object BloomForecastEngine {
         if (signals.isEmpty()) return null
 
         val bloomSignals = signals.filter(LearnedBloomSignal::directBloom)
+        val weightedMonths = MutableList(12) { 0.0 }
+        signals.forEach { signal ->
+            val monthIndex = signal.inferredDate.monthValue - 1
+            weightedMonths[monthIndex] += if (signal.directBloom) 3.0 else 1.5
+        }
+        val maxWeight = weightedMonths.maxOrNull() ?: 0.0
+        val monthlyIntensity = if (maxWeight <= 0.0) {
+            List(12) { 0 }
+        } else {
+            weightedMonths.map { weight ->
+                when {
+                    weight <= 0.0 -> 0
+                    weight / maxWeight >= 0.75 -> 3
+                    weight / maxWeight >= 0.45 -> 2
+                    else -> 1
+                }
+            }
+        }
+        val activeYears = signals.map { it.inferredDate.year }.distinct().sorted()
+        val alternateYearAnchor = activeYears.firstOrNull()
+            ?.takeIf {
+                activeYears.size >= 2 &&
+                    activeYears.map { year -> year % 2 }.distinct().size == 1 &&
+                    (activeYears.last() - activeYears.first()) >= 2
+            }
+        val inferredPattern = when {
+            alternateYearAnchor != null -> BloomPatternType.ALTERNATE_YEAR
+            else -> inferPatternFromMonthlyProfile(monthlyIntensity)
+        }
+        val confidence = when {
+            bloomSignals.size >= 4 || signals.size >= 6 -> ForecastConfidence.HIGH
+            bloomSignals.size >= 2 || signals.size >= 3 -> ForecastConfidence.MEDIUM
+            else -> ForecastConfidence.LOW
+        }
         val peakDay = circularMeanDayOfYear(signals.map { it.inferredDate.dayOfYear })
         val spreadDays = circularSpreadDays(signals.map { it.inferredDate.dayOfYear }, peakDay)
         val durationDays = when {
+            inferredPattern != BloomPatternType.SINGLE_ANNUAL -> null
             bloomSignals.size >= 3 && spreadDays <= 9 -> 21L
             bloomSignals.size >= 2 && spreadDays <= 16 -> 28L
             bloomSignals.isEmpty() -> 40L
             spreadDays >= 24 -> 42L
             else -> 32L
         }
-        val confidence = when {
-            bloomSignals.size >= 3 -> ForecastConfidence.HIGH
-            bloomSignals.size >= 2 -> ForecastConfidence.MEDIUM
-            else -> ForecastConfidence.LOW
-        }
         return LearnedBloomProfile(
-            peakDayOfYear = peakDay,
+            monthlyIntensity = monthlyIntensity,
+            patternType = inferredPattern,
+            peakDayOfYear = peakDay.takeIf { inferredPattern == BloomPatternType.SINGLE_ANNUAL },
             durationDays = durationDays,
+            confidence = confidence,
+            alternateYearAnchor = alternateYearAnchor
+        )
+    }
+
+    private fun TreeEntity.effectiveManualBloomProfile(): List<Int> {
+        val explicitProfile = manualBloomProfile.normalizedMonthlyIntensity()
+        if (explicitProfile.any { it > 0 }) return explicitProfile
+        return legacyManualBloomProfile()
+    }
+
+    private fun TreeEntity.legacyManualBloomProfile(): List<Int> {
+        if (bloomTimingMode != BloomTimingMode.CUSTOM) return List(12) { 0 }
+        val month = customBloomStartMonth?.takeIf { it in 1..12 } ?: return List(12) { 0 }
+        val duration = customBloomDurationDays?.takeIf { it > 0 } ?: return List(12) { 0 }
+        val monthCount = when {
+            duration >= 180 -> 12
+            duration >= 90 -> 3
+            duration >= 45 -> 2
+            else -> 1
+        }
+        return List(12) { index ->
+            val monthValue = index + 1
+            if ((0 until monthCount).any { offset -> ((month - 1 + offset) % 12) + 1 == monthValue }) {
+                if (monthCount >= 3) 2 else 3
+            } else {
+                0
+            }
+        }
+    }
+
+    private fun patternWindowForMonth(
+        tree: TreeEntity,
+        yearMonth: YearMonth,
+        monthlyIntensity: List<Int>,
+        patternType: BloomPatternType,
+        source: ForecastSource,
+        confidence: ForecastConfidence,
+        alternateYearAnchor: Int? = null
+    ): PredictedBloomWindow? {
+        val normalizedProfile = monthlyIntensity.normalizedMonthlyIntensity()
+        if (patternType == BloomPatternType.SUPPRESSED) return null
+        if (patternType == BloomPatternType.ALTERNATE_YEAR &&
+            alternateYearAnchor != null &&
+            (yearMonth.year - alternateYearAnchor) % 2 != 0
+        ) {
+            return null
+        }
+        val activeThisMonth = when (patternType) {
+            BloomPatternType.CONTINUOUS -> true
+            BloomPatternType.MANUAL_ONLY -> normalizedProfile.any { it > 0 }
+            else -> normalizedProfile.getOrElse(yearMonth.monthValue - 1) { 0 } > 0
+        }
+        if (!activeThisMonth) return null
+        return PredictedBloomWindow(
+            treeId = tree.id,
+            treeLabel = tree.displayName(),
+            speciesLabel = speciesCultivarLabel(tree.species, tree.cultivar),
+            startDate = yearMonth.atDay(1),
+            endDate = yearMonth.atEndOfMonth(),
+            phase = BloomPhase.MID,
+            patternType = patternType,
+            source = source,
             confidence = confidence
         )
     }
@@ -2812,6 +3515,35 @@ object BloomForecastEngine {
     private fun circularDistance(left: Int, right: Int, yearLength: Int = 366): Int {
         val delta = abs(left - right)
         return min(delta, yearLength - delta)
+    }
+
+    private fun List<Int>.normalizedMonthlyIntensity(): List<Int> {
+        val normalized = take(12).map { it.coerceIn(0, 3) }
+        return if (normalized.size == 12) normalized else normalized + List(12 - normalized.size) { 0 }
+    }
+
+    private fun inferPatternFromMonthlyProfile(monthlyIntensity: List<Int>): BloomPatternType {
+        val normalizedProfile = monthlyIntensity.normalizedMonthlyIntensity()
+        val activeMonths = normalizedProfile.count { it > 0 }
+        if (activeMonths == 0) return BloomPatternType.SUPPRESSED
+        if (activeMonths >= 8) return BloomPatternType.CONTINUOUS
+        val doubled = normalizedProfile + normalizedProfile
+        var spanCount = 0
+        var inSpan = false
+        for (index in doubled.indices) {
+            val active = doubled[index] > 0
+            if (active && !inSpan) {
+                spanCount += 1
+                inSpan = true
+            } else if (!active) {
+                inSpan = false
+            }
+        }
+        return when {
+            activeMonths >= 4 -> BloomPatternType.MULTI_WAVE
+            spanCount >= 3 -> BloomPatternType.MULTI_WAVE
+            else -> BloomPatternType.SINGLE_ANNUAL
+        }
     }
 
     private fun dayOfYearToDate(year: Int, dayOfYear: Int): LocalDate {
@@ -2868,9 +3600,17 @@ object BloomForecastEngine {
         profile: SpeciesBloomProfile,
         locationProfile: ForecastLocationProfile
     ): Long {
-        val climateBand = locationProfile.climateBand() ?: return 0L
         val referenceBand = referenceClimateBandFor(profile.referenceZoneCode)
-        val bandShiftDays = (climateBand.order - referenceBand.order) * 14L
+        val referenceStartDate = LocalDate.of(2026, profile.startMonth, profile.startDay)
+        val bandShiftDays = climateAlignedStartDateForYear(
+            profile = profile,
+            year = referenceStartDate.year,
+            locationProfile = locationProfile
+        )?.let { alignedStartDate ->
+            ChronoUnit.DAYS.between(referenceStartDate, alignedStartDate)
+        } ?: effectiveClimateBand(locationProfile)?.let { climateBand ->
+            (climateBand.order - referenceBand.order) * 14L
+        } ?: 0L
         val elevationShiftDays = when {
             locationProfile.elevationM == null -> 0L
             locationProfile.elevationM >= 1800.0 -> 21L
@@ -2878,7 +3618,7 @@ object BloomForecastEngine {
             locationProfile.elevationM >= 600.0 -> 7L
             else -> 0L
         }
-        return bandShiftDays + elevationShiftDays
+        return bandShiftDays + elevationShiftDays + chillTimingAdjustmentDays(profile, locationProfile)
     }
 
     private fun referenceClimateBandFor(zoneCode: String): ClimateBand {
@@ -2899,6 +3639,246 @@ object BloomForecastEngine {
             ClimateBand.TEMPERATE -> 3
             ClimateBand.COOL -> 4
         }
+
+    private val ChillHoursBand.order: Int
+        get() = when (this) {
+            ChillHoursBand.UNKNOWN -> -1
+            ChillHoursBand.UNDER_100 -> 0
+            ChillHoursBand.H100_300 -> 1
+            ChillHoursBand.H300_600 -> 2
+            ChillHoursBand.H600_900 -> 3
+            ChillHoursBand.H900_PLUS -> 4
+        }
+
+    private fun effectiveClimateBand(locationProfile: ForecastLocationProfile): ClimateBand? {
+        val derivedClimateBand = locationProfile.climateBand()
+        val zoneClimateBand = locationProfile.usdaZoneCode
+            ?.takeIf(String::isNotBlank)
+            ?.let(::referenceClimateBandFor)
+        return listOfNotNull(derivedClimateBand, zoneClimateBand)
+            .maxByOrNull { band -> band.order }
+    }
+
+    private fun climateBandSeasonForBand(
+        year: Int,
+        climateBand: ClimateBand,
+        hemisphere: Hemisphere
+    ): SeasonalDateRange {
+        val northernRange = when (climateBand) {
+            ClimateBand.EQUATORIAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 2, 1),
+                endDate = LocalDate.of(year, 12, 31)
+            )
+            ClimateBand.TROPICAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 3, 1),
+                endDate = LocalDate.of(year, 11, 30)
+            )
+            ClimateBand.SUBTROPICAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 4, 1),
+                endDate = LocalDate.of(year, 10, 31)
+            )
+            ClimateBand.TEMPERATE -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 5, 1),
+                endDate = LocalDate.of(year, 9, 30)
+            )
+            ClimateBand.COOL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 6, 1),
+                endDate = LocalDate.of(year, 8, 31)
+            )
+        }
+        return when (hemisphere) {
+            Hemisphere.SOUTHERN -> SeasonalDateRange(
+                startDate = northernRange.startDate.plusMonths(6),
+                endDate = northernRange.endDate.plusMonths(6)
+            )
+            Hemisphere.EQUATORIAL -> SeasonalDateRange(
+                startDate = LocalDate.of(year, 2, 1),
+                endDate = LocalDate.of(year, 12, 31)
+            )
+            Hemisphere.NORTHERN -> northernRange
+        }
+    }
+
+    private fun climateAlignedStartDateForYear(
+        profile: SpeciesBloomProfile,
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): LocalDate? {
+        val referenceBand = referenceClimateBandFor(profile.referenceZoneCode)
+        val localOnsetDate = climateOnsetDateForYear(profile, year, locationProfile) ?: return null
+        val referenceOnsetDate = if (profile.key in winterBloomKeys) {
+            referenceCoolingOnsetDateForBand(year, referenceBand, locationProfile.hemisphere)
+        } else {
+            referenceOnsetDateForBand(year, referenceBand, locationProfile.hemisphere)
+        }
+        val referenceStartDate = LocalDate.of(year, profile.startMonth, profile.startDay)
+        val offsetFromOnset = ChronoUnit.DAYS.between(referenceOnsetDate, referenceStartDate)
+        return localOnsetDate.plusDays(offsetFromOnset)
+    }
+
+    private fun climateOnsetDateForYear(
+        profile: SpeciesBloomProfile,
+        year: Int,
+        locationProfile: ForecastLocationProfile
+    ): LocalDate? {
+        val referenceBand = referenceClimateBandFor(profile.referenceZoneCode)
+        if (profile.key in winterBloomKeys) {
+            val (maxMeanTempC, maxMaxTempC) = coolingThresholdsFor(profile, referenceBand)
+            return coolingTriggeredOnsetDateForYear(
+                year = year,
+                locationProfile = locationProfile,
+                maxMeanTempC = maxMeanTempC,
+                maxMaxTempC = maxMaxTempC
+            ) ?: effectiveClimateBand(locationProfile)?.let { climateBand ->
+                referenceCoolingOnsetDateForBand(year, climateBand, locationProfile.hemisphere)
+            }
+        }
+        val (minMeanTempC, minMaxTempC) = onsetThresholdsFor(profile, referenceBand)
+        return temperatureTriggeredOnsetDateForYear(
+            year = year,
+            locationProfile = locationProfile,
+            minMeanTempC = minMeanTempC,
+            minMaxTempC = minMaxTempC
+        ) ?: effectiveClimateBand(locationProfile)?.let { climateBand ->
+            referenceOnsetDateForBand(year, climateBand, locationProfile.hemisphere)
+        }
+    }
+
+    private fun coolingThresholdsFor(
+        profile: SpeciesBloomProfile,
+        referenceBand: ClimateBand
+    ): Pair<Double, Double> = when {
+        profile.key == "loquat" -> 18.0 to 26.0
+        referenceBand == ClimateBand.TROPICAL -> 20.0 to 28.0
+        referenceBand == ClimateBand.SUBTROPICAL -> 18.0 to 26.0
+        else -> 16.0 to 24.0
+    }
+
+    private fun onsetThresholdsFor(
+        profile: SpeciesBloomProfile,
+        referenceBand: ClimateBand
+    ): Pair<Double, Double> = when {
+        profile.key in chillSensitiveKeys -> 8.0 to 15.0
+        referenceBand == ClimateBand.COOL -> 7.0 to 13.0
+        referenceBand == ClimateBand.TEMPERATE -> 10.0 to 16.0
+        referenceBand == ClimateBand.SUBTROPICAL -> 14.0 to 22.0
+        else -> 18.0 to 26.0
+    }
+
+    private fun temperatureTriggeredOnsetDateForYear(
+        year: Int,
+        locationProfile: ForecastLocationProfile,
+        minMeanTempC: Double,
+        minMaxTempC: Double
+    ): LocalDate? {
+        val climateFingerprint = locationProfile.climateFingerprint
+            ?.takeIf(LocationClimateFingerprint::isComplete)
+            ?: return null
+        val coldestMonthIndex = climateFingerprint.meanMonthlyTempC
+            .indices
+            .minByOrNull { index -> climateFingerprint.meanMonthlyTempC[index] }
+            ?: return null
+        for (offset in 1..12) {
+            val monthIndex = (coldestMonthIndex + offset) % 12
+            if (
+                climateFingerprint.meanMonthlyTempC[monthIndex] >= minMeanTempC ||
+                climateFingerprint.meanMonthlyMaxTempC[monthIndex] >= minMaxTempC
+            ) {
+                return LocalDate.of(year, monthIndex + 1, 1)
+            }
+        }
+        return null
+    }
+
+    private fun coolingTriggeredOnsetDateForYear(
+        year: Int,
+        locationProfile: ForecastLocationProfile,
+        maxMeanTempC: Double,
+        maxMaxTempC: Double
+    ): LocalDate? {
+        val climateFingerprint = locationProfile.climateFingerprint
+            ?.takeIf(LocationClimateFingerprint::isComplete)
+            ?: return null
+        val warmestMonthIndex = climateFingerprint.meanMonthlyTempC
+            .indices
+            .maxByOrNull { index -> climateFingerprint.meanMonthlyTempC[index] }
+            ?: return null
+        for (offset in 1..12) {
+            val monthIndex = (warmestMonthIndex + offset) % 12
+            if (
+                climateFingerprint.meanMonthlyTempC[monthIndex] <= maxMeanTempC ||
+                climateFingerprint.meanMonthlyMaxTempC[monthIndex] <= maxMaxTempC
+            ) {
+                return LocalDate.of(year, monthIndex + 1, 1)
+            }
+        }
+        return null
+    }
+
+    private fun referenceOnsetDateForBand(
+        year: Int,
+        climateBand: ClimateBand,
+        hemisphere: Hemisphere
+    ): LocalDate {
+        val northernDate = when (climateBand) {
+            ClimateBand.EQUATORIAL -> LocalDate.of(year, 1, 15)
+            ClimateBand.TROPICAL -> LocalDate.of(year, 2, 15)
+            ClimateBand.SUBTROPICAL -> LocalDate.of(year, 3, 1)
+            ClimateBand.TEMPERATE -> LocalDate.of(year, 3, 15)
+            ClimateBand.COOL -> LocalDate.of(year, 4, 15)
+        }
+        return when (hemisphere) {
+            Hemisphere.SOUTHERN -> northernDate.plusMonths(6)
+            Hemisphere.EQUATORIAL -> LocalDate.of(year, 1, 15)
+            Hemisphere.NORTHERN -> northernDate
+        }
+    }
+
+    private fun referenceCoolingOnsetDateForBand(
+        year: Int,
+        climateBand: ClimateBand,
+        hemisphere: Hemisphere
+    ): LocalDate {
+        val northernDate = when (climateBand) {
+            ClimateBand.EQUATORIAL -> LocalDate.of(year, 11, 1)
+            ClimateBand.TROPICAL -> LocalDate.of(year, 11, 1)
+            ClimateBand.SUBTROPICAL -> LocalDate.of(year, 11, 1)
+            ClimateBand.TEMPERATE -> LocalDate.of(year, 10, 1)
+            ClimateBand.COOL -> LocalDate.of(year, 9, 15)
+        }
+        return when (hemisphere) {
+            Hemisphere.SOUTHERN -> northernDate.plusMonths(6)
+            Hemisphere.EQUATORIAL -> LocalDate.of(year, 11, 1)
+            Hemisphere.NORTHERN -> northernDate
+        }
+    }
+
+    private fun chillTimingAdjustmentDays(
+        profile: SpeciesBloomProfile,
+        locationProfile: ForecastLocationProfile
+    ): Long {
+        if (profile.key !in chillSensitiveKeys) return 0L
+        val actualChillBand = locationProfile.effectiveChillHoursBand()
+        if (actualChillBand == ChillHoursBand.UNKNOWN) return 0L
+        val referenceChillBand = referenceChillHoursBandFor(profile.referenceZoneCode)
+        val delta = actualChillBand.order - referenceChillBand.order
+        return when {
+            delta < 0 -> (-delta) * 10L
+            delta > 0 -> -min(delta * 4L, 12L)
+            else -> 0L
+        }
+    }
+
+    private fun referenceChillHoursBandFor(zoneCode: String): ChillHoursBand {
+        val zoneNumber = zoneCode.trim().takeWhile(Char::isDigit).toIntOrNull() ?: 7
+        return when {
+            zoneNumber >= 10 -> ChillHoursBand.UNDER_100
+            zoneNumber >= 9 -> ChillHoursBand.H100_300
+            zoneNumber >= 8 -> ChillHoursBand.H300_600
+            zoneNumber >= 7 -> ChillHoursBand.H600_900
+            else -> ChillHoursBand.H900_PLUS
+        }
+    }
 
     private fun forecastConfidenceFor(
         profile: SpeciesBloomProfile,
@@ -2943,6 +3923,12 @@ object BloomForecastEngine {
         speciesProfile == null -> true
         speciesProfile.key == cultivarSpeciesKey -> true
         speciesProfile.key == "citrus" && cultivarSpeciesKey in citrusSpeciesKeys -> true
+        speciesProfile.key == "pear" && cultivarSpeciesKey in pearSpeciesKeys -> true
+        speciesProfile.key == "raspberry" && cultivarSpeciesKey in raspberrySpeciesKeys -> true
+        speciesProfile.key == "blueberry" && cultivarSpeciesKey in blueberrySpeciesKeys -> true
+        speciesProfile.key == "fig" && cultivarSpeciesKey in figSpeciesKeys -> true
+        speciesProfile.key == "mulberry" && cultivarSpeciesKey in mulberrySpeciesKeys -> true
+        speciesProfile.key == "plum" && cultivarSpeciesKey in plumSpeciesKeys -> true
         else -> false
     }
 
@@ -2952,21 +3938,48 @@ object BloomForecastEngine {
         return !end.isBefore(monthStart) && !start.isAfter(monthEnd)
     }
 
-    private fun speciesMatchScore(query: String?, species: String): Int {
+    private fun speciesMatchContext(query: String?): SpeciesMatchContext {
         val normalizedQuery = normalize(query.orEmpty())
-        if (normalizedQuery.isBlank()) return 0
+        return SpeciesMatchContext(
+            normalizedQuery = normalizedQuery,
+            queryProfile = normalizedQuery.takeIf(String::isNotBlank)?.let { resolveSpeciesProfile(query) }
+        )
+    }
 
-        val queryProfile = resolveSpeciesProfile(query)
+    private fun resolveScopedSpeciesLabel(query: String?): String? {
+        val normalizedQuery = normalize(query.orEmpty())
+        if (normalizedQuery.isBlank()) return null
+        resolveSpeciesAutocomplete(query.orEmpty())?.let { return it }
+        return speciesAutocompleteCatalog
+            .firstOrNull { normalize(it.species) == normalizedQuery }
+            ?.species
+    }
+
+    private fun speciesMatchScore(context: SpeciesMatchContext, species: String): Int {
+        if (context.normalizedQuery.isBlank()) return 0
+
         val speciesProfile = resolveSpeciesProfile(species)
-        if (queryProfile != null && speciesProfile != null && speciesCompatible(queryProfile, speciesProfile.key)) {
+        if (context.queryProfile != null && speciesProfile != null && speciesCompatible(context.queryProfile, speciesProfile.key)) {
             return 4
         }
 
         val normalizedSpecies = normalize(species)
+        if (context.queryProfile?.key == "blueberry" && normalizedSpecies.endsWith("blueberry")) {
+            return 4
+        }
+        if (context.queryProfile?.key == "fig" && normalizedSpecies.endsWith("fig")) {
+            return 4
+        }
+        if (context.queryProfile?.key == "mulberry" && normalizedSpecies.endsWith("mulberry")) {
+            return 4
+        }
+        if (context.queryProfile?.key == "plum" && normalizedSpecies.endsWith("plum")) {
+            return 4
+        }
         return when {
-            normalizedSpecies == normalizedQuery -> 3
-            normalizedSpecies.startsWith(normalizedQuery) -> 2
-            normalizedSpecies.contains(normalizedQuery) -> 1
+            normalizedSpecies == context.normalizedQuery -> 3
+            normalizedSpecies.startsWith(context.normalizedQuery) -> 2
+            normalizedSpecies.contains(context.normalizedQuery) -> 1
             else -> 0
         }
     }
@@ -2991,13 +4004,38 @@ object BloomForecastEngine {
         val coarseWindow = coarseWindowLabel()
         val isCurrentWindow = !today.isBefore(startDate) && !today.isAfter(endDate)
         val daysUntilStart = if (isCurrentWindow) 0L else ChronoUnit.DAYS.between(today, startDate)
-        val headline = when {
-            isCurrentWindow && confidence == ForecastConfidence.LOW -> "Likely now"
-            isCurrentWindow -> "Now"
-            confidence == ForecastConfidence.LOW -> "Likely $coarseWindow"
-            else -> "${daysUntilStart}d"
+        val exactCountdownAllowed = patternType == BloomPatternType.SINGLE_ANNUAL && confidence != ForecastConfidence.LOW
+        val headline = when (patternType) {
+            BloomPatternType.CONTINUOUS -> if (isCurrentWindow) "Repeat" else "Watch"
+            BloomPatternType.MULTI_WAVE -> if (isCurrentWindow) "Repeat" else "Watch"
+            BloomPatternType.ALTERNATE_YEAR -> if (isCurrentWindow) "Active year" else "Watch"
+            BloomPatternType.MANUAL_ONLY -> "Manual"
+            BloomPatternType.SUPPRESSED -> "Unknown"
+            BloomPatternType.SINGLE_ANNUAL -> when {
+                isCurrentWindow && confidence == ForecastConfidence.LOW -> "Likely now"
+                isCurrentWindow -> "Now"
+                confidence == ForecastConfidence.LOW -> "Likely $coarseWindow"
+                else -> "${daysUntilStart}d"
+            }
         }
-        val supportingLine = buildString {
+        val supportingLine = if (patternType != BloomPatternType.SINGLE_ANNUAL) {
+            buildString {
+                append(
+                    when (patternType) {
+                        BloomPatternType.CONTINUOUS -> "Active season now"
+                        BloomPatternType.MULTI_WAVE -> "Repeat bloomer"
+                        BloomPatternType.ALTERNATE_YEAR -> "Alternate-year bloom"
+                        BloomPatternType.MANUAL_ONLY -> "Watch for buds"
+                        BloomPatternType.SUPPRESSED -> "No automatic forecast"
+                        BloomPatternType.SINGLE_ANNUAL -> coarseWindow
+                    }
+                )
+                append(" | ")
+                append(sourceLabel)
+                append(" | ")
+                append(confidenceLabel)
+            }
+        } else buildString {
             append(
                 if (confidence == ForecastConfidence.LOW) {
                     coarseWindow
@@ -3005,9 +4043,9 @@ object BloomForecastEngine {
                     formatCatalogRange(startDate, endDate)
                 }
             )
-            append(" · ")
+            append(" | ")
             append(sourceLabel)
-            append(" · ")
+            append(" | ")
             append(confidenceLabel)
         }
         return BloomForecastSummary(
@@ -3015,9 +4053,26 @@ object BloomForecastEngine {
             supportingLine = supportingLine,
             source = source,
             confidence = confidence,
+            patternType = patternType,
+            patternLabel = patternType.detailPatternLabel(),
+            timingLabel = if (patternType == BloomPatternType.SINGLE_ANNUAL) {
+                if (confidence == ForecastConfidence.LOW) coarseWindow else formatCatalogRange(startDate, endDate)
+            } else {
+                formatCatalogRange(startDate, endDate)
+            },
+            exactCountdownAllowed = exactCountdownAllowed,
             daysUntilStart = daysUntilStart,
             isCurrentWindow = isCurrentWindow
         )
+    }
+
+    private fun BloomPatternType.detailPatternLabel(): String = when (this) {
+        BloomPatternType.SINGLE_ANNUAL -> "Annual bloomer"
+        BloomPatternType.MULTI_WAVE -> "Repeat bloomer"
+        BloomPatternType.CONTINUOUS -> "Continuous bloomer"
+        BloomPatternType.ALTERNATE_YEAR -> "Alternate-year bloomer"
+        BloomPatternType.MANUAL_ONLY -> "Manual bloomer"
+        BloomPatternType.SUPPRESSED -> "No automatic bloom forecast"
     }
 
     private fun PredictedBloomWindow.coarseWindowLabel(): String {
@@ -3054,6 +4109,16 @@ object BloomForecastEngine {
         PollinationRequirement.UNKNOWN -> PollinationProfile()
     }
 
+    private fun SpeciesBloomProfile.supportsFamilyScopedAutocompleteExpansion(): Boolean = key in setOf(
+        "citrus",
+        "pear",
+        "raspberry",
+        "blueberry",
+        "fig",
+        "plum",
+        "mulberry"
+    )
+
     private fun String.toDisplayLabel(): String = split(' ')
         .filter(String::isNotBlank)
         .joinToString(" ") { part -> part.replaceFirstChar(Char::uppercase) }
@@ -3066,4 +4131,5 @@ object BloomForecastEngine {
         toDisplayLabel()
     }
 }
+
 

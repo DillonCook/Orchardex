@@ -5,6 +5,7 @@ import com.dillon.orcharddex.data.local.ActivityPhotoEntity
 import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.ReminderEntity
+import com.dillon.orcharddex.data.local.SaleEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.WishlistCultivarEntity
@@ -23,7 +24,21 @@ data class TreeDetailModel(
     val activityPhotos: List<ActivityPhotoEntity> = emptyList(),
     val events: List<EventEntity>,
     val harvests: List<HarvestEntity>,
-    val reminders: List<ReminderEntity>
+    val reminders: List<ReminderEntity>,
+    val sales: List<SaleEntity> = emptyList(),
+    val revenueSummary: TreeRevenueSummary = TreeRevenueSummary()
+)
+
+data class TreeRevenueSummary(
+    val directPlantRevenue: Double = 0.0,
+    val directHarvestRevenue: Double = 0.0,
+    val directRevenue: Double = 0.0,
+    val lineageRevenue: Double = 0.0,
+    val totalRevenue: Double = 0.0,
+    val treeSaleCount: Int = 0,
+    val harvestSaleCount: Int = 0,
+    val lineageSaleCount: Int = 0,
+    val lastSaleDate: Long? = null
 )
 
 enum class ActivityKind {
@@ -61,7 +76,11 @@ data class HistoryEntryModel(
     val firstFruit: Boolean = false,
     val verified: Boolean = false,
     val photoPath: String? = null,
-    val photoPaths: List<String> = emptyList()
+    val photoPaths: List<String> = emptyList(),
+    val saleCount: Int = 0,
+    val soldQuantity: Double? = null,
+    val revenue: Double? = null,
+    val remainingQuantity: Double? = null
 )
 
 data class DashboardDetailItem(
@@ -123,6 +142,7 @@ data class ReminderListItem(
 data class SettingsSnapshot(
     val themeMode: String,
     val dynamicColor: Boolean,
+    val showSalesTools: Boolean = false,
     val defaultLeadTimeMode: String,
     val defaultCustomLeadHours: Int,
     val orchardName: String = "",
@@ -135,7 +155,13 @@ data class SettingsSnapshot(
     val elevationM: Double? = null,
     val chillHoursBand: ChillHoursBand = ChillHoursBand.UNKNOWN,
     val microclimateFlags: Set<MicroclimateFlag> = emptySet(),
+    val climateSource: String = "",
+    val climateFetchedAt: Long? = null,
+    val climateMeanMonthlyTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMinTempC: List<Double> = emptyList(),
+    val climateMeanMonthlyMaxTempC: List<Double> = emptyList(),
     val defaultLocationId: String = "",
     val orchardRegion: String = "",
-    val onboardingComplete: Boolean = false
+    val onboardingComplete: Boolean = false,
+    val walkthroughComplete: Boolean = false
 )

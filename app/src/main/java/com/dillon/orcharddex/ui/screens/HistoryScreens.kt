@@ -45,17 +45,26 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.dillon.orcharddex.data.model.ActivityKind
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.HistoryEntryModel
+import com.dillon.orcharddex.data.model.SaleKind
+import com.dillon.orcharddex.data.local.SaleEntity
+import com.dillon.orcharddex.data.preferences.AppSettings
+import com.dillon.orcharddex.data.repository.displayName
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.LocalPhotoStrip
+import com.dillon.orcharddex.ui.components.SaleDialog
+import com.dillon.orcharddex.ui.components.SaleDraftState
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.displayAmount
+import com.dillon.orcharddex.ui.epochToLocalDate
 import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.viewmodel.HistoryDetailViewModel
 import com.dillon.orcharddex.ui.viewmodel.HistoryViewModel
 import java.io.File
 import java.time.Instant
+import java.time.LocalDate
+import java.time.YearMonth
 import java.time.format.DateTimeFormatter
 
 private val historyMonthFormatter = DateTimeFormatter.ofPattern("MMMM yyyy")
@@ -89,13 +98,34 @@ private data class SeasonalSummary(
     val peakMonth: String?
 )
 
+private data class SalesSummary(
+    val saleCount: Int = 0,
+    val treeSaleCount: Int = 0,
+    val harvestSaleCount: Int = 0,
+    val currentMonthRevenue: Double = 0.0,
+    val totalRevenue: Double = 0.0
+)
+
+private data class RecentSaleSummary(
+    val id: String,
+    val title: String,
+    val subtitle: String,
+    val detail: String
+)
+
 @Composable
 fun HistoryScreen(
     viewModel: HistoryViewModel,
     onEntryClick: (ActivityKind, String) -> Unit,
-    onAddLog: () -> Unit
+    onAddLog: () -> Unit,
+    onAddEvent: () -> Unit,
+    onAddHarvest: () -> Unit,
+    onAddPlant: () -> Unit
 ) {
     val history by viewModel.history.collectAsStateWithLifecycle()
+    val sales by viewModel.sales.collectAsStateWithLifecycle()
+    val trees by viewModel.trees.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
     var search by rememberSaveable { mutableStateOf("") }
     var quickFilter by rememberSaveable { mutableStateOf(HistoryQuickFilter.ALL) }
     var selectedTracker by rememberSaveable { mutableStateOf<HarvestTracker?>(null) }
@@ -160,6 +190,33 @@ fun HistoryScreen(
     }
     val currentSeasonSummary = seasonalSummaries.firstOrNull { it.year == currentYear }
         ?: seasonalSummaries.firstOrNull()
+    val treeLabels = remember(trees) {
+        trees.associate { tree -> tree.id to tree.displayName() }
+    }
+    val salesSummary = remember(sales) {
+        val currentMonth = OrchardTime.currentYearMonth()
+        SalesSummary(
+            saleCount = sales.size,
+            treeSaleCount = sales.count { sale -> sale.saleKind == SaleKind.TREE },
+            harvestSaleCount = sales.count { sale -> sale.saleKind == SaleKind.HARVEST },
+            currentMonthRevenue = sales
+                .filter { sale -> YearMonth.from(epochToLocalDate(sale.soldAt)) == currentMonth }
+                .sumOf(SaleEntity::totalPrice),
+            totalRevenue = sales.sumOf(SaleEntity::totalPrice)
+        )
+    }
+    val recentSales = remember(sales, treeLabels) {
+        sales.take(5).map { sale ->
+            val treeLabel = treeLabels[sale.treeId].orEmpty()
+            RecentSaleSummary(
+                id = sale.id,
+                title = treeLabel.ifBlank { sale.saleKind.historyLabel() },
+                subtitle = listOf(sale.saleKind.historyLabel(), sale.saleChannel.label)
+                    .joinToString(" - "),
+                detail = "${sale.soldAt.toDateLabel()} - $${sale.totalPrice.displayAmount()}"
+            )
+        }
+    }
 
     selectedTracker?.let { tracker ->
         HarvestTrackerDialog(
@@ -278,6 +335,71 @@ fun HistoryScreen(
                     }
                 }
             }
+            if (settings.showSalesTools) {
+                item {
+                    SectionCard("Sales") {
+                        if (salesSummary.saleCount == 0) {
+                            Text("No sales recorded yet.")
+                        } else {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                com.dillon.orcharddex.ui.components.StatCard(
+                                    modifier = Modifier.weight(1f),
+                                    label = "This month",
+                                    value = "$${salesSummary.currentMonthRevenue.displayAmount()}",
+                                    minWidth = 0.dp
+                                )
+                                com.dillon.orcharddex.ui.components.StatCard(
+                                    modifier = Modifier.weight(1f),
+                                    label = "Total revenue",
+                                    value = "$${salesSummary.totalRevenue.displayAmount()}",
+                                    minWidth = 0.dp
+                                )
+                            }
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                CompactFact("Transactions", salesSummary.saleCount.toString())
+                                CompactFact("Plant sales", salesSummary.treeSaleCount.toString())
+                                CompactFact("Harvest sales", salesSummary.harvestSaleCount.toString())
+                            }
+                            Text("Recent sales", style = MaterialTheme.typography.labelLarge)
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                recentSales.forEach { sale ->
+                                    OutlinedCard(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(20.dp)
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .padding(14.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = sale.title,
+                                                style = MaterialTheme.typography.titleMedium
+                                            )
+                                            Text(
+                                                text = sale.subtitle,
+                                                style = MaterialTheme.typography.bodySmall
+                                            )
+                                            Text(
+                                                text = sale.detail,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
             item {
                 SectionCard("Search") {
                     OutlinedTextField(
@@ -306,10 +428,23 @@ fun HistoryScreen(
             }
             when {
                 history.isEmpty() -> item {
-                    EmptyStateCard(
-                        title = "No history yet",
-                        message = "Add an event or harvest to start building your orchard timeline."
-                    )
+                    if (trees.isEmpty()) {
+                        EmptyStateCard(
+                            title = "No history yet",
+                            message = "Add your first plant before you start logging orchard events and harvests.",
+                            primaryActionLabel = "Add first plant",
+                            onPrimaryAction = onAddPlant
+                        )
+                    } else {
+                        EmptyStateCard(
+                            title = "No history yet",
+                            message = "Log your first event or harvest to start building your orchard timeline.",
+                            primaryActionLabel = "Log first event",
+                            onPrimaryAction = onAddEvent,
+                            secondaryActionLabel = "Log first harvest",
+                            onSecondaryAction = onAddHarvest
+                        )
+                    }
                 }
 
                 filteredHistory.isEmpty() -> item {
@@ -346,6 +481,7 @@ fun HistoryScreen(
 @Composable
 fun HistoryDetailScreen(
     viewModel: HistoryDetailViewModel,
+    settings: AppSettings,
     onBack: () -> Unit,
     onOpenTree: (String) -> Unit
 ) {
@@ -369,6 +505,61 @@ fun HistoryDetailScreen(
 
         else -> {
             val historyEntry = requireNotNull(entry)
+            var showSaleDialog by rememberSaveable(historyEntry.id) { mutableStateOf(false) }
+            var saleDraft by remember(historyEntry.id, historyEntry.saleCount) {
+                mutableStateOf(defaultHarvestSaleDraft(historyEntry))
+            }
+            var saleDraftError by remember(historyEntry.id, historyEntry.saleCount) {
+                mutableStateOf<String?>(null)
+            }
+            val remainingQuantity = historyEntry.remainingQuantity ?: historyEntry.quantityValue ?: 0.0
+
+            if (showSaleDialog) {
+                SaleDialog(
+                    title = "Record harvest sale",
+                    confirmLabel = if (viewModel.saleBusy) "Saving..." else "Record sale",
+                    state = saleDraft,
+                    onStateChange = {
+                        saleDraft = it
+                        saleDraftError = null
+                    },
+                    onDismiss = {
+                        showSaleDialog = false
+                        saleDraftError = null
+                    },
+                    onConfirm = {
+                        val quantity = saleDraft.quantityValue.toDoubleOrNull()
+                        val unitPrice = saleDraft.unitPrice.toDoubleOrNull()
+                        when {
+                            quantity == null || quantity <= 0.0 -> {
+                                saleDraftError = "Enter a valid quantity."
+                            }
+                            quantity > remainingQuantity + 0.0001 -> {
+                                saleDraftError = "Sale quantity exceeds the remaining logged harvest."
+                            }
+                            unitPrice == null || unitPrice < 0.0 -> {
+                                saleDraftError = "Enter a valid unit price."
+                            }
+                            else -> {
+                                saleDraftError = null
+                                viewModel.recordHarvestSale(
+                                    soldDate = saleDraft.soldDate,
+                                    quantityValue = quantity,
+                                    quantityUnit = saleDraft.quantityUnit,
+                                    unitPrice = unitPrice,
+                                    saleChannel = saleDraft.saleChannel,
+                                    notes = saleDraft.notes
+                                ) {
+                                    showSaleDialog = false
+                                }
+                            }
+                        }
+                    },
+                    remainingLabel = "Remaining to sell: ${remainingQuantity.displayAmount()} ${historyEntry.quantityUnit.orEmpty()}",
+                    errorMessage = saleDraftError ?: viewModel.saleErrorMessage,
+                    saving = viewModel.saleBusy
+                )
+            }
             LazyColumn(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -401,6 +592,12 @@ fun HistoryDetailScreen(
                             if (historyEntry.firstFruit) {
                                 CompactFact("Flag", "First fruit")
                             }
+                            if (settings.showSalesTools && historyEntry.saleCount > 0) {
+                                CompactFact("Sales", historyEntry.saleCount.toString())
+                            }
+                            if (settings.showSalesTools) {
+                                historyEntry.revenue?.let { CompactFact("Revenue", "$${it.displayAmount()}") }
+                            }
                         }
                     }
                 }
@@ -428,8 +625,42 @@ fun HistoryDetailScreen(
                         }
                     }
                 }
+                if (settings.showSalesTools && historyEntry.kind == ActivityKind.HARVEST) {
+                    item {
+                        SectionCard("Sales") {
+                            if (historyEntry.saleCount == 0) {
+                                Text("No sales recorded for this harvest yet.")
+                            } else {
+                                historyEntry.soldQuantity?.let { soldQuantity ->
+                                    Text(
+                                        "Sold ${soldQuantity.displayAmount()} ${historyEntry.quantityUnit.orEmpty()} for $${historyEntry.revenue?.displayAmount() ?: "0"}."
+                                    )
+                                }
+                                historyEntry.remainingQuantity?.let { remaining ->
+                                    Text(
+                                        text = "Remaining logged harvest: ${remaining.displayAmount()} ${historyEntry.quantityUnit.orEmpty()}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
                 item {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        if (settings.showSalesTools && historyEntry.kind == ActivityKind.HARVEST && remainingQuantity > 0.0) {
+                            OutlinedButton(
+                                onClick = {
+                                    saleDraft = defaultHarvestSaleDraft(historyEntry)
+                                    saleDraftError = null
+                                    showSaleDialog = true
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Record sale")
+                            }
+                        }
                         OutlinedButton(
                             onClick = { onOpenTree(historyEntry.treeId) },
                             modifier = Modifier.fillMaxWidth()
@@ -601,6 +832,11 @@ private fun HistoryEntryModel.matchesSearch(query: String): Boolean {
     }
 }
 
+private fun SaleKind.historyLabel(): String = when (this) {
+    SaleKind.TREE -> "Plant sale"
+    SaleKind.HARVEST -> "Harvest sale"
+}
+
 private fun HistoryEntryModel.rowMetaLine(): String = buildString {
     append(kind.detailLabel())
     eventType?.let {
@@ -667,3 +903,12 @@ private fun Long.monthShortLabel(): String = Instant.ofEpochMilli(this)
     .format(historyMonthShortFormatter)
 
 private fun HistoryEntryModel.monthShortLabel(): String = date.monthShortLabel()
+
+private fun defaultHarvestSaleDraft(entry: HistoryEntryModel): SaleDraftState {
+    val defaultQuantity = entry.remainingQuantity ?: entry.quantityValue ?: 0.0
+    return SaleDraftState(
+        soldDate = OrchardTime.today(),
+        quantityValue = if (defaultQuantity > 0.0) defaultQuantity.displayAmount() else "",
+        quantityUnit = entry.quantityUnit.orEmpty()
+    )
+}

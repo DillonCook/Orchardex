@@ -54,8 +54,8 @@ android {
         applicationId = "com.dillon.orcharddex"
         minSdk = 26
         targetSdk = 36
-        versionCode = 5
-        versionName = "1.0.1"
+        versionCode = 12
+        versionName = "1.0.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -103,6 +103,10 @@ android {
     buildFeatures {
         compose = true
         buildConfig = true
+    }
+
+    sourceSets {
+        getByName("androidTest").assets.srcDir("$projectDir/schemas")
     }
 
     packaging {
@@ -167,4 +171,17 @@ dependencies {
 
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
+}
+
+tasks.register<JavaExec>("exportPhenologyCatalog") {
+    group = "orcharddex"
+    description = "Exports the merged phenology catalog into app/src/main/assets."
+    dependsOn("compileDebugKotlin", "compileDebugJavaWithJavac")
+    classpath =
+        files(
+            "$buildDir/tmp/kotlin-classes/debug",
+            "$buildDir/intermediates/javac/debug/compileDebugJavaWithJavac/classes"
+        ) + configurations.getByName("debugRuntimeClasspath")
+    mainClass.set("com.dillon.orcharddex.data.phenology.CatalogAssetExporter")
+    args("$projectDir/src/main/assets")
 }
