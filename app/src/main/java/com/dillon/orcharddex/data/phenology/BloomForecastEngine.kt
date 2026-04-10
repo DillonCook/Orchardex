@@ -2701,18 +2701,11 @@ object BloomForecastEngine {
         observations: List<PhenologyObservation> = emptyList()
     ): BloomForecastSummary? {
         val today = OrchardTime.today()
-        val currentMonth = YearMonth.from(today)
-        val nextWindow = generateSequence(0L) { it + 1 }
-            .take(18)
-            .mapNotNull { offset ->
-                predictMonth(
-                    trees = listOf(tree),
-                    yearMonth = currentMonth.plusMonths(offset),
-                    locationProfile = locationProfile,
-                    observations = observations
-                ).firstOrNull()
-            }
-            .firstOrNull { window -> !window.endDate.isBefore(today) }
+        val nextWindow = nextBloomWindow(
+            tree = tree,
+            locationProfile = locationProfile,
+            observations = observations
+        )
 
         if (nextWindow != null) {
             return nextWindow.toSummary(today)
@@ -3190,6 +3183,26 @@ object BloomForecastEngine {
         }
     }
 
+    fun nextBloomWindow(
+        tree: TreeEntity,
+        locationProfile: ForecastLocationProfile,
+        observations: List<PhenologyObservation> = emptyList()
+    ): PredictedBloomWindow? {
+        val today = OrchardTime.today()
+        val currentMonth = YearMonth.from(today)
+        return generateSequence(0L) { it + 1 }
+            .take(18)
+            .mapNotNull { offset ->
+                predictMonth(
+                    trees = listOf(tree),
+                    yearMonth = currentMonth.plusMonths(offset),
+                    locationProfile = locationProfile,
+                    observations = observations
+                ).firstOrNull()
+            }
+            .firstOrNull { window -> !window.endDate.isBefore(today) }
+    }
+
     private fun clampSeasonRange(
         climateSeason: SeasonalDateRange,
         baselineSeason: SeasonalDateRange
@@ -3393,7 +3406,8 @@ object BloomForecastEngine {
             else -> inferPatternFromMonthlyProfile(monthlyIntensity)
         }
         val confidence = when {
-            bloomSignals.size >= 4 || signals.size >= 6 -> ForecastConfidence.HIGH
+            activeYears.size >= 2 && (bloomSignals.isNotEmpty() || signals.size >= 3) -> ForecastConfidence.HIGH
+            activeYears.size >= 1 && (bloomSignals.isNotEmpty() || signals.size >= 2) -> ForecastConfidence.MEDIUM
             bloomSignals.size >= 2 || signals.size >= 3 -> ForecastConfidence.MEDIUM
             else -> ForecastConfidence.LOW
         }

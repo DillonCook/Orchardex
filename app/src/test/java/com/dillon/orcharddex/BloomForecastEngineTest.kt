@@ -4542,7 +4542,7 @@ class BloomForecastEngineTest {
 
         assertThat(windows).hasSize(1)
         assertThat(windows.single().source).isEqualTo(ForecastSource.HISTORY_LEARNED)
-        assertThat(windows.single().confidence).isEqualTo(ForecastConfidence.MEDIUM)
+        assertThat(windows.single().confidence).isEqualTo(ForecastConfidence.HIGH)
         assertThat(windows.single().startDate.monthValue).isEqualTo(3)
     }
 
