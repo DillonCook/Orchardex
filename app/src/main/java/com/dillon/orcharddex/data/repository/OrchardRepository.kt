@@ -1,4 +1,4 @@
-package com.dillon.orcharddex.data.repository
+﻿package com.dillon.orcharddex.data.repository
 
 import com.dillon.orcharddex.data.local.ActivityPhotoEntity
 import androidx.room.withTransaction
@@ -7,6 +7,7 @@ import com.dillon.orcharddex.data.local.GrowingLocationEntity
 import com.dillon.orcharddex.data.local.HarvestEntity
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
 import com.dillon.orcharddex.data.local.ReminderEntity
+import com.dillon.orcharddex.data.local.SaleEntity
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.TreeWithPhotos
@@ -31,9 +32,12 @@ import com.dillon.orcharddex.data.model.RecentActivityItem
 import com.dillon.orcharddex.data.model.RecurrenceType
 import com.dillon.orcharddex.data.model.ReminderInput
 import com.dillon.orcharddex.data.model.ReminderListItem
+import com.dillon.orcharddex.data.model.SaleInput
+import com.dillon.orcharddex.data.model.SaleKind
 import com.dillon.orcharddex.data.model.TreeDetailModel
 import com.dillon.orcharddex.data.model.TreeInput
 import com.dillon.orcharddex.data.model.TreeListItem
+import com.dillon.orcharddex.data.model.TreeRevenueSummary
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.WishlistInput
@@ -71,6 +75,7 @@ class OrchardRepository(
     private val activityPhotoDao = database.activityPhotoDao()
     private val eventDao = database.eventDao()
     private val harvestDao = database.harvestDao()
+    private val saleDao = database.saleDao()
     private val reminderDao = database.reminderDao()
     private val wishlistDao = database.wishlistDao()
 
@@ -90,20 +95,25 @@ class OrchardRepository(
 
     fun observeTreeDetail(treeId: String): Flow<TreeDetailModel?> = combine(
         treeDao.observeTreeWithPhotos(treeId),
+        treeDao.observeTrees(),
         eventDao.observeEventsForTree(treeId),
         harvestDao.observeHarvestsForTree(treeId),
         reminderDao.observeRemindersForTree(treeId),
         growingLocationDao.observeAllLocations(),
-        activityPhotoDao.observeAllPhotos()
+        activityPhotoDao.observeAllPhotos(),
+        saleDao.observeAllSales()
     ) { values ->
         val treeWithPhotos = values[0] as TreeWithPhotos?
-        val events = values[1] as List<EventEntity>
-        val harvests = values[2] as List<HarvestEntity>
-        val reminders = values[3] as List<ReminderEntity>
-        val locations = values[4] as List<GrowingLocationEntity>
-        val activityPhotos = values[5] as List<ActivityPhotoEntity>
+        val allTrees = values[1] as List<TreeEntity>
+        val events = values[2] as List<EventEntity>
+        val harvests = values[3] as List<HarvestEntity>
+        val reminders = values[4] as List<ReminderEntity>
+        val locations = values[5] as List<GrowingLocationEntity>
+        val activityPhotos = values[6] as List<ActivityPhotoEntity>
+        val sales = values[7] as List<SaleEntity>
         val locationsById = locations.associateBy(GrowingLocationEntity::id)
         treeWithPhotos?.let {
+            val directSales = sales.filter { sale -> sale.treeId == treeId }
             TreeDetailModel(
                 tree = it.tree,
                 location = it.tree.locationId?.let(locationsById::get),
@@ -117,7 +127,9 @@ class OrchardRepository(
                 },
                 events = events,
                 harvests = harvests,
-                reminders = reminders
+                reminders = reminders,
+                sales = directSales,
+                revenueSummary = computeTreeRevenueSummary(treeId, allTrees, sales)
             )
         }
     }
@@ -230,7 +242,7 @@ class OrchardRepository(
                 RecentActivityItem(
                     id = harvest.id,
                     title = "Harvest",
-                    subtitle = "${tree?.displayName() ?: "Tree"} • ${harvest.quantityValue.trimmed()} ${harvest.quantityUnit}",
+                    subtitle = "${tree?.displayName() ?: "Tree"} | ${harvest.quantityValue.trimmed()} ${harvest.quantityUnit}",
                     date = harvest.harvestDate,
                     kind = ActivityKind.HARVEST,
                     treeId = harvest.treeId
@@ -322,10 +334,13 @@ class OrchardRepository(
         treeDao.observeTrees(),
         eventDao.observeAllEvents(),
         harvestDao.observeAllHarvests(),
-        activityPhotoDao.observeAllPhotos()
-    ) { trees, events, harvests, activityPhotos ->
-        buildHistoryEntries(trees, events, harvests, activityPhotos)
+        activityPhotoDao.observeAllPhotos(),
+        saleDao.observeAllSales()
+    ) { trees, events, harvests, activityPhotos, sales ->
+        buildHistoryEntries(trees, events, harvests, activityPhotos, sales)
     }
+
+    fun observeAllSales(): Flow<List<SaleEntity>> = saleDao.observeAllSales()
 
     fun observeTreeNames(): Flow<List<TreeEntity>> = treeDao.observeTrees()
 
@@ -346,9 +361,12 @@ class OrchardRepository(
         val location = tree.tree.locationId?.let { locationId -> growingLocationDao.getLocation(locationId) }
         val events = eventDao.getAllEvents().filter { it.treeId == treeId }
         val harvests = harvestDao.getAllHarvests().filter { it.treeId == treeId }
+        val allTrees = treeDao.getAllTrees()
+        val sales = saleDao.getAllSales()
         val eventIds = events.map(EventEntity::id).toSet()
         val harvestIds = harvests.map(HarvestEntity::id).toSet()
         val activityPhotos = activityPhotoDao.getAllPhotos()
+        val directSales = sales.filter { sale -> sale.treeId == treeId }
         TreeDetailModel(
             tree = tree.tree,
             location = location,
@@ -362,7 +380,9 @@ class OrchardRepository(
             },
             events = events,
             harvests = harvests,
-            reminders = reminderDao.getAllReminders().filter { it.treeId == treeId }
+            reminders = reminderDao.getAllReminders().filter { it.treeId == treeId },
+            sales = directSales,
+            revenueSummary = computeTreeRevenueSummary(treeId, allTrees, sales)
         )
     }
 
@@ -371,7 +391,8 @@ class OrchardRepository(
             trees = treeDao.getAllTrees(),
             events = eventDao.getAllEvents(),
             harvests = harvestDao.getAllHarvests(),
-            activityPhotos = activityPhotoDao.getAllPhotos()
+            activityPhotos = activityPhotoDao.getAllPhotos(),
+            sales = saleDao.getAllSales()
         ).firstOrNull { it.kind == kind && it.id == entryId }
     }
 
@@ -408,7 +429,11 @@ class OrchardRepository(
                     timestamp = now,
                     nickname = plannedNicknames.firstOrNull()
                 )
-                treeDao.insert(entity)
+                if (existing != null) {
+                    treeDao.update(entity)
+                } else {
+                    treeDao.insert(entity)
+                }
 
                 if (input.removedPhotoIds.isNotEmpty()) {
                     val photos = treePhotoDao.getPhotosByIds(input.removedPhotoIds)
@@ -591,10 +616,10 @@ class OrchardRepository(
         )
     }
 
-    suspend fun addHarvest(input: HarvestInput) = addHarvests(listOf(input))
+    suspend fun addHarvest(input: HarvestInput): HarvestEntity = addHarvests(listOf(input)).single()
 
-    suspend fun addHarvests(inputs: List<HarvestInput>) = withContext(Dispatchers.IO) {
-        if (inputs.isEmpty()) return@withContext
+    suspend fun addHarvests(inputs: List<HarvestInput>): List<HarvestEntity> = withContext(Dispatchers.IO) {
+        if (inputs.isEmpty()) return@withContext emptyList()
 
         val fruitingTreeIds = (
             harvestDao.getAllHarvests().map(HarvestEntity::treeId) +
@@ -648,6 +673,61 @@ class OrchardRepository(
                 }
             }
         )
+        harvests
+    }
+
+    suspend fun recordSale(input: SaleInput): String = withContext(Dispatchers.IO) {
+        require(input.treeId.isNotBlank()) { "Tree is required." }
+        require(input.quantityValue > 0.0) { "Quantity must be greater than zero." }
+        require(input.quantityUnit.isNotBlank()) { "Unit is required." }
+        require(input.unitPrice >= 0.0) { "Unit price cannot be negative." }
+
+        val tree = treeDao.getTree(input.treeId) ?: error("Tree not found.")
+        val harvest = input.linkedHarvestId?.let { harvestId -> harvestDao.getHarvest(harvestId) }
+        if (input.saleKind == SaleKind.HARVEST) {
+            val harvestEntity = requireNotNull(harvest) { "Linked harvest not found." }
+            require(harvestEntity.treeId == input.treeId) { "Harvest does not belong to this tree." }
+            val soldQuantity = saleDao.getSalesForHarvest(harvestEntity.id).sumOf(SaleEntity::quantityValue)
+            val remainingQuantity = (harvestEntity.quantityValue - soldQuantity).coerceAtLeast(0.0)
+            require(input.quantityValue <= remainingQuantity + 0.0001) {
+                "Sale quantity exceeds the remaining logged harvest."
+            }
+        }
+        if (input.saleKind == SaleKind.TREE) {
+            require(input.linkedHarvestId == null) { "Tree sales cannot link to a harvest." }
+            require(saleDao.getTreeSale(input.treeId) == null) { "A plant sale is already recorded for this tree." }
+        }
+
+        val now = System.currentTimeMillis()
+        val sale = SaleEntity(
+            id = UUID.randomUUID().toString(),
+            saleKind = input.saleKind,
+            treeId = input.treeId,
+            linkedHarvestId = input.linkedHarvestId,
+            soldAt = input.soldAt,
+            quantityValue = input.quantityValue,
+            quantityUnit = input.quantityUnit.trim(),
+            unitPrice = input.unitPrice,
+            totalPrice = input.quantityValue * input.unitPrice,
+            currencyCode = input.currencyCode.trim().ifBlank { "USD" },
+            saleChannel = input.saleChannel,
+            notes = input.notes.trim(),
+            createdAt = now,
+            updatedAt = now
+        )
+
+        database.withTransaction {
+            saleDao.insert(sale)
+            if (input.saleKind == SaleKind.TREE) {
+                treeDao.update(
+                    tree.copy(
+                        status = TreeStatus.SOLD,
+                        updatedAt = now
+                    )
+                )
+            }
+        }
+        sale.id
     }
 
     suspend fun saveReminder(input: ReminderInput): String = saveReminders(listOf(input)).single()
@@ -779,7 +859,11 @@ class OrchardRepository(
                 entity = entity.withClimate(climate)
             }
         }
-        growingLocationDao.insert(entity)
+        if (existing != null) {
+            growingLocationDao.update(entity)
+        } else {
+            growingLocationDao.insert(entity)
+        }
         treeDao.updateOrchardNameForLocation(entity.id, entity.name)
         entity
     }
@@ -800,7 +884,12 @@ class OrchardRepository(
             settings.elevationM != defaultLocation.elevationM ||
             settings.usdaZone != defaultLocation.usdaZoneCode.orEmpty() ||
             settings.chillHoursBand != defaultLocation.chillHoursBand ||
-            settings.microclimateFlags != defaultLocation.microclimateFlags
+            settings.microclimateFlags != defaultLocation.microclimateFlags ||
+            settings.climateSource != defaultLocation.climateSource.orEmpty() ||
+            settings.climateFetchedAt != defaultLocation.climateFetchedAt ||
+            settings.climateMeanMonthlyTempC != defaultLocation.climateMeanMonthlyTempC ||
+            settings.climateMeanMonthlyMinTempC != defaultLocation.climateMeanMonthlyMinTempC ||
+            settings.climateMeanMonthlyMaxTempC != defaultLocation.climateMeanMonthlyMaxTempC
         if (needsDefaultIdUpdate) {
             settingsRepository.updateDefaultLocationId(defaultLocation.id)
         }
@@ -817,8 +906,12 @@ class OrchardRepository(
         val longitude = location.longitudeDeg ?: return@withContext location
         val fingerprint = fetchLocationClimate(latitude, longitude) ?: return@withContext location
         val updated = location.withClimate(fingerprint).copy(updatedAt = System.currentTimeMillis())
-        growingLocationDao.insert(updated)
+        growingLocationDao.update(updated)
         updated
+    }
+
+    suspend fun deleteGrowingLocation(locationId: String) = withContext(Dispatchers.IO) {
+        growingLocationDao.delete(locationId)
     }
 
     suspend fun loadSampleDataReplaceAll() = withContext(Dispatchers.IO) {
@@ -848,7 +941,7 @@ class OrchardRepository(
             val location = growingLocationDao.getLocation(defaultLocationId)
             if (location != null) {
                 val updated = location.copy(name = name.trim().ifBlank { location.name }, updatedAt = System.currentTimeMillis())
-                growingLocationDao.insert(updated)
+                growingLocationDao.update(updated)
                 treeDao.updateOrchardNameForLocation(updated.id, updated.name)
                 settingsRepository.updateDefaultLocationId(updated.id)
                 settingsRepository.updateForecastLocation(updated.toForecastLocationProfile())
@@ -893,12 +986,20 @@ class OrchardRepository(
         notes = input.notes.trim(),
         tags = input.tags.trim(),
         bloomTimingMode = input.bloomTimingMode,
+        bloomPatternOverride = input.bloomPatternOverride,
+        manualBloomProfile = input.manualBloomProfile.takeIf { it.size == 12 } ?: emptyList(),
+        alternateYearAnchor = input.alternateYearAnchor,
         customBloomStartMonth = input.customBloomStartMonth,
         customBloomStartDay = input.customBloomStartDay,
         customBloomDurationDays = input.customBloomDurationDays,
         selfCompatibilityOverride = input.selfCompatibilityOverride,
         pollinationModeOverride = input.pollinationModeOverride,
         pollinationOverrideNote = input.pollinationOverrideNote.trim().takeIf(String::isNotBlank),
+        nurseryStage = input.nurseryStage,
+        parentTreeId = input.parentTreeId?.takeIf(String::isNotBlank),
+        originType = input.originType,
+        propagationMethod = input.propagationMethod,
+        propagationDate = input.propagationDate,
         createdAt = existing?.createdAt ?: timestamp,
         updatedAt = timestamp
     )
@@ -1010,6 +1111,7 @@ class OrchardRepository(
             activityPhotoDao.clearAll()
             eventDao.clearAll()
             harvestDao.clearAll()
+            saleDao.clearAll()
             reminderDao.clearAll()
             treePhotoDao.clearAll()
             treeDao.clearAll()
@@ -1023,10 +1125,14 @@ class OrchardRepository(
         trees: List<TreeEntity>,
         events: List<EventEntity>,
         harvests: List<HarvestEntity>,
-        activityPhotos: List<ActivityPhotoEntity>
+        activityPhotos: List<ActivityPhotoEntity>,
+        sales: List<SaleEntity>
     ): List<HistoryEntryModel> {
         val treesById = trees.associateBy(TreeEntity::id)
         val photosByOwner = activityPhotos.groupBy { it.ownerKind to it.ownerId }
+        val salesByHarvestId = sales
+            .filter { sale -> sale.saleKind == SaleKind.HARVEST && !sale.linkedHarvestId.isNullOrBlank() }
+            .groupBy { sale -> checkNotNull(sale.linkedHarvestId) }
         return (
             events.map { event ->
                 val tree = treesById[event.treeId]
@@ -1061,6 +1167,9 @@ class OrchardRepository(
                         .orEmpty()
                         .sortedBy(ActivityPhotoEntity::sortOrder)
                         .map(ActivityPhotoEntity::relativePath)
+                    val linkedSales = salesByHarvestId[harvest.id].orEmpty()
+                    val soldQuantity = linkedSales.sumOf(SaleEntity::quantityValue)
+                    val revenue = linkedSales.sumOf(SaleEntity::totalPrice)
                     HistoryEntryModel(
                         id = harvest.id,
                         kind = ActivityKind.HARVEST,
@@ -1080,7 +1189,11 @@ class OrchardRepository(
                         firstFruit = harvest.firstFruit,
                         verified = harvest.verified,
                         photoPath = photoPaths.firstOrNull() ?: harvest.photoPath,
-                        photoPaths = photoPaths.ifEmpty { listOfNotNull(harvest.photoPath) }
+                        photoPaths = photoPaths.ifEmpty { listOfNotNull(harvest.photoPath) },
+                        saleCount = linkedSales.size,
+                        soldQuantity = soldQuantity.takeIf { linkedSales.isNotEmpty() },
+                        revenue = revenue.takeIf { linkedSales.isNotEmpty() },
+                        remainingQuantity = (harvest.quantityValue - soldQuantity).coerceAtLeast(0.0)
                     )
                 }
             ).sortedWith(
@@ -1088,6 +1201,56 @@ class OrchardRepository(
                 .thenByDescending { it.createdAt }
         )
     }
+}
+
+private fun computeTreeRevenueSummary(
+    treeId: String,
+    allTrees: List<TreeEntity>,
+    sales: List<SaleEntity>
+): TreeRevenueSummary {
+    val descendantIds = descendantTreeIds(treeId, allTrees)
+    val directSales = sales.filter { sale -> sale.treeId == treeId }
+    val lineageSales = sales.filter { sale -> sale.treeId in descendantIds }
+    val directPlantRevenue = directSales
+        .filter { sale -> sale.saleKind == SaleKind.TREE }
+        .sumOf(SaleEntity::totalPrice)
+    val directHarvestRevenue = directSales
+        .filter { sale -> sale.saleKind == SaleKind.HARVEST }
+        .sumOf(SaleEntity::totalPrice)
+    val lineageRevenue = lineageSales.sumOf(SaleEntity::totalPrice)
+    val allRelevantSales = directSales + lineageSales
+    return TreeRevenueSummary(
+        directPlantRevenue = directPlantRevenue,
+        directHarvestRevenue = directHarvestRevenue,
+        directRevenue = directPlantRevenue + directHarvestRevenue,
+        lineageRevenue = lineageRevenue,
+        totalRevenue = directPlantRevenue + directHarvestRevenue + lineageRevenue,
+        treeSaleCount = directSales.count { sale -> sale.saleKind == SaleKind.TREE },
+        harvestSaleCount = directSales.count { sale -> sale.saleKind == SaleKind.HARVEST },
+        lineageSaleCount = lineageSales.size,
+        lastSaleDate = allRelevantSales.maxOfOrNull(SaleEntity::soldAt)
+    )
+}
+
+private fun descendantTreeIds(treeId: String, allTrees: List<TreeEntity>): Set<String> {
+    val childrenByParent = allTrees
+        .mapNotNull { tree -> tree.parentTreeId?.let { parentId -> parentId to tree.id } }
+        .groupBy(
+            keySelector = { it.first },
+            valueTransform = { it.second }
+        )
+    val descendants = linkedSetOf<String>()
+    val queue = ArrayDeque<String>()
+    queue.add(treeId)
+    while (queue.isNotEmpty()) {
+        val current = queue.removeFirst()
+        childrenByParent[current].orEmpty().forEach { childId ->
+            if (descendants.add(childId)) {
+                queue.add(childId)
+            }
+        }
+    }
+    return descendants
 }
 
 private fun GrowingLocationEntity.withClimate(climate: LocationClimateFingerprint): GrowingLocationEntity = copy(
@@ -1110,7 +1273,7 @@ fun TreeEntity.speciesCultivarLabel(): String = speciesCultivarLabel(species, cu
 fun speciesCultivarLabel(species: String, cultivar: String): String = when {
     species.isBlank() -> cultivar.trim()
     cultivar.isBlank() -> species.trim()
-    else -> "${species.trim()} • ${cultivar.trim()}"
+    else -> "${species.trim()} | ${cultivar.trim()}"
 }
 
 private fun String.normalized(): String = trim().lowercase()
@@ -1188,3 +1351,4 @@ private fun ReminderEntity.nextDueAt(): Long? {
         RecurrenceType.EVERY_X_DAYS -> current.plusDays((recurrenceIntervalDays ?: 1).toLong()).toInstant().toEpochMilli()
     }
 }
+

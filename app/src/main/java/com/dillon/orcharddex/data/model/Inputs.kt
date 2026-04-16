@@ -25,12 +25,20 @@ data class TreeInput(
     val notes: String = "",
     val tags: String = "",
     val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val bloomPatternOverride: BloomPatternType? = null,
+    val manualBloomProfile: List<Int> = emptyList(),
+    val alternateYearAnchor: Int? = null,
     val customBloomStartMonth: Int? = null,
     val customBloomStartDay: Int? = null,
     val customBloomDurationDays: Int? = null,
     val selfCompatibilityOverride: SelfCompatibility? = null,
     val pollinationModeOverride: PollinationMode? = null,
     val pollinationOverrideNote: String = "",
+    val nurseryStage: NurseryStage = NurseryStage.NONE,
+    val parentTreeId: String? = null,
+    val originType: TreeOriginType = TreeOriginType.UNKNOWN,
+    val propagationMethod: PropagationMethod? = null,
+    val propagationDate: Long? = null,
     val quantity: Int = 1,
     val newPhotoUris: List<Uri> = emptyList(),
     val removedPhotoIds: List<String> = emptyList()
@@ -72,6 +80,19 @@ data class HarvestInput(
     val verified: Boolean = true,
     val notes: String = "",
     val photoUris: List<Uri> = emptyList()
+)
+
+data class SaleInput(
+    val treeId: String,
+    val saleKind: SaleKind,
+    val linkedHarvestId: String? = null,
+    val soldAt: Long,
+    val quantityValue: Double,
+    val quantityUnit: String,
+    val unitPrice: Double,
+    val currencyCode: String = "USD",
+    val saleChannel: SaleChannel = SaleChannel.DIRECT,
+    val notes: String = ""
 )
 
 data class ReminderInput(

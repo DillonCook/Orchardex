@@ -7,6 +7,7 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import androidx.room.Relation
 import com.dillon.orcharddex.data.model.BloomTimingMode
+import com.dillon.orcharddex.data.model.BloomPatternType
 import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.EventType
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
@@ -14,11 +15,16 @@ import com.dillon.orcharddex.data.model.FrostSensitivityLevel
 import com.dillon.orcharddex.data.model.Hemisphere
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.MicroclimateFlag
+import com.dillon.orcharddex.data.model.NurseryStage
 import com.dillon.orcharddex.data.model.PlantType
 import com.dillon.orcharddex.data.model.PollinationMode
+import com.dillon.orcharddex.data.model.PropagationMethod
 import com.dillon.orcharddex.data.model.RecurrenceType
+import com.dillon.orcharddex.data.model.SaleChannel
+import com.dillon.orcharddex.data.model.SaleKind
 import com.dillon.orcharddex.data.model.SelfCompatibility
 import com.dillon.orcharddex.data.model.TreeStatus
+import com.dillon.orcharddex.data.model.TreeOriginType
 import com.dillon.orcharddex.data.model.WishlistPriority
 import kotlinx.serialization.Serializable
 
@@ -65,7 +71,9 @@ data class GrowingLocationEntity(
         Index("cultivar"),
         Index("orchardName"),
         Index("status"),
-        Index("locationId")
+        Index("locationId"),
+        Index("parentTreeId"),
+        Index("nurseryStage")
     ]
 )
 data class TreeEntity(
@@ -91,12 +99,20 @@ data class TreeEntity(
     val notes: String,
     val tags: String,
     val bloomTimingMode: BloomTimingMode = BloomTimingMode.AUTO,
+    val bloomPatternOverride: BloomPatternType? = null,
+    val manualBloomProfile: List<Int> = emptyList(),
+    val alternateYearAnchor: Int? = null,
     val customBloomStartMonth: Int? = null,
     val customBloomStartDay: Int? = null,
     val customBloomDurationDays: Int? = null,
     val selfCompatibilityOverride: SelfCompatibility? = null,
     val pollinationModeOverride: PollinationMode? = null,
     val pollinationOverrideNote: String? = null,
+    val nurseryStage: NurseryStage = NurseryStage.NONE,
+    val parentTreeId: String? = null,
+    val originType: TreeOriginType = TreeOriginType.UNKNOWN,
+    val propagationMethod: PropagationMethod? = null,
+    val propagationDate: Long? = null,
     val createdAt: Long,
     val updatedAt: Long
 )
@@ -190,6 +206,42 @@ data class HarvestEntity(
     val notes: String,
     val photoPath: String?,
     val createdAt: Long
+)
+
+@Serializable
+@Entity(
+    tableName = "sales",
+    foreignKeys = [
+        ForeignKey(
+            entity = TreeEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["treeId"],
+            onDelete = ForeignKey.CASCADE
+        ),
+        ForeignKey(
+            entity = HarvestEntity::class,
+            parentColumns = ["id"],
+            childColumns = ["linkedHarvestId"],
+            onDelete = ForeignKey.CASCADE
+        )
+    ],
+    indices = [Index("treeId"), Index("linkedHarvestId"), Index("soldAt"), Index("saleKind")]
+)
+data class SaleEntity(
+    @PrimaryKey val id: String,
+    val saleKind: SaleKind,
+    val treeId: String,
+    val linkedHarvestId: String?,
+    val soldAt: Long,
+    val quantityValue: Double,
+    val quantityUnit: String,
+    val unitPrice: Double,
+    val totalPrice: Double,
+    val currencyCode: String,
+    val saleChannel: SaleChannel,
+    val notes: String,
+    val createdAt: Long,
+    val updatedAt: Long
 )
 
 @Serializable

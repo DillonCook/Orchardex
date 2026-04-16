@@ -14,6 +14,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         ActivityPhotoEntity::class,
         EventEntity::class,
         HarvestEntity::class,
+        SaleEntity::class,
         ReminderEntity::class,
         WishlistCultivarEntity::class
     ],
@@ -28,11 +29,12 @@ abstract class OrchardDexDatabase : RoomDatabase() {
     abstract fun activityPhotoDao(): ActivityPhotoDao
     abstract fun eventDao(): EventDao
     abstract fun harvestDao(): HarvestDao
+    abstract fun saleDao(): SaleDao
     abstract fun reminderDao(): ReminderDao
     abstract fun wishlistDao(): WishlistDao
 
     companion object {
-        const val DB_VERSION = 9
+        const val DB_VERSION = 11
         const val DB_NAME = "orcharddex.db"
 
         val MIGRATION_1_2 = object : Migration(1, 2) {
@@ -311,6 +313,149 @@ abstract class OrchardDexDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN bloomPatternOverride TEXT
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN manualBloomProfile TEXT NOT NULL DEFAULT ''
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN alternateYearAnchor INTEGER
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN nurseryStage TEXT NOT NULL DEFAULT 'NONE'
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN parentTreeId TEXT
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN originType TEXT NOT NULL DEFAULT 'UNKNOWN'
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN propagationMethod TEXT
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    ALTER TABLE trees
+                    ADD COLUMN propagationDate INTEGER
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_trees_parentTreeId` ON `trees` (`parentTreeId`)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    CREATE INDEX IF NOT EXISTS `index_trees_nurseryStage` ON `trees` (`nurseryStage`)
+                    """.trimIndent()
+                )
+                database.execSQL(
+                    """
+                    UPDATE trees
+                    SET manualBloomProfile = CASE
+                        WHEN bloomTimingMode = 'CUSTOM'
+                             AND customBloomStartMonth BETWEEN 1 AND 12
+                             AND customBloomDurationDays IS NOT NULL
+                             AND customBloomDurationDays > 0
+                        THEN
+                            CASE
+                                WHEN customBloomDurationDays >= 180 THEN '2|2|2|2|2|2|2|2|2|2|2|2'
+                                WHEN customBloomDurationDays >= 90 THEN
+                                    CASE customBloomStartMonth
+                                        WHEN 1 THEN '3|3|3|0|0|0|0|0|0|0|0|0'
+                                        WHEN 2 THEN '0|3|3|3|0|0|0|0|0|0|0|0'
+                                        WHEN 3 THEN '0|0|3|3|3|0|0|0|0|0|0|0'
+                                        WHEN 4 THEN '0|0|0|3|3|3|0|0|0|0|0|0'
+                                        WHEN 5 THEN '0|0|0|0|3|3|3|0|0|0|0|0'
+                                        WHEN 6 THEN '0|0|0|0|0|3|3|3|0|0|0|0'
+                                        WHEN 7 THEN '0|0|0|0|0|0|3|3|3|0|0|0'
+                                        WHEN 8 THEN '0|0|0|0|0|0|0|3|3|3|0|0'
+                                        WHEN 9 THEN '0|0|0|0|0|0|0|0|3|3|3|0'
+                                        WHEN 10 THEN '0|0|0|0|0|0|0|0|0|3|3|3'
+                                        WHEN 11 THEN '3|0|0|0|0|0|0|0|0|0|3|3'
+                                        WHEN 12 THEN '3|3|0|0|0|0|0|0|0|0|0|3'
+                                        ELSE ''
+                                    END
+                                ELSE
+                                    CASE customBloomStartMonth
+                                        WHEN 1 THEN '3|0|0|0|0|0|0|0|0|0|0|0'
+                                        WHEN 2 THEN '0|3|0|0|0|0|0|0|0|0|0|0'
+                                        WHEN 3 THEN '0|0|3|0|0|0|0|0|0|0|0|0'
+                                        WHEN 4 THEN '0|0|0|3|0|0|0|0|0|0|0|0'
+                                        WHEN 5 THEN '0|0|0|0|3|0|0|0|0|0|0|0'
+                                        WHEN 6 THEN '0|0|0|0|0|3|0|0|0|0|0|0'
+                                        WHEN 7 THEN '0|0|0|0|0|0|3|0|0|0|0|0'
+                                        WHEN 8 THEN '0|0|0|0|0|0|0|3|0|0|0|0'
+                                        WHEN 9 THEN '0|0|0|0|0|0|0|0|3|0|0|0'
+                                        WHEN 10 THEN '0|0|0|0|0|0|0|0|0|3|0|0'
+                                        WHEN 11 THEN '0|0|0|0|0|0|0|0|0|0|3|0'
+                                        WHEN 12 THEN '0|0|0|0|0|0|0|0|0|0|0|3'
+                                        ELSE ''
+                                    END
+                            END
+                        ELSE manualBloomProfile
+                    END
+                    """.trimIndent()
+                )
+            }
+        }
+
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS `sales` (
+                        `id` TEXT NOT NULL,
+                        `saleKind` TEXT NOT NULL,
+                        `treeId` TEXT NOT NULL,
+                        `linkedHarvestId` TEXT,
+                        `soldAt` INTEGER NOT NULL,
+                        `quantityValue` REAL NOT NULL,
+                        `quantityUnit` TEXT NOT NULL,
+                        `unitPrice` REAL NOT NULL,
+                        `totalPrice` REAL NOT NULL,
+                        `currencyCode` TEXT NOT NULL,
+                        `saleChannel` TEXT NOT NULL,
+                        `notes` TEXT NOT NULL,
+                        `createdAt` INTEGER NOT NULL,
+                        `updatedAt` INTEGER NOT NULL,
+                        PRIMARY KEY(`id`),
+                        FOREIGN KEY(`treeId`) REFERENCES `trees`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE,
+                        FOREIGN KEY(`linkedHarvestId`) REFERENCES `harvests`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_treeId` ON `sales` (`treeId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_linkedHarvestId` ON `sales` (`linkedHarvestId`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_soldAt` ON `sales` (`soldAt`)")
+                database.execSQL("CREATE INDEX IF NOT EXISTS `index_sales_saleKind` ON `sales` (`saleKind`)")
+            }
+        }
+
         val ALL_MIGRATIONS = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -319,7 +464,9 @@ abstract class OrchardDexDatabase : RoomDatabase() {
             MIGRATION_5_6,
             MIGRATION_6_7,
             MIGRATION_7_8,
-            MIGRATION_8_9
+            MIGRATION_8_9,
+            MIGRATION_9_10,
+            MIGRATION_10_11
         )
     }
 }

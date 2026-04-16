@@ -5,6 +5,7 @@ import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
+import com.dillon.orcharddex.data.local.TreePhotoEntity
 import com.dillon.orcharddex.data.local.WishlistCultivarEntity
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
 import com.dillon.orcharddex.data.model.FrostSensitivityLevel
@@ -154,6 +155,50 @@ class OrchardRepositoryTest {
 
         val savedTrees = database.treeDao().getAllTrees()
         assertThat(savedTrees.map { it.nickname }).contains("Plant 2")
+    }
+
+    @Test
+    fun saveTree_updatingExistingTree_preservesExistingPhotos() = runBlocking {
+        val savedTreeId = repository.saveTree(
+            TreeInput(
+                orchardName = "Home",
+                sectionName = "Block A",
+                species = "Mango",
+                cultivar = "Sweet Tart",
+                plantedDate = 1_700_000_000_000
+            )
+        )
+        database.treePhotoDao().insert(
+            TreePhotoEntity(
+                id = "tree-photo-1",
+                treeId = savedTreeId,
+                relativePath = "trees/existing.jpg",
+                caption = "Existing photo",
+                createdAt = 1_700_000_000_001,
+                sortOrder = 0,
+                isHero = true
+            )
+        )
+
+        repository.saveTree(
+            TreeInput(
+                id = savedTreeId,
+                orchardName = "Home",
+                sectionName = "Updated section",
+                species = "Mango",
+                cultivar = "Sweet Tart",
+                plantedDate = 1_700_000_000_000
+            )
+        )
+
+        val treePhotos = database.treePhotoDao().getPhotosForTree(savedTreeId)
+        val savedTree = database.treeDao().getTree(savedTreeId)
+
+        assertThat(savedTree).isNotNull()
+        assertThat(savedTree?.sectionName).isEqualTo("Updated section")
+        assertThat(treePhotos).hasSize(1)
+        assertThat(treePhotos.single().relativePath).isEqualTo("trees/existing.jpg")
+        assertThat(treePhotos.single().isHero).isTrue()
     }
 
     @Test

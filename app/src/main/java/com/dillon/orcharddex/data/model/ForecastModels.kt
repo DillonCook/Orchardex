@@ -4,6 +4,25 @@ import kotlinx.serialization.Serializable
 import java.time.ZoneId
 
 @Serializable
+enum class BloomPatternType(val label: String) {
+    SINGLE_ANNUAL("Annual"),
+    MULTI_WAVE("Repeat"),
+    CONTINUOUS("Continuous"),
+    ALTERNATE_YEAR("Alternate-year"),
+    MANUAL_ONLY("Manual"),
+    SUPPRESSED("Suppressed")
+}
+
+@Serializable
+enum class PhenologyModelType(val label: String) {
+    CHILL_HEAT("Chill + heat"),
+    CLIMATE_WINDOW("Climate window"),
+    TROPICAL_REPEAT("Tropical repeat"),
+    WARM_SEASON_PHOTOPERIOD("Warm-season / photoperiod"),
+    MANUAL_ONLY("Manual only")
+}
+
+@Serializable
 enum class Hemisphere(val label: String) {
     NORTHERN("Northern hemisphere"),
     SOUTHERN("Southern hemisphere"),
@@ -246,4 +265,19 @@ data class PhenologyObservation(
     val dateMillis: Long,
     val eventType: EventType? = null,
     val isHarvest: Boolean = false
+)
+
+val bloomMonthLabels = listOf(
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec"
 )

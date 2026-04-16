@@ -1,7 +1,9 @@
 package com.dillon.orcharddex.ui.screens
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
@@ -12,12 +14,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
@@ -31,18 +36,26 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.dillon.orcharddex.data.model.ActivityKind
+import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.DashboardDetailItem
 import com.dillon.orcharddex.data.model.DashboardModel
 import com.dillon.orcharddex.data.model.ForecastConfidence
+import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.model.ReminderListItem
 import com.dillon.orcharddex.data.model.TreeListItem
+import com.dillon.orcharddex.data.local.SaleEntity
 import com.dillon.orcharddex.data.local.toForecastLocationProfile
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
@@ -51,17 +64,23 @@ import com.dillon.orcharddex.data.phenology.EverbearingPlant
 import com.dillon.orcharddex.data.phenology.PredictedBloomWindow
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.forecastLocationProfile
+import com.dillon.orcharddex.data.repository.speciesCultivarLabel
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.OrchardDexHeroBanner
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
+import com.dillon.orcharddex.ui.displayAmount
 import com.dillon.orcharddex.ui.epochToLocalDate
 import com.dillon.orcharddex.time.OrchardTime
 import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.viewmodel.DashboardViewModel
+import java.io.File
+import java.time.Instant
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import java.time.ZoneId
+import java.time.temporal.ChronoUnit
 import java.time.format.DateTimeFormatter
 
 private enum class DashboardStat(val label: String) {
@@ -94,10 +113,28 @@ private data class DashboardCalendarItem(
 }
 
 private data class DashboardCalendarState(
-    val items: List<DashboardCalendarItem> = emptyList(),
+    val agendaItems: List<DashboardCalendarItem> = emptyList(),
     val activeTreeCount: Int = 0,
     val forecastedTreeCount: Int = 0,
     val everbearingPlants: List<EverbearingPlant> = emptyList()
+)
+
+private data class DashboardBloomWatchItem(
+    val treeId: String,
+    val primaryLabel: String,
+    val secondaryLabel: String = "",
+    val expectedBloomLabel: String,
+    val expectedFruitLabel: String,
+    val sortDate: LocalDate,
+    val infoLines: List<String> = emptyList()
+)
+
+private data class DashboardFruitTimingInsight(
+    val label: String,
+    val nextDate: LocalDate,
+    val seasonCount: Int,
+    val sourceLabel: String,
+    val detailLine: String
 )
 
 private data class DashboardDaySummary(
@@ -146,22 +183,24 @@ fun DashboardScreen(
     onAddEvent: () -> Unit,
     onAddHarvest: () -> Unit,
     onAddReminder: () -> Unit,
+    onOpenOrchard: () -> Unit,
+    onOpenSettings: () -> Unit,
     onViewTree: (String) -> Unit
 ) {
+    val context = LocalContext.current
     val dashboard by viewModel.dashboard.collectAsStateWithLifecycle(initialValue = null)
     val dashboardModel = dashboard ?: DashboardModel()
     val trees by viewModel.trees.collectAsStateWithLifecycle()
     val reminders by viewModel.reminders.collectAsStateWithLifecycle()
     val history by viewModel.history.collectAsStateWithLifecycle()
+    val sales by viewModel.sales.collectAsStateWithLifecycle()
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     var selectedStat by rememberSaveable { mutableStateOf<DashboardStat?>(null) }
-    var selectedMonthSection by rememberSaveable { mutableStateOf<DashboardMonthSection?>(null) }
-    var showSelectedDayDialog by rememberSaveable { mutableStateOf(false) }
+    var selectedBloomWatch by rememberSaveable { mutableStateOf<String?>(null) }
     var visibleMonthText by rememberSaveable { mutableStateOf(OrchardTime.currentYearMonth().toString()) }
-    var selectedDateText by rememberSaveable { mutableStateOf(OrchardTime.today().toString()) }
     val visibleMonth = remember(visibleMonthText) { YearMonth.parse(visibleMonthText) }
-    val selectedDate = remember(selectedDateText) { LocalDate.parse(selectedDateText) }
     val locationProfile = remember(settings) { settings.forecastLocationProfile() }
+    val activeTrees = remember(trees) { trees.filter { it.tree.status == TreeStatus.ACTIVE } }
     val calendarState = remember(trees, reminders, history, locationProfile, settings.orchardRegion, visibleMonth) {
         buildDashboardCalendarState(
             defaultLocationProfile = locationProfile,
@@ -169,21 +208,45 @@ fun DashboardScreen(
             visibleMonth = visibleMonth,
             reminders = reminders,
             history = history,
-            activeTrees = trees.filter { it.tree.status == TreeStatus.ACTIVE }
+            activeTrees = activeTrees
         )
     }
-    val itemsForSelectedDay = remember(calendarState.items, selectedDate) {
-        calendarState.items
-            .filter { it.occursOn(selectedDate) }
-            .sortedWith(compareBy(DashboardCalendarItem::startDate, DashboardCalendarItem::kind, DashboardCalendarItem::title))
+    val dueThisWeek = remember(reminders) {
+        val now = System.currentTimeMillis()
+        val cutoff = now + 7L * 24 * 60 * 60 * 1000
+        reminders
+            .filter { it.reminder.completedAt == null && it.reminder.enabled && it.reminder.dueAt in now..cutoff }
+            .sortedBy { it.reminder.dueAt }
+            .take(6)
     }
-    val monthSectionState = remember(calendarState, reminders, history, visibleMonth) {
-        buildDashboardMonthSectionState(
-            visibleMonth = visibleMonth,
-            calendarState = calendarState,
-            reminders = reminders,
+    val bloomWatchItems = remember(activeTrees, history, locationProfile, settings.orchardRegion) {
+        buildDashboardBloomWatchItems(
+            defaultLocationProfile = locationProfile,
+            orchardRegion = settings.orchardRegion,
+            activeTrees = activeTrees,
             history = history
         )
+    }
+    val seasonHarvestTotals = remember(history) {
+        val currentYear = OrchardTime.today().year
+        history
+            .filter { it.kind == ActivityKind.HARVEST && epochToLocalDate(it.date).year == currentYear }
+            .groupBy { it.quantityUnit.orEmpty().ifBlank { "unit" } }
+            .mapValues { (_, entries) -> entries.sumOf { it.quantityValue ?: 0.0 } }
+            .toList()
+            .sortedByDescending { it.second }
+    }
+    val salesThisMonthRevenue = remember(sales) {
+        val currentMonth = OrchardTime.currentYearMonth()
+        sales
+            .filter { sale -> YearMonth.from(epochToLocalDate(sale.soldAt)) == currentMonth }
+            .sumOf(SaleEntity::totalPrice)
+    }
+    val photoTimeline = remember(history) {
+        history
+            .filter { it.photoPaths.isNotEmpty() }
+            .sortedByDescending(HistoryEntryModel::date)
+            .take(8)
     }
     val orchardPulseStats = listOf(
         DashboardStat.TREES to dashboardModel.totalTreeCount,
@@ -197,7 +260,6 @@ fun DashboardScreen(
     fun jumpMonth(offset: Long) {
         val updatedMonth = visibleMonth.plusMonths(offset)
         visibleMonthText = updatedMonth.toString()
-        selectedDateText = defaultSelectedDateForMonth(updatedMonth).toString()
     }
 
     selectedStat?.let { stat ->
@@ -208,21 +270,10 @@ fun DashboardScreen(
             onViewTree = onViewTree
         )
     }
-    selectedMonthSection?.let { section ->
-        DashboardMonthSectionDialog(
-            section = section,
-            visibleMonth = visibleMonth,
-            items = monthSectionState.itemsFor(section),
-            onDismiss = { selectedMonthSection = null },
-            onViewTree = onViewTree
-        )
-    }
-    if (showSelectedDayDialog) {
-        DashboardDayDialog(
-            date = selectedDate,
-            items = itemsForSelectedDay,
-            onDismiss = { showSelectedDayDialog = false },
-            onViewTree = onViewTree
+    bloomWatchItems.firstOrNull { it.treeId == selectedBloomWatch }?.let { item ->
+        DashboardBloomWatchDialog(
+            item = item,
+            onDismiss = { selectedBloomWatch = null }
         )
     }
     LazyColumn(
@@ -232,8 +283,12 @@ fun DashboardScreen(
         if (dashboard != null && dashboardModel.totalTreeCount == 0) {
             item {
                 EmptyStateCard(
-                    title = "Start with your first tree",
-                    message = "Add a plant, then use reminders, events, harvests, and bloom forecasts to run the orchard from one place."
+                    title = "Start with your first plant",
+                    message = "Add a plant, then use reminders, logs, and bloom timing to track the orchard from one place.",
+                    primaryActionLabel = "Add first plant",
+                    onPrimaryAction = onAddTree,
+                    secondaryActionLabel = "Open Orchard",
+                    onSecondaryAction = onOpenOrchard
                 )
             }
         }
@@ -252,54 +307,117 @@ fun DashboardScreen(
             }
         }
         item {
-            DashboardCalendarSection(
-                visibleMonth = visibleMonth,
-                selectedDate = selectedDate,
-                settings = settings,
-                calendarState = calendarState,
-                monthSectionState = monthSectionState,
-                onPreviousMonth = { jumpMonth(-1) },
-                onNextMonth = { jumpMonth(1) },
-                onSelectDay = {
-                    selectedDateText = it.toString()
-                    showSelectedDayDialog = true
-                },
-                onOpenMonthSection = { selectedMonthSection = it }
-            )
-        }
-        item {
-            SectionCard("Orchard pulse") {
-                Text(
-                    text = if (dashboardModel.totalTreeCount == 0) {
-                        "The dashboard becomes your quick review board once plants and reminders are in place."
-                    } else {
-                        "Scan the collection, spot due work, and jump into the right plant or reminder list quickly."
-                    },
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            SectionCard("At a glance") {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    orchardPulseStats.chunked(2).forEach { row ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        if (settings.showSalesTools) {
+                            DashboardMiniStatCard(
+                                label = "Sales this month",
+                                value = "$${salesThisMonthRevenue.displayAmount()}"
+                            )
+                        }
+                        orchardPulseStats.forEach { (stat, value) ->
+                            DashboardMiniStatCard(
+                                label = stat.label,
+                                value = value.toString(),
+                                onClick = { selectedStat = stat }
+                            )
+                        }
+                    }
+                    if (seasonHarvestTotals.isEmpty()) {
+                        Text("No harvests logged this season.", style = MaterialTheme.typography.bodySmall)
+                    } else {
+                        Text("Season harvest total", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            row.forEach { (stat, value) ->
-                                StatCard(
-                                    label = stat.label,
-                                    value = value.toString(),
-                                    modifier = Modifier.weight(1f),
-                                    minWidth = 0.dp
-                                ) {
-                                    selectedStat = stat
-                                }
+                            seasonHarvestTotals.forEach { (unit, total) ->
+                                DashboardMiniStatCard(
+                                    label = unit,
+                                    value = total.displayAmount()
+                                )
                             }
                         }
                     }
                 }
-                Text(
-                    text = "Tap any count to inspect the underlying list.",
-                    style = MaterialTheme.typography.bodySmall
+            }
+        }
+        if (dashboardModel.totalTreeCount > 0 && settings.needsClimateProfileCompletionPrompt()) {
+            item {
+                EmptyStateCard(
+                    title = "Finish your climate profile",
+                    message = "Open Settings > Default orchard to add coordinates, elevation, and chill hours so bloom timing stays more accurate.",
+                    primaryActionLabel = "Open Settings",
+                    onPrimaryAction = onOpenSettings
                 )
+            }
+        }
+        item {
+            DashboardCalendarSection(
+                visibleMonth = visibleMonth,
+                calendarState = calendarState,
+                onPreviousMonth = { jumpMonth(-1) },
+                onNextMonth = { jumpMonth(1) },
+                onViewTree = onViewTree
+            )
+        }
+        item {
+            SectionCard("Due this week") {
+                if (dueThisWeek.isEmpty()) {
+                    Text("Nothing due in the next 7 days.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        dueThisWeek.forEach { item ->
+                            DashboardActionRow(
+                                title = item.reminder.title,
+                                subtitle = item.treeLabel ?: "General orchard",
+                                detail = item.reminder.dueAt.toDateLabel(),
+                                onClick = item.reminder.treeId?.let { treeId -> { onViewTree(treeId) } }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SectionCard("Bloom & fruit timing") {
+                if (bloomWatchItems.isEmpty()) {
+                    Text("No near-term bloom or fruit timing is learned right now.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        bloomWatchItems.forEach { item ->
+                            DashboardBloomWatchRow(
+                                item = item,
+                                onClick = { onViewTree(item.treeId) },
+                                onShowInfo = item.infoLines.takeIf { lines -> lines.isNotEmpty() }?.let {
+                                    { selectedBloomWatch = item.treeId }
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            SectionCard("Photo timeline") {
+                if (photoTimeline.isEmpty()) {
+                    Text("Add photos to harvests or events to build the timeline.", style = MaterialTheme.typography.bodySmall)
+                } else {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        items(photoTimeline, key = { "${it.kind.name}-${it.id}" }) { entry ->
+                            DashboardPhotoCard(
+                                entry = entry,
+                                photoPath = entry.photoPaths.firstOrNull(),
+                                filesDir = context.filesDir,
+                                onClick = { onViewTree(entry.treeId) }
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -308,16 +426,12 @@ fun DashboardScreen(
 @Composable
 private fun DashboardCalendarSection(
     visibleMonth: YearMonth,
-    selectedDate: LocalDate,
-    settings: AppSettings,
     calendarState: DashboardCalendarState,
-    monthSectionState: DashboardMonthSectionState,
     onPreviousMonth: () -> Unit,
     onNextMonth: () -> Unit,
-    onSelectDay: (LocalDate) -> Unit,
-    onOpenMonthSection: (DashboardMonthSection) -> Unit
+    onViewTree: (String) -> Unit
 ) {
-    SectionCard("Calendar") {
+    SectionCard("Agenda") {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -331,175 +445,20 @@ private fun DashboardCalendarSection(
             )
             OutlinedButton(onClick = onNextMonth) { Text(">") }
         }
-        when {
-            calendarState.activeTreeCount == 0 -> {
-                Text("Add an active plant to see bloom timing here.", style = MaterialTheme.typography.bodySmall)
-            }
-            !settings.forecastLocationProfile().hasForecastSignals() -> {
-                Text(
-                    "Add latitude, elevation, chill hours, or a USDA zone in Settings to tune bloom timing.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-            calendarState.forecastedTreeCount in 1 until calendarState.activeTreeCount -> {
-                Text(
-                    text = "Bloom estimates cover ${calendarState.forecastedTreeCount} of ${calendarState.activeTreeCount} active ${"plant".pluralize(calendarState.activeTreeCount)}.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }
-        }
-        DashboardMonthGrid(
-            visibleMonth = visibleMonth,
-            selectedDate = selectedDate,
-            items = calendarState.items,
-            onSelectDay = onSelectDay
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = "Tap a day to open that date in a modal. Month sections below stay focused on ${visibleMonth.format(dashboardMonthFormatter)}.",
-            style = MaterialTheme.typography.bodySmall
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            Text(
-                text = "This month",
-                style = MaterialTheme.typography.titleMedium
-            )
-            DashboardMonthSectionCard(
-                section = DashboardMonthSection.BLOOM_NOW,
-                count = monthSectionState.bloomNow.size,
-                subtitle = "Predicted bloom windows in ${visibleMonth.format(dashboardMonthFormatter)}",
-                onClick = { onOpenMonthSection(DashboardMonthSection.BLOOM_NOW) }
-            )
-            DashboardMonthSectionCard(
-                section = DashboardMonthSection.FRUIT_LIKELY,
-                count = monthSectionState.fruitLikely.size,
-                subtitle = "Month-matched harvest activity from logged history",
-                onClick = { onOpenMonthSection(DashboardMonthSection.FRUIT_LIKELY) }
-            )
-            DashboardMonthSectionCard(
-                section = DashboardMonthSection.REPEAT_BLOOMERS,
-                count = monthSectionState.repeatBloomers.size,
-                subtitle = "Repeat-bearing plants tracked outside a tight month window",
-                onClick = { onOpenMonthSection(DashboardMonthSection.REPEAT_BLOOMERS) }
-            )
-            DashboardMonthSectionCard(
-                section = DashboardMonthSection.RECOVERY_WATCH,
-                count = monthSectionState.recoveryWatch.size,
-                subtitle = "Tree-linked reminders due in ${visibleMonth.format(dashboardMonthFormatter)}",
-                onClick = { onOpenMonthSection(DashboardMonthSection.RECOVERY_WATCH) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun DashboardMonthGrid(
-    visibleMonth: YearMonth,
-    selectedDate: LocalDate,
-    items: List<DashboardCalendarItem>,
-    onSelectDay: (LocalDate) -> Unit
-) {
-    val firstDayOffset = visibleMonth.atDay(1).dayOfWeek.value % 7
-    val totalDays = visibleMonth.lengthOfMonth()
-    val cells = buildList<LocalDate?> {
-        repeat(firstDayOffset) { add(null) }
-        repeat(totalDays) { add(visibleMonth.atDay(it + 1)) }
-        while (size % DayOfWeek.values().size != 0) add(null)
-    }
-    val weekdayLabels = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
-
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            weekdayLabels.forEach { label ->
-                Text(
-                    text = label,
-                    modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.labelSmall,
-                    textAlign = TextAlign.Center
-                )
-            }
-        }
-        cells.chunked(DayOfWeek.values().size).forEach { week ->
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                week.forEach { day ->
-                    if (day == null) {
-                        Spacer(modifier = Modifier.weight(1f))
-                    } else {
-                        DashboardDayCell(
-                            modifier = Modifier.weight(1f),
-                            day = day,
-                            summary = items.summaryFor(day),
-                            selected = day == selectedDate,
-                            today = day == OrchardTime.today(),
-                            onClick = { onSelectDay(day) }
-                        )
-                    }
+        val agendaItems = calendarState.agendaItems
+            .filter { item -> YearMonth.from(item.startDate) == visibleMonth || YearMonth.from(item.endDate) == visibleMonth }
+            .sortedWith(compareBy(DashboardCalendarItem::startDate, DashboardCalendarItem::kind, DashboardCalendarItem::title))
+            .take(20)
+        if (agendaItems.isEmpty()) {
+            Text("No tasks, events, or harvests scheduled in this month.", style = MaterialTheme.typography.bodySmall)
+        } else {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                agendaItems.forEach { item ->
+                    DashboardCalendarRow(
+                        item = item,
+                        onClick = item.treeId?.let { treeId -> { onViewTree(treeId) } }
+                    )
                 }
-            }
-        }
-    }
-}
-
-@Composable
-private fun DashboardDayCell(
-    modifier: Modifier = Modifier,
-    day: LocalDate,
-    summary: DashboardDaySummary,
-    selected: Boolean,
-    today: Boolean,
-    onClick: () -> Unit
-) {
-    val containerColor = when {
-        selected -> MaterialTheme.colorScheme.primaryContainer
-        today -> MaterialTheme.colorScheme.secondaryContainer
-        else -> MaterialTheme.colorScheme.surface
-    }
-    val borderColor = when {
-        selected -> MaterialTheme.colorScheme.primary
-        today -> MaterialTheme.colorScheme.secondary
-        else -> MaterialTheme.colorScheme.outlineVariant
-    }
-
-    OutlinedCard(
-        modifier = modifier
-            .height(94.dp)
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        border = BorderStroke(1.dp, borderColor),
-        colors = CardDefaults.outlinedCardColors(containerColor = containerColor)
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(3.dp)
-        ) {
-            Text(
-                text = day.dayOfMonth.toString(),
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = if (selected || today) FontWeight.SemiBold else FontWeight.Normal
-            )
-            if (summary.reminderCount > 0) {
-                Text(
-                    text = "${summary.reminderCount} ${"task".pluralize(summary.reminderCount)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (summary.logCount > 0) {
-                Text(
-                    text = "${summary.logCount} ${"log".pluralize(summary.logCount)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (summary.bloomCount > 0) {
-                Text(
-                    text = "${summary.bloomCount} ${"bloom".pluralize(summary.bloomCount)}",
-                    style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
             }
         }
     }
@@ -526,6 +485,196 @@ private fun DashboardCalendarRow(
             overflow = TextOverflow.Ellipsis
         )
     }
+}
+
+@Composable
+private fun DashboardMiniStatCard(
+    label: String,
+    value: String,
+    onClick: (() -> Unit)? = null
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .heightIn(min = 84.dp)
+            .let { base -> if (onClick == null) base else base.clickable(onClick = onClick) },
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardPhotoCard(
+    entry: HistoryEntryModel,
+    photoPath: String?,
+    filesDir: File,
+    onClick: () -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier
+            .size(width = 180.dp, height = 208.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            if (photoPath != null) {
+                AsyncImage(
+                    model = File(filesDir, "photos/$photoPath"),
+                    contentDescription = entry.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(116.dp)
+                )
+            }
+            Column(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                Text(
+                    text = entry.treeLabel,
+                    style = MaterialTheme.typography.titleSmall,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = entry.title,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = entry.date.toDateLabel(),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DashboardActionRow(
+    title: String,
+    subtitle: String,
+    detail: String,
+    onClick: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .let { base -> if (onClick == null) base else base.clickable(onClick = onClick) },
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        if (subtitle.isNotBlank()) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall)
+        }
+        if (detail.isNotBlank()) {
+            Text(detail, style = MaterialTheme.typography.labelSmall)
+        }
+    }
+}
+
+@Composable
+private fun DashboardBloomWatchRow(
+    item: DashboardBloomWatchItem,
+    onClick: () -> Unit,
+    onShowInfo: (() -> Unit)?
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top
+        ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(item.primaryLabel, style = MaterialTheme.typography.titleMedium)
+                if (item.secondaryLabel.isNotBlank()) {
+                    Text(
+                        text = item.secondaryLabel,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+            onShowInfo?.let { showInfo ->
+                TextButton(onClick = showInfo) {
+                    Text("Why?")
+                }
+            }
+        }
+        Text(
+            text = "Expected bloom: ${item.expectedBloomLabel}",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            text = "Expected fruit: ${item.expectedFruitLabel}",
+            style = MaterialTheme.typography.bodySmall
+        )
+    }
+}
+
+@Composable
+private fun DashboardBloomWatchDialog(
+    item: DashboardBloomWatchItem,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(item.primaryLabel) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                if (item.secondaryLabel.isNotBlank()) {
+                    Text(item.secondaryLabel, style = MaterialTheme.typography.bodySmall)
+                }
+                Text("Expected bloom: ${item.expectedBloomLabel}", style = MaterialTheme.typography.bodyMedium)
+                Text("Expected fruit: ${item.expectedFruitLabel}", style = MaterialTheme.typography.bodyMedium)
+                item.infoLines.forEach { line ->
+                    Text(line, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun DashboardIndicatorDot(color: Color) {
+    Box(
+        modifier = Modifier
+            .padding(top = 4.dp)
+            .size(6.dp)
+            .background(color = color, shape = RoundedCornerShape(999.dp))
+    )
 }
 
 @Composable
@@ -770,26 +919,233 @@ private fun DashboardDetailRow(
     }
 }
 
+private fun buildDashboardBloomWatchItems(
+    defaultLocationProfile: com.dillon.orcharddex.data.model.ForecastLocationProfile,
+    orchardRegion: String,
+    activeTrees: List<TreeListItem>,
+    history: List<HistoryEntryModel>
+): List<DashboardBloomWatchItem> {
+    val today = OrchardTime.today()
+    val observationsByTreeId = historyPhenologyObservationsByTreeId(history)
+    val harvestHistory = history.filter { it.kind == ActivityKind.HARVEST }
+    return activeTrees.mapNotNull { item ->
+        val tree = item.tree
+        val treeLocationProfile = item.location?.toForecastLocationProfile() ?: defaultLocationProfile
+        val observations = observationsByTreeId[tree.id].orEmpty()
+        val learnedWindow = BloomForecastEngine.nextBloomWindow(
+            tree = tree,
+            locationProfile = treeLocationProfile,
+            observations = observations
+        )
+        val baselineWindow = observations.takeIf { it.isNotEmpty() }?.let {
+            BloomForecastEngine.nextBloomWindow(
+                tree = tree,
+                locationProfile = treeLocationProfile,
+                observations = emptyList()
+            )
+        }
+        val fruitInsight = learnedFruitTimingInsight(
+            tree = tree,
+            history = harvestHistory,
+            today = today
+        )
+        val isBloomCurrent = learnedWindow?.let { !today.isBefore(it.startDate) && !today.isAfter(it.endDate) } == true
+        val isBloomSoon = learnedWindow?.startDate?.let { !it.isAfter(today.plusDays(45)) } == true
+        val isFruitSoon = fruitInsight?.nextDate?.let { !it.isAfter(today.plusDays(60)) } == true
+        if (!isBloomCurrent && !isBloomSoon && !isFruitSoon) return@mapNotNull null
+
+        val bloomSeasonCount = observedSeasonCount(
+            observations = observations,
+            timezoneId = treeLocationProfile.timezoneId
+        )
+        val infoLines = buildList {
+            if (learnedWindow?.source == ForecastSource.HISTORY_LEARNED && baselineWindow != null) {
+                val shiftDays = ChronoUnit.DAYS.between(baselineWindow.startDate, learnedWindow.startDate)
+                if (kotlin.math.abs(shiftDays) >= 3L) {
+                    add(
+                        "Adjusted from your logs: usually ${kotlin.math.abs(shiftDays)} days " +
+                            if (shiftDays > 0) "later here." else "earlier here."
+                    )
+                }
+            }
+            if (bloomSeasonCount > 0) {
+                add("Confidence increased from $bloomSeasonCount prior ${"season".pluralize(bloomSeasonCount)}.")
+            }
+            fruitInsight?.detailLine?.let(::add)
+        }
+
+        DashboardBloomWatchItem(
+            treeId = tree.id,
+            primaryLabel = speciesCultivarLabel(tree.species, tree.cultivar),
+            secondaryLabel = tree.nickname.orEmpty().trim(),
+            expectedBloomLabel = learnedWindow?.let { it.expectedTimingLabel(today) }
+                ?: BloomForecastEngine.nextBloomSummary(
+                    tree = tree,
+                    locationProfile = treeLocationProfile,
+                    observations = observations
+                )?.timingLabel
+                ?: "Log bloom events to learn this here",
+            expectedFruitLabel = fruitInsight?.label
+                ?: fallbackFruitTimingLabel(learnedWindow),
+            sortDate = listOfNotNull(
+                learnedWindow?.startDate?.takeIf { !today.isAfter(learnedWindow.endDate) }?.let {
+                    if (it.isBefore(today)) today else it
+                },
+                fruitInsight?.nextDate
+            ).minOrNull() ?: today,
+            infoLines = infoLines
+        )
+    }.sortedWith(
+        compareBy<DashboardBloomWatchItem>({ it.sortDate }, { it.primaryLabel.lowercase() })
+    ).take(6)
+}
+
+private fun historyPhenologyObservationsByTreeId(
+    history: List<HistoryEntryModel>
+): Map<String, List<PhenologyObservation>> = history.mapNotNull { entry ->
+    when {
+        entry.kind == ActivityKind.HARVEST -> PhenologyObservation(
+            treeId = entry.treeId,
+            dateMillis = entry.date,
+            isHarvest = true
+        )
+        entry.eventType != null -> PhenologyObservation(
+            treeId = entry.treeId,
+            dateMillis = entry.date,
+            eventType = entry.eventType
+        )
+        else -> null
+    }
+}.groupBy(PhenologyObservation::treeId)
+
+private fun observedSeasonCount(
+    observations: List<PhenologyObservation>,
+    timezoneId: String
+): Int {
+    val zoneId = runCatching { ZoneId.of(timezoneId) }.getOrElse { OrchardTime.zoneId() }
+    return observations
+        .filter { observation ->
+            observation.eventType in setOf(
+                com.dillon.orcharddex.data.model.EventType.BUD,
+                com.dillon.orcharddex.data.model.EventType.BLOOM,
+                com.dillon.orcharddex.data.model.EventType.FRUIT_SET
+            )
+        }
+        .map { observation ->
+            Instant.ofEpochMilli(observation.dateMillis).atZone(zoneId).toLocalDate().year
+        }
+        .distinct()
+        .size
+}
+
+private fun learnedFruitTimingInsight(
+    tree: com.dillon.orcharddex.data.local.TreeEntity,
+    history: List<HistoryEntryModel>,
+    today: LocalDate
+): DashboardFruitTimingInsight? {
+    val treeMatches = history.filter { it.treeId == tree.id }
+    buildFruitTimingInsight(treeMatches, today, "this tree")?.let { return it }
+
+    val cultivar = tree.cultivar.normalizedDashboardKey()
+    if (cultivar.isNotBlank()) {
+        val cultivarMatches = history.filter {
+            it.treeId != tree.id &&
+                it.species.normalizedDashboardKey() == tree.species.normalizedDashboardKey() &&
+                it.cultivar.normalizedDashboardKey() == cultivar
+        }
+        buildFruitTimingInsight(cultivarMatches, today, "this cultivar in your orchard")?.let { return it }
+    }
+
+    val speciesMatches = history.filter {
+        it.treeId != tree.id &&
+            it.species.normalizedDashboardKey() == tree.species.normalizedDashboardKey()
+    }
+    return buildFruitTimingInsight(speciesMatches, today, "this species in your orchard")
+}
+
+private fun buildFruitTimingInsight(
+    history: List<HistoryEntryModel>,
+    today: LocalDate,
+    sourceLabel: String
+): DashboardFruitTimingInsight? {
+    if (history.isEmpty()) return null
+    val dates = history.map { epochToLocalDate(it.date) }.sorted()
+    val years = dates.map(LocalDate::getYear).distinct().sorted()
+    val dayOfYearValues = dates.map(LocalDate::getDayOfYear).sorted()
+    val representativeDayOfYear = dayOfYearValues[dayOfYearValues.size / 2]
+    val spreadDays = dayOfYearValues.last() - dayOfYearValues.first()
+    val activeMonths = dates.map(LocalDate::getMonthValue).distinct().sorted()
+    val monthSpan = activeMonths.last() - activeMonths.first()
+    val nextDate = nextOccurrenceForDayOfYear(representativeDayOfYear, today)
+    val startLabel = coarseTimingLabel(nextOccurrenceForDayOfYear(dayOfYearValues.first(), today))
+    val endLabel = coarseTimingLabel(nextOccurrenceForDayOfYear(dayOfYearValues.last(), today))
+    val label = when {
+        activeMonths.size >= 6 || spreadDays >= 150 -> "active season, $startLabel - $endLabel"
+        activeMonths.size >= 3 || spreadDays >= 60 -> "repeat waves, $startLabel - $endLabel"
+        activeMonths.size == 2 || monthSpan >= 1 -> "$startLabel - $endLabel"
+        else -> coarseTimingLabel(nextDate)
+    }
+    return DashboardFruitTimingInsight(
+        label = label,
+        nextDate = nextDate,
+        seasonCount = years.size,
+        sourceLabel = sourceLabel,
+        detailLine = "Expected fruit learned from ${years.size} ${"season".pluralize(years.size)} of harvest logs for $sourceLabel."
+    )
+}
+
+private fun PredictedBloomWindow.expectedTimingLabel(today: LocalDate): String = when {
+    !today.isBefore(startDate) && !today.isAfter(endDate) -> "now"
+    patternType == com.dillon.orcharddex.data.model.BloomPatternType.SINGLE_ANNUAL -> {
+        val midpoint = startDate.plusDays(ChronoUnit.DAYS.between(startDate, endDate) / 2)
+        coarseTimingLabel(midpoint)
+    }
+    patternType == com.dillon.orcharddex.data.model.BloomPatternType.MULTI_WAVE ->
+        "repeat waves, ${coarseTimingLabel(startDate)} - ${coarseTimingLabel(endDate)}"
+    patternType == com.dillon.orcharddex.data.model.BloomPatternType.CONTINUOUS ->
+        "active season, ${coarseTimingLabel(startDate)} - ${coarseTimingLabel(endDate)}"
+    else -> "${coarseTimingLabel(startDate)} - ${coarseTimingLabel(endDate)}"
+}
+
+private fun fallbackFruitTimingLabel(window: PredictedBloomWindow?): String = when (window?.patternType) {
+    com.dillon.orcharddex.data.model.BloomPatternType.MULTI_WAVE -> "repeat waves after bloom"
+    com.dillon.orcharddex.data.model.BloomPatternType.CONTINUOUS -> "active season varies"
+    com.dillon.orcharddex.data.model.BloomPatternType.ALTERNATE_YEAR -> "varies in active years"
+    com.dillon.orcharddex.data.model.BloomPatternType.SINGLE_ANNUAL -> "after bloom"
+    com.dillon.orcharddex.data.model.BloomPatternType.MANUAL_ONLY -> "learn from harvest logs"
+    com.dillon.orcharddex.data.model.BloomPatternType.SUPPRESSED, null -> "Log harvests to learn this here"
+}
+
+private fun coarseTimingLabel(date: LocalDate): String = when (date.dayOfMonth) {
+    in 1..10 -> "early ${date.month.name.lowercase().replaceFirstChar(Char::titlecase)}"
+    in 11..20 -> "mid ${date.month.name.lowercase().replaceFirstChar(Char::titlecase)}"
+    else -> "late ${date.month.name.lowercase().replaceFirstChar(Char::titlecase)}"
+}
+
+private fun nextOccurrenceForDayOfYear(dayOfYear: Int, today: LocalDate): LocalDate {
+    val currentYearDate = LocalDate.ofYearDay(
+        today.year,
+        dayOfYear.coerceAtMost(YearMonth.of(today.year, 12).atEndOfMonth().dayOfYear)
+    )
+    return if (!currentYearDate.isBefore(today)) {
+        currentYearDate
+    } else {
+        LocalDate.ofYearDay(
+            today.year + 1,
+            dayOfYear.coerceAtMost(YearMonth.of(today.year + 1, 12).atEndOfMonth().dayOfYear)
+        )
+    }
+}
+
+private fun String.normalizedDashboardKey(): String = trim().lowercase()
+
 private fun buildDashboardMonthSectionState(
     visibleMonth: YearMonth,
     calendarState: DashboardCalendarState,
     reminders: List<ReminderListItem>,
     history: List<HistoryEntryModel>
 ): DashboardMonthSectionState {
-    val bloomNow = calendarState.items
-        .filter { it.kind == DashboardCalendarKind.BLOOM_FORECAST }
-        .map { item ->
-            DashboardMonthSectionItem(
-                id = item.id,
-                title = item.title,
-                subtitle = item.subtitle,
-                detail = listOf(
-                    "${item.startDate.format(dashboardCompactDateFormatter)} - ${item.endDate.format(dashboardCompactDateFormatter)}",
-                    item.detail.takeIf(String::isNotBlank)
-                ).joinToString(" - "),
-                treeId = item.treeId
-            )
-        }
+    val bloomNow = emptyList<DashboardMonthSectionItem>()
     val fruitLikely = history
         .filter { it.kind == com.dillon.orcharddex.data.model.ActivityKind.HARVEST }
         .filter { YearMonth.from(epochToLocalDate(it.date)) == visibleMonth }
@@ -867,8 +1223,12 @@ private fun buildDashboardCalendarState(
             observations = observationsByTreeId[item.tree.id].orEmpty()
         )
     }
-    val everbearingPlants = BloomForecastEngine.everbearingPlants(activeTrees.map(TreeListItem::tree))
-    val bloomItems = bloomWindows.map(PredictedBloomWindow::toCalendarItem)
+    val everbearingPlants = BloomForecastEngine.everbearingPlants(
+        trees = activeTrees.map(TreeListItem::tree),
+        locationProfilesByTreeId = activeTrees.associate { item ->
+            item.tree.id to (item.location?.toForecastLocationProfile() ?: defaultLocationProfile)
+        }
+    )
     val reminderItems = reminders.mapNotNull { reminderItem ->
         val reminder = reminderItem.reminder
         val dueDate = epochToLocalDate(reminder.dueAt)
@@ -902,11 +1262,11 @@ private fun buildDashboardCalendarState(
             treeId = entry.treeId
         )
     }
-    val allItems = (bloomItems + reminderItems + historyItems).sortedWith(
+    val allItems = (reminderItems + historyItems).sortedWith(
         compareBy<DashboardCalendarItem>({ it.startDate }, { it.kind.priority }, { it.title.lowercase() })
     )
     return DashboardCalendarState(
-        items = allItems,
+        agendaItems = allItems,
         activeTreeCount = activeTrees.size,
         forecastedTreeCount = bloomWindows.map(PredictedBloomWindow::treeId).distinct().size,
         everbearingPlants = everbearingPlants
@@ -917,51 +1277,29 @@ private fun PredictedBloomWindow.toCalendarItem(): DashboardCalendarItem = Dashb
     id = "bloom:$treeId:${startDate}",
     kind = DashboardCalendarKind.BLOOM_FORECAST,
     title = treeLabel,
-    subtitle = speciesLabel,
-    detail = buildString {
-        if (confidence == ForecastConfidence.LOW) {
-            append("Likely ${startDate.format(dashboardCompactDateFormatter)} - ${endDate.format(dashboardCompactDateFormatter)}")
-        } else {
-            append(phase.dashboardDetailLabel())
-        }
-        append(" - ")
-        append(sourceLabel)
-        append(" - ")
-        append(confidenceLabel)
-    },
+    subtitle = "",
+    detail = "${startDate.format(dashboardCompactDateFormatter)} - ${endDate.format(dashboardCompactDateFormatter)}",
     startDate = startDate,
     endDate = endDate,
     treeId = treeId
 )
 
-private fun BloomPhase.dashboardDetailLabel(): String = when (this) {
-    BloomPhase.MID -> "Peak bloom estimate"
-    else -> "${label} bloom estimate"
-}
-
 private fun DashboardCalendarItem.supportingLine(): String = buildString {
     append(kind.label)
-    subtitle.takeUnless { it.isRedundantWith(title) }?.takeIf(String::isNotBlank)?.let {
-        append(" - ")
-        append(it)
-    }
     if (detail.isNotBlank()) {
         append(" - ")
         append(detail)
     }
 }
 
-private fun String.isRedundantWith(other: String): Boolean {
-    val words = normalizedWords()
-    val otherWords = other.normalizedWords()
-    return words.isNotEmpty() && otherWords.containsAll(words)
+private fun AppSettings.needsClimateProfileCompletionPrompt(): Boolean {
+    if (defaultLocationId.isBlank()) return true
+    val profile = forecastLocationProfile()
+    val missingCoordinates = profile.latitudeDeg == null || profile.longitudeDeg == null
+    val missingElevation = profile.elevationM == null
+    val missingChillBand = profile.effectiveChillHoursBand() == ChillHoursBand.UNKNOWN
+    return missingCoordinates || missingElevation || missingChillBand
 }
-
-private fun String.normalizedWords(): Set<String> =
-    lowercase()
-        .split(Regex("[^a-z0-9]+"))
-        .filter(String::isNotBlank)
-        .toSet()
 
 private fun List<DashboardCalendarItem>.summaryFor(day: LocalDate): DashboardDaySummary {
     val itemsForDay = filter { it.occursOn(day) }

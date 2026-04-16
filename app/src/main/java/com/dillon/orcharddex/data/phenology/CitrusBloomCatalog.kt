@@ -1,6 +1,22 @@
 package com.dillon.orcharddex.data.phenology
 
+import com.dillon.orcharddex.data.model.BloomPatternType
+import com.dillon.orcharddex.data.model.PhenologyModelType
+
 internal object CitrusBloomCatalog {
+    val subgroupSpeciesKeys = setOf(
+        "lemon",
+        "lime",
+        "orange",
+        "mandarin",
+        "grapefruit",
+        "pomelo",
+        "kumquat",
+        "calamondin",
+        "yuzu",
+        "citron"
+    )
+
     val speciesProfiles = listOf(
         SpeciesBloomProfile(
             "citrus",
@@ -9,7 +25,8 @@ internal object CitrusBloomCatalog {
             3,
             6,
             25,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Useful as a generic fallback, but citrus bloom behavior diverges by type; lemons and limes rebloom more than sweet orange, mandarin, or grapefruit."
         ),
         SpeciesBloomProfile(
             "lemon",
@@ -25,7 +42,11 @@ internal object CitrusBloomCatalog {
             3,
             1,
             32,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Many lemons flower more than once each year, especially in mild climates, so the app should treat lemon as a repeat-bearing citrus rather than a single spring-only bloomer."
         ),
         SpeciesBloomProfile(
             "lime",
@@ -48,7 +69,11 @@ internal object CitrusBloomCatalog {
             3,
             6,
             34,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            forecastBehavior = BloomForecastBehavior.MANUAL_ONLY,
+            patternType = BloomPatternType.MULTI_WAVE,
+            modelType = PhenologyModelType.TROPICAL_REPEAT,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Limes often rebloom in warm climates and some types can flower in nearly any month, so the app should model lime as a repeat-bearing citrus, not an annual-only bloom."
         ),
         SpeciesBloomProfile(
             "orange",
@@ -65,7 +90,8 @@ internal object CitrusBloomCatalog {
             3,
             10,
             24,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Sweet oranges usually have one main spring bloom, but local climate and stress can still create lighter off-cycle flowering."
         ),
         SpeciesBloomProfile(
             "mandarin",
@@ -84,14 +110,13 @@ internal object CitrusBloomCatalog {
             3,
             5,
             22,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Mandarin, tangelo, and tangor bloom overlap varies by hybrid background, so cultivar phase is more trustworthy than one shared species window."
         ),
         SpeciesBloomProfile(
             "grapefruit",
             setOf(
                 "grapefruit",
-                "pomelo",
-                "pummelo",
                 "grapefruit hybrid",
                 "oroblanco",
                 "oro blanco",
@@ -101,7 +126,63 @@ internal object CitrusBloomCatalog {
             3,
             8,
             24,
-            pollinationRequirement = PollinationRequirement.SELF_FERTILE
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Grapefruit and pummelo bloom is mostly spring-centered, but hybrid lines can drift earlier or later than the baseline."
+        ),
+        SpeciesBloomProfile(
+            "pomelo",
+            setOf("pomelo", "pummelo", "shaddock", "citrus maxima"),
+            "10a",
+            3,
+            10,
+            24,
+            reviewTier = SpeciesReviewTier.REVIEWED,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Pummelos are close to grapefruit seasonally, but they deserve a separate catalog lane instead of disappearing into the generic grapefruit bucket."
+        ),
+        SpeciesBloomProfile(
+            "kumquat",
+            setOf("kumquat", "kumquats", "fortunella", "fortunella margarita", "fortunella crassifolia"),
+            "9a",
+            4,
+            1,
+            20,
+            reviewTier = SpeciesReviewTier.REVIEWED,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Kumquats are usually self-fruitful and spring-centered, so a separate species row is more useful than hiding them under generic citrus."
+        ),
+        SpeciesBloomProfile(
+            "calamondin",
+            setOf("calamondin", "calamansi", "calamondin orange", "calamondin mandarin", "citrus x microcarpa"),
+            "9b",
+            3,
+            12,
+            24,
+            reviewTier = SpeciesReviewTier.REVIEWED,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Calamondin often reblooms in mild climates, but a broad spring-centered baseline is still better than burying it under citrus."
+        ),
+        SpeciesBloomProfile(
+            "yuzu",
+            setOf("yuzu", "citrus junos"),
+            "8b",
+            4,
+            5,
+            18,
+            reviewTier = SpeciesReviewTier.REVIEWED,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Yuzu behaves more like a cool-season acid citrus than a lemon or lime, so keeping it distinct avoids the wrong cultivar lane."
+        ),
+        SpeciesBloomProfile(
+            "citron",
+            setOf("citron", "citrus medica", "etrog", "buddha's hand", "buddhas hand"),
+            "9b",
+            3,
+            8,
+            22,
+            reviewTier = SpeciesReviewTier.REVIEWED,
+            pollinationRequirement = PollinationRequirement.SELF_FERTILE,
+            uncertaintyNote = "Citron is uncommon but distinct enough in home collections that it should not be collapsed into lemon."
         )
     )
 
@@ -174,6 +255,29 @@ internal object CitrusBloomCatalog {
         grapefruit("Ruby Red", phase = BloomPhase.MID_LATE),
         grapefruit("Rio Red", phase = BloomPhase.LATE),
         grapefruit("Star Ruby", phase = BloomPhase.LATE),
+
+        pomelo("Chandler", phase = BloomPhase.MID),
+        pomelo("Hirado Buntan", phase = BloomPhase.MID),
+        pomelo("Kao Pan", phase = BloomPhase.MID_LATE),
+        pomelo("Siamese Sweet", phase = BloomPhase.MID_LATE),
+        pomelo("Valentine", aliases = setOf("Valentine Pummelo"), phase = BloomPhase.MID_LATE),
+
+        kumquat("Nagami", phase = BloomPhase.MID),
+        kumquat("Meiwa", phase = BloomPhase.MID),
+        kumquat("Marumi", phase = BloomPhase.MID),
+        kumquat("Fukushu", aliases = setOf("Changshou"), phase = BloomPhase.MID_LATE),
+        kumquat("Nordmann Seedless", aliases = setOf("Seedless Nagami"), phase = BloomPhase.MID),
+        kumquat("Centennial Variegated", aliases = setOf("Variegated Kumquat"), phase = BloomPhase.MID_LATE),
+
+        calamondin("Calamondin", aliases = setOf("Calamansi"), phase = BloomPhase.MID),
+        calamondin("Variegated Calamondin", phase = BloomPhase.MID),
+
+        yuzu("Yuzu", phase = BloomPhase.MID),
+
+        citron("Etrog", phase = BloomPhase.MID),
+        citron("Diamante", phase = BloomPhase.MID),
+        citron("Buddha's Hand", aliases = setOf("Buddhas Hand"), phase = BloomPhase.MID_LATE),
+        citron("Corsican", phase = BloomPhase.MID),
 
         clementine("Algerian", aliases = setOf("Clementine"), phase = BloomPhase.EARLY),
         clementine("Arrufatina", phase = BloomPhase.EARLY),
@@ -256,6 +360,36 @@ internal object CitrusBloomCatalog {
         aliases: Set<String> = emptySet(),
         phase: BloomPhase
     ) = CultivarBloomProfile("grapefruit", cultivar, aliases, phase, catalogSpeciesLabel = "Grapefruit")
+
+    private fun pomelo(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        phase: BloomPhase
+    ) = CultivarBloomProfile("pomelo", cultivar, aliases, phase, catalogSpeciesLabel = "Pomelo")
+
+    private fun kumquat(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        phase: BloomPhase
+    ) = CultivarBloomProfile("kumquat", cultivar, aliases, phase, catalogSpeciesLabel = "Kumquat")
+
+    private fun calamondin(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        phase: BloomPhase
+    ) = CultivarBloomProfile("calamondin", cultivar, aliases, phase, catalogSpeciesLabel = "Calamondin")
+
+    private fun yuzu(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        phase: BloomPhase
+    ) = CultivarBloomProfile("yuzu", cultivar, aliases, phase, catalogSpeciesLabel = "Yuzu")
+
+    private fun citron(
+        cultivar: String,
+        aliases: Set<String> = emptySet(),
+        phase: BloomPhase
+    ) = CultivarBloomProfile("citron", cultivar, aliases, phase, catalogSpeciesLabel = "Citron")
 
     private fun mandarin(
         cultivar: String,

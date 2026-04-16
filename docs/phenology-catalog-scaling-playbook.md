@@ -25,9 +25,35 @@ Relevant files:
 - `app/src/main/java/com/dillon/orcharddex/data/phenology/PhenologyCatalogAssets.kt`
 - `app/src/main/assets/phenology_profiles.json`
 - `app/src/main/assets/pollination_profiles.json`
+- `docs/catalog-authoring-schema.md`
+- `docs/catalog-research-pass-template.md`
+- `docs/catalog-species-ledger.csv`
+- `docs/catalog-cultivar-ledger.csv`
+- `scripts/export_catalog_ledgers.ps1`
 - `docs/*-research.md`
 
+Asset ownership rules:
+- `phenology_profiles.json` is now the main source of truth for species profiles, cultivar timing rows, aliases, and most pollination defaults.
+- `pollination_profiles.json` is reserved for targeted overrides or future split-outs; it is not expected to duplicate every default already embedded in the phenology asset.
+- Kotlin should hold model logic and export/fallback helpers, not the long-term catalog authority.
+- `catalog-species-ledger.csv` and `catalog-cultivar-ledger.csv` are generated audit surfaces. They help track coverage and research status, but they do not replace the runtime assets.
+
 Catalog data is therefore not a giant city-by-city table. It is a compact baseline plus location and history adjustments.
+
+Current pattern/model vocabulary:
+- `BloomPatternType`
+  - `SINGLE_ANNUAL`
+  - `MULTI_WAVE`
+  - `CONTINUOUS`
+  - `ALTERNATE_YEAR`
+  - `MANUAL_ONLY`
+  - `SUPPRESSED`
+- `PhenologyModelType`
+  - `CHILL_HEAT`
+  - `CLIMATE_WINDOW`
+  - `TROPICAL_REPEAT`
+  - `WARM_SEASON_PHOTOPERIOD`
+  - `MANUAL_ONLY`
 
 ## Core rule
 
@@ -59,9 +85,19 @@ Minimum outputs for a new species:
 - canonical species key
 - alias list
 - pollination default
-- forecast behavior
+- pattern type
+- model type
 - baseline bloom timing or trigger family
+- uncertainty note
 - note about whether cultivar timing matters a lot or only a little
+
+`baseline_only` should include a real fertility packet, not just timing:
+- `pollinationRequirement`
+- `selfCompatibility`
+- `pollinationMode`
+- and, when they materially affect user action, sex expression, hand-pollination usefulness, or a short compatibility note
+
+If those details are unknown, the baseline entry should say `UNKNOWN` and explain the uncertainty instead of skipping the category.
 
 ## What should be researched for a new cultivar
 
@@ -107,17 +143,30 @@ If nursery-grade sources are used:
 
 ## Research packet template
 
+Use:
+- `docs/catalog-authoring-schema.md` as the canonical field list
+- `docs/catalog-research-pass-template.md` as the default pass template
+
+Every species pass should leave behind a filled checklist state, not just prose. That checklist is what lets future sessions know whether the species is still `baseline_only` or has genuinely been reviewed.
+
 Every new species packet should capture:
 
 - scope of this pass
 - main sources used
 - species baseline decision
+- bloom pattern decision
+- model type decision
 - pollination default decision
 - cultivar names added
 - cultivar overrides added
 - aliases added
 - uncertainty and what was intentionally left out
 - follow-up ideas for later model upgrades
+
+Every research-backed species pass should also land with:
+- one asset entry in `phenology_profiles.json`
+- any needed pollination entry or explicit justification for using the species default
+- at least one forecast or matching test that proves the new pattern/model behaves as intended
 
 Keep one species-family or crop-group research note per pass when possible. Do not scatter reasoning only inside code comments.
 
@@ -158,6 +207,8 @@ In other words:
 - research species biology
 - do not research every town
 
+The online climate layer should reduce regional guesswork, not replace catalog research. A new species still needs a defensible baseline and trigger family before location data can improve it.
+
 ## USDA vs advanced location tuning
 
 USDA zone is still useful, especially for US users with limited inputs.
@@ -192,13 +243,14 @@ When the catalog grows toward 500+ species:
 
 ## Minimum implementation checklist for a new species pass
 
-1. Create or update a research note in `docs/`.
-2. Add species profile or asset entry.
-3. Add cultivar rows only when justified.
-4. Add pollination defaults and overrides if justified.
-5. Add aliases for real user input patterns.
-6. Add tests for matching and forecast behavior.
-7. Record unresolved uncertainties in the research note instead of hiding them in code.
+1. Start from `docs/catalog-authoring-schema.md`.
+2. Create or update a research note in `docs/` using `docs/catalog-research-pass-template.md`.
+3. Add or update the species asset entry first.
+4. Add cultivar rows only when justified.
+5. Add pollination defaults and overrides if justified.
+6. Add aliases for real user input patterns.
+7. Add tests for matching and forecast behavior.
+8. Record unresolved uncertainties in the research note instead of hiding them in code.
 
 ## Anti-patterns
 

@@ -3,6 +3,7 @@ package com.dillon.orcharddex
 import android.content.Context
 import androidx.room.Room
 import com.dillon.orcharddex.backup.BackupManager
+import com.dillon.orcharddex.diagnostics.LocalDiagnosticsStore
 import com.dillon.orcharddex.data.local.OrchardDexDatabase
 import com.dillon.orcharddex.data.preferences.SettingsRepository
 import com.dillon.orcharddex.data.remote.NasaPowerClimateService
@@ -30,6 +31,7 @@ class OrchardDexContainer(context: Context) {
     val sampleDataSeeder = SampleDataSeeder()
     val locationSearchService = OpenMeteoLocationSearchService()
     val climateFingerprintService = NasaPowerClimateService()
+    val diagnosticsStore = LocalDiagnosticsStore(appContext)
     val repository = OrchardRepository(
         database = database,
         settingsRepository = settingsRepository,

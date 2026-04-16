@@ -3,12 +3,6 @@ package com.dillon.orcharddex.ui.components
 import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.net.Uri
-import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -35,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AddPhotoAlternate
 import androidx.compose.material.icons.outlined.Close
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -48,26 +43,27 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.surfaceColorAtElevation
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -88,6 +84,10 @@ import java.time.LocalTime
 fun EmptyStateCard(
     title: String,
     message: String,
+    primaryActionLabel: String? = null,
+    onPrimaryAction: (() -> Unit)? = null,
+    secondaryActionLabel: String? = null,
+    onSecondaryAction: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     OutlinedCard(
@@ -124,6 +124,21 @@ fun EmptyStateCard(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            if (primaryActionLabel != null && onPrimaryAction != null) {
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(onClick = onPrimaryAction) {
+                        Text(primaryActionLabel)
+                    }
+                    if (secondaryActionLabel != null && onSecondaryAction != null) {
+                        OutlinedButton(onClick = onSecondaryAction) {
+                            Text(secondaryActionLabel)
+                        }
+                    }
+                }
+            }
         }
     }
 }
@@ -351,16 +366,22 @@ fun StatCard(
 @Composable
 fun OrchardDexHeroBanner(modifier: Modifier = Modifier) {
     val isDarkPalette = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    val gradientMotion = rememberInfiniteTransition(label = "orchard_dex_wordmark")
-    val motionProgress by gradientMotion.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 7200, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "orchard_dex_wordmark_progress"
-    )
+    var sweepProgress by remember { mutableFloatStateOf(0f) }
+    var wordmarkWidthPx by remember { mutableFloatStateOf(420f) }
+    var wordmarkHeightPx by remember { mutableFloatStateOf(96f) }
+    LaunchedEffect(Unit) {
+        val durationNanos = 7_200_000_000L
+        var startTimeNanos = 0L
+        while (true) {
+            withFrameNanos { frameTimeNanos ->
+                if (startTimeNanos == 0L) startTimeNanos = frameTimeNanos
+                val cycleNanos = durationNanos * 2L
+                val elapsed = (frameTimeNanos - startTimeNanos) % cycleNanos
+                val normalized = elapsed.toFloat() / durationNanos.toFloat()
+                sweepProgress = if (normalized <= 1f) normalized else 2f - normalized
+            }
+        }
+    }
     val wordmarkColors = listOf(
         if (isDarkPalette) Color(0xFF58C4FF) else Color(0xFF3D8EDB),
         if (isDarkPalette) Color(0xFF6D97FF) else Color(0xFF6FA2EA),
@@ -368,41 +389,38 @@ fun OrchardDexHeroBanner(modifier: Modifier = Modifier) {
         if (isDarkPalette) Color(0xFFF0B54B) else Color(0xFF6D9A2C),
         if (isDarkPalette) Color(0xFFFF9C43) else Color(0xFFA9C92E)
     )
+    val baseTextStyle = MaterialTheme.typography.displayLarge.copy(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Black,
+        letterSpacing = (-1.4).sp,
+        shadow = Shadow(
+            color = Color.Black.copy(alpha = 0.18f),
+            offset = Offset(0f, 2f),
+            blurRadius = 8f
+        )
+    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
     ) {
+        val gradientTravelPx = wordmarkWidthPx * 0.62f
+        val gradientStartX = (-wordmarkWidthPx * 0.28f) + (gradientTravelPx * sweepProgress)
+        val gradientEndX = (wordmarkWidthPx * 1.08f) + (gradientTravelPx * sweepProgress)
+        val sweepBrush = Brush.linearGradient(
+            colors = wordmarkColors,
+            start = Offset(gradientStartX, 0f),
+            end = Offset(gradientEndX, wordmarkHeightPx)
+        )
         Text(
             text = "OrcharDex",
-            modifier = Modifier
-                .graphicsLayer(alpha = 0.99f)
-                .drawWithCache {
-                    val travel = size.width * 0.62f
-                    val startX = (-size.width * 0.28f) + (travel * motionProgress)
-                    val endX = (size.width * 1.08f) + (travel * motionProgress)
-                    val textBrush = Brush.linearGradient(
-                        colors = wordmarkColors,
-                        start = Offset(startX, 0f),
-                        end = Offset(endX, size.height)
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(textBrush, blendMode = BlendMode.SrcAtop)
-                    }
-                },
-            color = Color.White,
-            style = MaterialTheme.typography.displayLarge.copy(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Black,
-                letterSpacing = (-1.4).sp,
-                shadow = Shadow(
-                    color = Color.Black.copy(alpha = 0.18f),
-                    offset = Offset(0f, 2f),
-                    blurRadius = 8f
-                )
-            )
+            onTextLayout = { layoutResult ->
+                wordmarkWidthPx = layoutResult.size.width.toFloat().coerceAtLeast(1f)
+                wordmarkHeightPx = layoutResult.size.height.toFloat().coerceAtLeast(1f)
+            },
+            color = Color.Unspecified,
+            style = baseTextStyle.copy(brush = sweepBrush)
         )
     }
 }

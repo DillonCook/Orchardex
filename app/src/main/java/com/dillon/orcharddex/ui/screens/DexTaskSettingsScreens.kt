@@ -1,4 +1,4 @@
-package com.dillon.orcharddex.ui.screens
+﻿package com.dillon.orcharddex.ui.screens
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -8,20 +8,26 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.lazy.LazyColumn
@@ -31,11 +37,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
@@ -71,13 +80,12 @@ import com.dillon.orcharddex.data.local.toForecastLocationProfile
 import com.dillon.orcharddex.data.model.ChillHoursBand
 import com.dillon.orcharddex.data.model.DexCultivarEntry
 import com.dillon.orcharddex.data.model.ForecastLocationProfile
-import com.dillon.orcharddex.data.model.ForecastSource
 import com.dillon.orcharddex.data.model.GrowingLocationInput
 import com.dillon.orcharddex.data.model.Hemisphere
-import com.dillon.orcharddex.data.model.HistoryEntryModel
 import com.dillon.orcharddex.data.model.LeadTimeMode
 import com.dillon.orcharddex.data.model.LocationSearchResult
 import com.dillon.orcharddex.data.model.MicroclimateFlag
+import com.dillon.orcharddex.data.model.NurseryStage
 import com.dillon.orcharddex.data.model.PhenologyObservation
 import com.dillon.orcharddex.data.phenology.CatalogSpeciesReferenceEntry
 import com.dillon.orcharddex.data.model.PlantType
@@ -86,30 +94,28 @@ import com.dillon.orcharddex.data.model.TreeListItem
 import com.dillon.orcharddex.data.model.TreeStatus
 import com.dillon.orcharddex.data.local.TreeEntity
 import com.dillon.orcharddex.data.phenology.BloomForecastEngine
-import com.dillon.orcharddex.data.phenology.BloomForecastSummary
 import com.dillon.orcharddex.data.preferences.AppSettings
 import com.dillon.orcharddex.data.preferences.AppThemeMode
 import com.dillon.orcharddex.data.preferences.forecastLocationProfile
+import com.dillon.orcharddex.ui.autocompleteSpeciesOptions
+import com.dillon.orcharddex.ui.existingCultivarAutocompleteOptions
+import com.dillon.orcharddex.ui.normalizeAutocomplete
 import com.dillon.orcharddex.ui.components.ChoiceChipsRow
 import com.dillon.orcharddex.ui.components.CompactFact
 import com.dillon.orcharddex.ui.components.EmptyStateCard
 import com.dillon.orcharddex.ui.components.SelectionField
 import com.dillon.orcharddex.ui.components.SectionCard
 import com.dillon.orcharddex.ui.components.StatCard
+import com.dillon.orcharddex.ui.components.TimezonePickerField
 import com.dillon.orcharddex.ui.toDateLabel
 import com.dillon.orcharddex.ui.toDateTimeLabel
+import com.dillon.orcharddex.ui.viewmodel.DexBlockInventoryCardModel
+import com.dillon.orcharddex.ui.viewmodel.DexPlantSortOption
 import com.dillon.orcharddex.ui.viewmodel.DexViewModel
 import com.dillon.orcharddex.ui.viewmodel.ReminderListViewModel
 import com.dillon.orcharddex.ui.viewmodel.SettingsViewModel
 import androidx.compose.material3.surfaceColorAtElevation
 import java.io.File
-
-private enum class DexPlantSortOption(val label: String) {
-    UPDATED("Updated"),
-    PLANTED("Planted"),
-    SPECIES("Species"),
-    CULTIVAR("Cultivar")
-}
 
 @Composable
 fun DexScreen(
@@ -120,21 +126,16 @@ fun DexScreen(
     onQuickLog: (String) -> Unit
 ) {
     val dex by viewModel.dex.collectAsStateWithLifecycle()
-    val plants by viewModel.trees.collectAsStateWithLifecycle()
-    val history by viewModel.history.collectAsStateWithLifecycle()
+    val trees by viewModel.trees.collectAsStateWithLifecycle()
+    val browserState = viewModel.browserState
     val defaultLocationProfile = remember(settings) { settings.forecastLocationProfile() }
-    val observationsByTreeId = remember(history) {
-        history
-            .mapNotNull(::historyEntryToPhenologyObservation)
-            .groupBy(PhenologyObservation::treeId)
-    }
-    var search by rememberSaveable { mutableStateOf("") }
     var wishlistVisible by rememberSaveable { mutableStateOf(false) }
     var filtersVisible by rememberSaveable { mutableStateOf(false) }
-    var speciesFilter by rememberSaveable { mutableStateOf<String?>(null) }
-    var statusFilter by rememberSaveable { mutableStateOf<TreeStatus?>(null) }
-    var plantTypeFilter by rememberSaveable { mutableStateOf<PlantType?>(null) }
-    var sort by rememberSaveable { mutableStateOf(DexPlantSortOption.UPDATED) }
+    val hasPlantFilters = browserState.search.isNotBlank() ||
+        browserState.speciesFilter != null ||
+        browserState.statusFilter != null ||
+        browserState.plantTypeFilter != null ||
+        browserState.nurseryStageFilter != null
 
     WishlistEntryDialog(viewModel)
     if (wishlistVisible) {
@@ -144,66 +145,52 @@ fun DexScreen(
             onDelete = viewModel::deleteWishlist
         )
     }
-
-    val speciesOptions = plants.map { it.tree.species }.distinct().sorted()
-    val filteredPlants = remember(plants, search, speciesFilter, statusFilter, plantTypeFilter, sort) {
-        plants.filter { item ->
-            val tree = item.tree
-            val query = search.trim().lowercase()
-            val matchesQuery = query.isBlank() || listOf(
-                tree.nickname.orEmpty(),
-                tree.species,
-                tree.cultivar,
-                tree.tags,
-                tree.notes,
-                tree.sectionName
-            ).any { it.lowercase().contains(query) }
-            matchesQuery &&
-                (speciesFilter == null || tree.species == speciesFilter) &&
-                (statusFilter == null || tree.status == statusFilter) &&
-                (plantTypeFilter == null || tree.plantType == plantTypeFilter)
-        }.sortedWith(
-            when (sort) {
-                DexPlantSortOption.UPDATED -> compareByDescending { it.tree.updatedAt }
-                DexPlantSortOption.PLANTED -> compareByDescending { it.tree.plantedDate }
-                DexPlantSortOption.SPECIES -> compareBy({ it.tree.species.lowercase() }, { it.tree.cultivar.lowercase() })
-                DexPlantSortOption.CULTIVAR -> compareBy({ it.tree.cultivar.lowercase() }, { it.tree.species.lowercase() })
-            }
-        )
-    }
     if (filtersVisible) {
         AlertDialog(
             onDismissRequest = { filtersVisible = false },
             title = { Text("Filter plants") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    ChoiceChipsRow(speciesOptions.take(12), speciesFilter, onSelected = { speciesFilter = it })
+                    ChoiceChipsRow(browserState.speciesOptions.take(12), browserState.speciesFilter, onSelected = viewModel::updateSpeciesFilter)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = statusFilter == null, onClick = { statusFilter = null }, label = { Text("Any status") })
+                        FilterChip(selected = browserState.statusFilter == null, onClick = { viewModel.updateStatusFilter(null) }, label = { Text("Any status") })
                         TreeStatus.entries.forEach { status ->
-                            FilterChip(selected = statusFilter == status, onClick = { statusFilter = status }, label = { Text(status.name.lowercase()) })
+                            FilterChip(
+                                selected = browserState.statusFilter == status,
+                                onClick = { viewModel.updateStatusFilter(status) },
+                                label = { Text(status.name.lowercase()) }
+                            )
                         }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilterChip(selected = plantTypeFilter == null, onClick = { plantTypeFilter = null }, label = { Text("Any planting") })
-                        FilterChip(selected = plantTypeFilter == PlantType.IN_GROUND, onClick = { plantTypeFilter = PlantType.IN_GROUND }, label = { Text("In-ground") })
-                        FilterChip(selected = plantTypeFilter == PlantType.CONTAINER, onClick = { plantTypeFilter = PlantType.CONTAINER }, label = { Text("Container") })
+                        FilterChip(selected = browserState.plantTypeFilter == null, onClick = { viewModel.updatePlantTypeFilter(null) }, label = { Text("Any planting") })
+                        FilterChip(selected = browserState.plantTypeFilter == PlantType.IN_GROUND, onClick = { viewModel.updatePlantTypeFilter(PlantType.IN_GROUND) }, label = { Text("In-ground") })
+                        FilterChip(selected = browserState.plantTypeFilter == PlantType.CONTAINER, onClick = { viewModel.updatePlantTypeFilter(PlantType.CONTAINER) }, label = { Text("Container") })
+                    }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = browserState.nurseryStageFilter == null, onClick = { viewModel.updateNurseryStageFilter(null) }, label = { Text("Any stage") })
+                        NurseryStage.entries.filterNot { it == NurseryStage.NONE }.forEach { stage ->
+                            FilterChip(
+                                selected = browserState.nurseryStageFilter == stage,
+                                onClick = { viewModel.updateNurseryStageFilter(stage) },
+                                label = { Text(stage.label) }
+                            )
+                        }
                     }
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         DexPlantSortOption.entries.forEach { option ->
-                            FilterChip(selected = sort == option, onClick = { sort = option }, label = { Text(option.label) })
+                            FilterChip(
+                                selected = browserState.sort == option,
+                                onClick = { viewModel.updateSort(option) },
+                                label = { Text(option.label) }
+                            )
                         }
                     }
                 }
             },
             confirmButton = { TextButton(onClick = { filtersVisible = false }) { Text("Done") } },
             dismissButton = {
-                TextButton(onClick = {
-                    speciesFilter = null
-                    statusFilter = null
-                    plantTypeFilter = null
-                    sort = DexPlantSortOption.UPDATED
-                }) { Text("Reset") }
+                TextButton(onClick = viewModel::resetBrowserFilters) { Text("Reset") }
             }
         )
     }
@@ -236,29 +223,174 @@ fun DexScreen(
                     }
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
-                            value = search,
-                            onValueChange = { search = it },
+                            value = browserState.search,
+                            onValueChange = viewModel::updateSearch,
                             modifier = Modifier.weight(1f),
                             label = { Text("Search plants or cultivars") }
                         )
                         OutlinedButton(onClick = { filtersVisible = true }) { Text("Filters") }
                     }
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !browserState.blockView, onClick = { viewModel.setBlockView(false) }, label = { Text("Plants") })
+                        FilterChip(selected = browserState.blockView, onClick = { viewModel.setBlockView(true) }, label = { Text("Blocks") })
+                    }
                 }
             }
-            if (filteredPlants.isEmpty()) {
-                item { EmptyStateCard("No plants found", "Try a different search, clear filters, or add a plant.") }
+            if (browserState.filteredPlants.isEmpty()) {
+                item {
+                    if (trees.isEmpty()) {
+                        EmptyStateCard(
+                            title = "Start your orchard",
+                            message = "Add your first plant to start tracking cultivars, reminders, and harvests.",
+                            primaryActionLabel = "Add first plant",
+                            onPrimaryAction = onAddTree
+                        )
+                    } else {
+                        EmptyStateCard(
+                            title = "No plants found",
+                            message = "Try a different search, clear filters, or add a plant.",
+                            primaryActionLabel = if (hasPlantFilters) "Clear filters" else "Add plant",
+                            onPrimaryAction = if (hasPlantFilters) viewModel::resetBrowserFilters else onAddTree,
+                            secondaryActionLabel = if (hasPlantFilters) "Add plant" else null,
+                            onSecondaryAction = if (hasPlantFilters) onAddTree else null
+                        )
+                    }
+                }
+            } else if (browserState.blockView) {
+                val selectedBlock = browserState.groupedBlocks.firstOrNull { it.id == browserState.selectedBlockId }
+                item {
+                    BlockMapSection(
+                        blocks = browserState.groupedBlocks,
+                        selectedBlockId = browserState.selectedBlockId,
+                        onSelectBlock = viewModel::setSelectedBlock
+                    )
+                }
+                selectedBlock?.let { block ->
+                    item(key = block.id) {
+                        BlockInventoryCard(
+                            block = block,
+                            onTreeClick = onTreeClick,
+                            onQuickLog = onQuickLog
+                        )
+                    }
+                }
             } else {
-                items(filteredPlants, key = { it.tree.id }) { item ->
+                items(browserState.filteredPlants, key = { it.tree.id }) { item ->
                     DexPlantCard(
                         item = item,
-                        defaultLocationProfile = defaultLocationProfile,
-                        observations = observationsByTreeId[item.tree.id].orEmpty(),
                         onClick = { onTreeClick(item.tree.id) },
                         onQuickAdd = { onQuickLog(item.tree.id) }
                     )
                 }
             }
 
+        }
+    }
+}
+
+@Composable
+private fun BlockMapSection(
+    blocks: List<DexBlockInventoryCardModel>,
+    selectedBlockId: String?,
+    onSelectBlock: (String) -> Unit
+) {
+    val assignedBlockCount = remember(blocks) { blocks.count { !it.isUnassigned } }
+    val unassignedPlantCount = remember(blocks) {
+        blocks.filter(DexBlockInventoryCardModel::isUnassigned).sumOf(DexBlockInventoryCardModel::plantCount)
+    }
+    SectionCard("Block map") {
+        if (assignedBlockCount == 0 && unassignedPlantCount > 0) {
+            Text(
+                text = "Everything is still unassigned. Add an Area / Section / Block on a plant to turn this into a real orchard section view.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        } else {
+            Text(
+                text = "Pick a block to focus the orchard tab on one section at a time.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            CompactFact("Blocks", assignedBlockCount.toString())
+            if (unassignedPlantCount > 0) {
+                CompactFact("Unassigned plants", unassignedPlantCount.toString())
+            }
+        }
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            blocks.forEach { block ->
+                BlockMapTile(
+                    block = block,
+                    selected = block.id == selectedBlockId,
+                    onClick = { onSelectBlock(block.id) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BlockMapTile(
+    block: DexBlockInventoryCardModel,
+    selected: Boolean,
+    onClick: () -> Unit
+) {
+    val selectedContainer = MaterialTheme.colorScheme.primaryContainer
+    val selectedContent = MaterialTheme.colorScheme.onPrimaryContainer
+    val unselectedContainer = MaterialTheme.colorScheme.surfaceColorAtElevation(2.dp)
+    val unselectedContent = MaterialTheme.colorScheme.onSurface
+    OutlinedCard(
+        modifier = Modifier
+            .widthIn(min = 164.dp, max = 220.dp)
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = if (selected) selectedContainer else unselectedContainer,
+            contentColor = if (selected) selectedContent else unselectedContent
+        ),
+        border = BorderStroke(
+            width = if (selected) 2.dp else 1.dp,
+            color = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = block.blockName,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = block.locationName,
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selected) selectedContent.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = "${block.plantCount} plants",
+                style = MaterialTheme.typography.labelLarge
+            )
+            Text(
+                text = listOfNotNull(
+                    "${block.dueTaskCount} due".takeIf { block.dueTaskCount > 0 },
+                    "${block.saleReadyCount} sale-ready".takeIf { block.saleReadyCount > 0 },
+                    "${block.rootingCount} rooting".takeIf { block.rootingCount > 0 }
+                ).joinToString(" • ").ifBlank { "No active alerts" },
+                style = MaterialTheme.typography.bodySmall,
+                color = if (selected) selectedContent.copy(alpha = 0.82f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
@@ -356,8 +488,6 @@ private fun DexCultivarCard(entry: DexCultivarEntry, onClick: (() -> Unit)?) {
 @Composable
 private fun DexPlantCard(
     item: TreeListItem,
-    defaultLocationProfile: ForecastLocationProfile,
-    observations: List<PhenologyObservation>,
     onClick: () -> Unit,
     onQuickAdd: () -> Unit
 ) {
@@ -366,186 +496,175 @@ private fun DexPlantCard(
         ?: item.tree.species.take(2)
     val cultivarLabel = item.tree.dexCultivarLabel()
     val speciesLabel = item.tree.dexSpeciesLabel()
-    val locationProfile = remember(item.location, defaultLocationProfile) {
-        item.location?.toForecastLocationProfile() ?: defaultLocationProfile
-    }
-    val nextBloomSummary = remember(item.tree, locationProfile, observations) {
-        BloomForecastEngine.nextBloomSummary(item.tree, locationProfile, observations)
-    }
-    val compactForecastLabel = remember(nextBloomSummary) {
-        compactBloomForecastLabel(nextBloomSummary)
-    }
-    val forecastSupportingLine = remember(item.tree, nextBloomSummary) {
-        buildList {
-            if (item.tree.status != TreeStatus.ACTIVE) {
-                add(item.tree.status.name.lowercase().replace('_', ' '))
-            }
-            nextBloomSummary?.supportingLine?.takeIf(String::isNotBlank)?.let(::add)
-        }.joinToString(" • ").ifBlank { "Forecast unavailable" }
-    }
-
     OutlinedCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick),
         shape = RoundedCornerShape(22.dp)
     ) {
-        Row(
-            modifier = Modifier.padding(14.dp),
-            horizontalArrangement = Arrangement.spacedBy(14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Box(
-                modifier = Modifier.size(84.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                if (item.mainPhotoPath != null) {
-                    AsyncImage(
-                        model = File(context.filesDir, "photos/${item.mainPhotoPath}"),
-                        contentDescription = "Plant photo",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .size(84.dp)
-                            .clip(RoundedCornerShape(20.dp))
-                    )
-                } else {
-                    Surface(
-                        modifier = Modifier.size(84.dp),
-                        shape = RoundedCornerShape(20.dp),
-                        tonalElevation = 2.dp,
-                        color = MaterialTheme.colorScheme.surfaceVariant
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            Text(
-                                text = thumbnailLabel.uppercase(),
-                                style = MaterialTheme.typography.titleLarge
-                            )
+        BoxWithConstraints {
+            val stackedLayout = maxWidth < 560.dp
+            val thumbnailWidth = if (stackedLayout) 104.dp else 118.dp
+
+            @Composable
+            fun Thumbnail(modifier: Modifier = Modifier) {
+                Box(
+                    modifier = modifier,
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (item.mainPhotoPath != null) {
+                        AsyncImage(
+                            model = File(context.filesDir, "photos/${item.mainPhotoPath}"),
+                            contentDescription = "Plant photo",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(20.dp))
+                        )
+                    } else {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            shape = RoundedCornerShape(20.dp),
+                            tonalElevation = 2.dp,
+                            color = MaterialTheme.colorScheme.surfaceVariant
+                        ) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = thumbnailLabel.uppercase(),
+                                    style = MaterialTheme.typography.titleLarge
+                                )
+                            }
                         }
                     }
                 }
             }
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                cultivarLabel?.let { cultivar ->
-                    Text(
-                        text = cultivar,
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.Normal,
-                        fontStyle = FontStyle.Italic,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Text(
-                    text = speciesLabel,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    fontStyle = FontStyle.Normal,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            FilledTonalIconButton(
-                onClick = onQuickAdd,
-                modifier = Modifier
-                    .size(40.dp)
-                    .testTag("dex_quick_add_${item.tree.id}")
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.Add,
-                    contentDescription = "Add log"
-                )
-            }
-            Column(
-                horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                Text(
-                    text = "Bloom forecast",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Surface(
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    tonalElevation = 1.dp
+
+            @Composable
+            fun PlantLabels(modifier: Modifier = Modifier) {
+                Column(
+                    modifier = modifier,
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    cultivarLabel?.let { cultivar ->
+                        Text(
+                            text = cultivar,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Normal,
+                            fontStyle = FontStyle.Italic,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                     Text(
-                        text = compactForecastLabel,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSecondaryContainer
+                        text = speciesLabel,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        fontStyle = FontStyle.Normal,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
-                Text(
-                    text = bloomSourceLabel(nextBloomSummary),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+            }
+
+            @Composable
+            fun QuickAddButton(size: androidx.compose.ui.unit.Dp) {
+                FilledTonalIconButton(
+                    onClick = onQuickAdd,
+                    modifier = Modifier
+                        .size(size)
+                        .testTag("dex_quick_add_${item.tree.id}")
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Add,
+                        contentDescription = "Add activity"
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier
+                    .padding(14.dp)
+                    .heightIn(min = thumbnailWidth)
+                    .height(IntrinsicSize.Min),
+                horizontalArrangement = Arrangement.spacedBy(if (stackedLayout) 12.dp else 14.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                Thumbnail(
+                    modifier = Modifier
+                        .width(thumbnailWidth)
+                        .fillMaxHeight()
                 )
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight(),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    PlantLabels()
+                }
+                QuickAddButton(size = if (stackedLayout) 38.dp else 40.dp)
             }
         }
     }
 }
-
-private fun TreeEntity.dexSupportingLine(): String? = listOfNotNull(
-    sectionName.takeIf(String::isNotBlank),
-    when (status) {
-        TreeStatus.ACTIVE -> null
-        else -> status.name.lowercase().replace('_', ' ')
-    }
-).joinToString(" • ").takeIf(String::isNotBlank)
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexPrimaryTitle(): String = cultivar
-    .trim()
-    .takeIf(String::isNotBlank)
-    ?: species.trim()
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexSecondaryTitle(): String? = species
-    .trim()
-    .takeIf { cultivar.isNotBlank() && it.isNotBlank() }
-
-private fun com.dillon.orcharddex.data.local.TreeEntity.dexCardTitle(): String = when {
-    cultivar.isNotBlank() && species.isNotBlank() -> "${cultivar.trim()} ${species.trim()}"
-    cultivar.isNotBlank() -> cultivar.trim()
-    else -> species.trim()
-}
-
+
 private fun TreeEntity.dexCultivarLabel(): String? = cultivar.trim().takeIf(String::isNotBlank)
 
 private fun TreeEntity.dexSpeciesLabel(): String = species.trim()
 
-private fun historyEntryToPhenologyObservation(entry: HistoryEntryModel): PhenologyObservation? = when {
-    entry.kind == com.dillon.orcharddex.data.model.ActivityKind.HARVEST -> PhenologyObservation(
-        treeId = entry.treeId,
-        dateMillis = entry.date,
-        isHarvest = true
-    )
-    entry.eventType != null -> PhenologyObservation(
-        treeId = entry.treeId,
-        dateMillis = entry.date,
-        eventType = entry.eventType
-    )
-    else -> null
-}
-
-private fun bloomSourceLabel(summary: BloomForecastSummary?): String = when (summary?.source) {
-    ForecastSource.CUSTOM -> "Overridden"
-    ForecastSource.HISTORY_LEARNED -> "Learned"
-    null -> "Unavailable"
-    else -> "Cataloged"
-}
-
-private fun compactBloomForecastLabel(summary: BloomForecastSummary?): String {
-    val headline = summary?.headline?.trim().orEmpty()
-    return when {
-        summary == null -> "Unknown"
-        summary.isCurrentWindow -> "Now"
-        summary.daysUntilStart != null && summary.daysUntilStart >= 0 -> "${summary.daysUntilStart}d"
-        headline.equals("Ongoing", ignoreCase = true) -> "Now"
-        headline.isBlank() -> "Unknown"
-        else -> "Unknown"
+@Composable
+private fun BlockInventoryCard(
+    block: DexBlockInventoryCardModel,
+    onTreeClick: (String) -> Unit,
+    onQuickLog: (String) -> Unit
+) {
+    OutlinedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(22.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(block.blockName, style = MaterialTheme.typography.titleMedium)
+            Text(
+                text = block.locationName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                CompactFact("Plants", block.plantCount.toString())
+                if (block.dueTaskCount > 0) {
+                    CompactFact("Due tasks", block.dueTaskCount.toString())
+                }
+                if (block.saleReadyCount > 0) {
+                    CompactFact("Sale-ready", block.saleReadyCount.toString())
+                }
+                if (block.rootingCount > 0) {
+                    CompactFact("Rooting", block.rootingCount.toString())
+                }
+            }
+            Text(
+                text = "Plants in this section",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            block.plants.forEach { plant ->
+                DexPlantCard(
+                    item = plant,
+                    onClick = { onTreeClick(plant.tree.id) },
+                    onQuickAdd = { onQuickLog(plant.tree.id) }
+                )
+            }
+        }
     }
 }
 
@@ -708,7 +827,19 @@ fun TasksScreen(
             }
             if (filtered.isEmpty()) {
                 item {
-                    EmptyStateCard("No reminders found", "Add a reminder or change the filters to bring tasks back into view.")
+                    if (reminders.isEmpty()) {
+                        EmptyStateCard(
+                            title = "No reminders yet",
+                            message = "Add your first reminder to keep watering, fertilizing, and harvest checks on track.",
+                            primaryActionLabel = "Add first reminder",
+                            onPrimaryAction = onAddReminder
+                        )
+                    } else {
+                        EmptyStateCard(
+                            title = "No reminders found",
+                            message = "Add a reminder or change the filters to bring tasks back into view."
+                        )
+                    }
                 }
             } else {
                 items(filtered, key = { it.reminder.id }) { item ->
@@ -835,26 +966,13 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val locations by viewModel.locations.collectAsStateWithLifecycle()
-    var orchardNameDraft by rememberSaveable(settings.orchardName) { mutableStateOf(settings.orchardName) }
-    val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
-    var usdaZoneDraft by rememberSaveable(settings.usdaZone) {
-        mutableStateOf(settings.usdaZone.takeIf(String::isNotBlank)?.let(BloomForecastEngine::zoneLabelForCode) ?: "Not set")
-    }
-    var countryCodeDraft by rememberSaveable(settings.countryCode) { mutableStateOf(settings.countryCode) }
-    var timezoneIdDraft by rememberSaveable(settings.timezoneId) { mutableStateOf(settings.timezoneId) }
-    val hemisphereOptions = remember { Hemisphere.entries.map(Hemisphere::label) }
-    var hemisphereDraft by rememberSaveable(settings.hemisphere) { mutableStateOf(settings.hemisphere.label) }
-    var latitudeDraft by rememberSaveable(settings.latitudeDeg) { mutableStateOf(settings.latitudeDeg?.toString().orEmpty()) }
-    var longitudeDraft by rememberSaveable(settings.longitudeDeg) { mutableStateOf(settings.longitudeDeg?.toString().orEmpty()) }
-    var elevationDraft by rememberSaveable(settings.elevationM) { mutableStateOf(settings.elevationM?.toString().orEmpty()) }
-    val chillOptions = remember { ChillHoursBand.entries.map(ChillHoursBand::label) }
-    var chillDraft by rememberSaveable(settings.chillHoursBand) { mutableStateOf(settings.chillHoursBand.label) }
-    var microclimateDraft by rememberSaveable(settings.microclimateFlags.map(MicroclimateFlag::name).sorted().joinToString()) {
-        mutableStateOf(settings.microclimateFlags.mapTo(linkedSetOf(), MicroclimateFlag::name))
-    }
     var editingLocation by remember { mutableStateOf<GrowingLocationEditorState?>(null) }
+    var deleteLocation by remember { mutableStateOf<GrowingLocationEntity?>(null) }
     val exportLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/zip")) { uri ->
         uri?.let(viewModel::exportBackup)
+    }
+    val diagnosticsLauncher = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(viewModel::exportDiagnostics)
     }
     val importLauncher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         uri?.let(viewModel::validateImport)
@@ -862,6 +980,9 @@ fun SettingsScreen(
     val defaultLocationId = settings.defaultLocationId.takeIf(String::isNotBlank)
     val currentDefaultLocation = remember(locations, defaultLocationId) {
         defaultLocationId?.let { id -> locations.firstOrNull { it.id == id } }
+    }
+    val additionalLocations = remember(locations, defaultLocationId) {
+        locations.filterNot { it.id == defaultLocationId }
     }
 
     editingLocation?.let { draft ->
@@ -873,12 +994,9 @@ fun SettingsScreen(
             searchError = viewModel.locationSearchError,
             onStateChange = { editingLocation = it },
             onSearchQueryChange = viewModel::updateLocationSearchQuery,
-            onSearch = viewModel::searchLocationMatches,
             onApplySearchResult = { result ->
-                editingLocation = draft.applySearchResult(result)
-            },
-            onRefreshClimate = draft.id?.let { locationId ->
-                { viewModel.refreshLocationClimate(locationId) }
+                editingLocation = (editingLocation ?: draft).applySearchResult(result)
+                viewModel.clearLocationSearch()
             },
             onDismiss = {
                 editingLocation = null
@@ -888,12 +1006,36 @@ fun SettingsScreen(
                 val timezoneId = draft.timezoneId.trim().ifBlank { settings.timezoneId }
                 viewModel.saveGrowingLocation(
                     draft.toInput(
-                        fallbackName = draft.name.ifBlank { "Growing location" },
+                        fallbackName = draft.name.ifBlank { "Orchard" },
                         fallbackTimezoneId = timezoneId
                     )
                 )
                 editingLocation = null
                 viewModel.clearLocationSearch()
+            }
+        )
+    }
+    deleteLocation?.let { location ->
+        AlertDialog(
+            onDismissRequest = { deleteLocation = null },
+            title = { Text("Delete ${location.name}?") },
+            text = {
+                Text(
+                    "Trees already assigned to this orchard keep their orchard name text, but the linked location/climate profile will be removed."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteGrowingLocation(location.id)
+                        deleteLocation = null
+                    }
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleteLocation = null }) { Text("Cancel") }
             }
         )
     }
@@ -939,137 +1081,72 @@ fun SettingsScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            SectionCard("Default growing location") {
+            SectionCard("Default orchard") {
                 Text(
-                    "Trees without their own assigned location use this profile. Switch the default or add more locations below.",
+                    "Trees without their own assigned location use this orchard by default. Give it your own orchard name, then search a nearby place to fill timezone, coordinates, and elevation.",
                     style = MaterialTheme.typography.bodySmall
                 )
-                OutlinedTextField(
-                    value = orchardNameDraft,
-                    onValueChange = { orchardNameDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Location name") }
-                )
-                OutlinedTextField(
-                    value = countryCodeDraft,
-                    onValueChange = { countryCodeDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Country / region") }
-                )
-                OutlinedTextField(
-                    value = timezoneIdDraft,
-                    onValueChange = { timezoneIdDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Timezone") }
-                )
-                SelectionField(
-                    label = "Hemisphere",
-                    value = hemisphereDraft,
-                    options = hemisphereOptions,
-                    onSelected = { hemisphereDraft = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                SelectionField(
-                    label = "USDA zone",
-                    value = usdaZoneDraft,
-                    options = zoneOptions,
-                    onSelected = { usdaZoneDraft = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "Timezone and hemisphere set the seasonal context. USDA zone is optional and is most useful for US growers.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    "Advanced climate tuning",
-                    style = MaterialTheme.typography.titleSmall
-                )
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = latitudeDraft,
-                        onValueChange = { latitudeDraft = it },
-                        modifier = Modifier.weight(1f),
-                        label = { Text("Latitude") }
+                val defaultLocation = currentDefaultLocation
+                if (defaultLocation == null) {
+                    Text(
+                        "No default orchard is saved yet. Create one first so bloom timing, reminders, and date formatting share one location profile.",
+                        style = MaterialTheme.typography.bodySmall
                     )
-                    OutlinedTextField(
-                        value = longitudeDraft,
-                        onValueChange = { longitudeDraft = it },
-                        modifier = Modifier.weight(1f),
-                        label = { Text("Longitude") }
-                    )
-                }
-                OutlinedTextField(
-                    value = elevationDraft,
-                    onValueChange = { elevationDraft = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Elevation (m)") }
-                )
-                SelectionField(
-                    label = "Chill hours",
-                    value = chillDraft,
-                    options = chillOptions,
-                    onSelected = { chillDraft = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    "Leave latitude, elevation, chill hours, and microclimate blank if you do not know them. The app will fall back to coarser forecasts.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    MicroclimateFlag.entries.forEach { flag ->
-                        val selected = flag.name in microclimateDraft
-                        FilterChip(
-                            selected = selected,
-                            onClick = {
-                                microclimateDraft = if (selected) {
-                                    linkedSetOf<String>().apply { addAll(microclimateDraft - flag.name) }
-                                } else {
-                                    linkedSetOf<String>().apply { addAll(microclimateDraft + flag.name) }
-                                }
-                            },
-                            label = { Text(flag.label) }
+                } else {
+                    Text(defaultLocation.name, style = MaterialTheme.typography.titleMedium)
+                    listOfNotNull(
+                        defaultLocation.timezoneId.takeIf(String::isNotBlank),
+                        defaultLocation.usdaZoneCode?.let(BloomForecastEngine::zoneLabelForCode)
+                    ).takeIf(List<String>::isNotEmpty)?.let { details ->
+                        Text(
+                            details.joinToString(" - "),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                    }
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        CompactFact("Hemisphere", defaultLocation.hemisphere.label)
+                        defaultLocation.latitudeDeg?.let { CompactFact("Latitude", it.toString()) }
+                        defaultLocation.elevationM?.let { CompactFact("Elevation", "${it.toInt()} m") }
+                        CompactFact("Climate", defaultLocation.climateSource ?: "Not cached")
+                    }
+                }
+                Text(
+                    "Search only fills place data. Your orchard name stays custom. Latitude, longitude, elevation, and chill hours are required. USDA stays optional.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(
+                        onClick = {
+                            viewModel.clearLocationSearch()
+                            editingLocation = GrowingLocationEditorState.from(currentDefaultLocation, settings)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(if (currentDefaultLocation == null) "Create orchard" else "Edit orchard")
                     }
                 }
                 OutlinedButton(
                     onClick = {
-                        viewModel.updateOrchardProfile(
-                            orchardNameDraft,
-                            ForecastLocationProfile(
-                                name = orchardNameDraft,
-                                countryCode = countryCodeDraft,
-                                timezoneId = timezoneIdDraft,
-                                hemisphere = Hemisphere.entries.first { it.label == hemisphereDraft },
-                                latitudeDeg = latitudeDraft.toDoubleOrNull(),
-                                longitudeDeg = longitudeDraft.toDoubleOrNull(),
-                                elevationM = elevationDraft.toDoubleOrNull(),
-                                usdaZoneCode = if (usdaZoneDraft == "Not set") null else BloomForecastEngine.zoneCodeFromLabel(usdaZoneDraft),
-                                chillHoursBand = ChillHoursBand.entries.first { it.label == chillDraft },
-                                microclimateFlags = microclimateDraft.mapNotNull { value ->
-                                    runCatching { MicroclimateFlag.valueOf(value) }.getOrNull()
-                                }.toSet()
-                            )
+                        viewModel.clearLocationSearch()
+                        editingLocation = GrowingLocationEditorState.from(
+                            null,
+                            settings
                         )
                     },
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Text("Save default location")
+                    Text("Add new orchard / growing location")
                 }
             }
         }
-        item {
-            SectionCard("Growing locations") {
-                Text(
-                    "Add separate locations for greenhouses, patios, rentals, or different properties. Each tree can point at one location.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                if (locations.isEmpty()) {
-                    Text("No growing locations saved yet.")
-                } else {
-                    locations.forEach { location ->
+        if (additionalLocations.isNotEmpty()) {
+            item {
+                SectionCard("Additional orchards / locations") {
+                    additionalLocations.forEach { location ->
                         OutlinedCard(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(18.dp)
@@ -1080,7 +1157,6 @@ fun SettingsScreen(
                             ) {
                                 Text(location.name, style = MaterialTheme.typography.titleMedium)
                                 listOfNotNull(
-                                    location.countryCode.takeIf(String::isNotBlank),
                                     location.timezoneId.takeIf(String::isNotBlank),
                                     location.usdaZoneCode?.let(BloomForecastEngine::zoneLabelForCode)
                                 ).takeIf(List<String>::isNotEmpty)?.let { details ->
@@ -1094,54 +1170,49 @@ fun SettingsScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    if (location.id == defaultLocationId) {
-                                        CompactFact("Default", "Yes")
-                                    }
                                     CompactFact("Hemisphere", location.hemisphere.label)
                                     location.latitudeDeg?.let { CompactFact("Latitude", it.toString()) }
                                     location.elevationM?.let { CompactFact("Elevation", "${it.toInt()} m") }
                                     CompactFact("Climate", location.climateSource ?: "Not cached")
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                FlowRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
                                     OutlinedButton(
                                         onClick = {
                                             viewModel.clearLocationSearch()
                                             editingLocation = GrowingLocationEditorState.from(location)
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.widthIn(min = 112.dp)
                                     ) {
                                         Text("Edit")
                                     }
                                     OutlinedButton(
-                                        onClick = { viewModel.refreshLocationClimate(location.id) },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = location.latitudeDeg != null && location.longitudeDeg != null && !viewModel.busy
+                                        onClick = { deleteLocation = location },
+                                        modifier = Modifier.widthIn(min = 112.dp),
+                                        enabled = !viewModel.busy
                                     ) {
-                                        Text("Refresh climate")
-                                    }
-                                    OutlinedButton(
-                                        onClick = { viewModel.setDefaultGrowingLocation(location.id) },
-                                        modifier = Modifier.weight(1f),
-                                        enabled = location.id != defaultLocationId
-                                    ) {
-                                        Text(if (location.id == defaultLocationId) "Default" else "Make default")
+                                        Text("Delete")
                                     }
                                 }
                             }
                         }
                     }
                 }
-                OutlinedButton(
-                    onClick = {
-                        viewModel.clearLocationSearch()
-                        editingLocation = GrowingLocationEditorState.from(
-                            currentDefaultLocation,
-                            settings
-                        )
-                    },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text("Add growing location")
+            }
+        }
+        item {
+            SectionCard("Backups") {
+                Text(
+                    "Export a backup before device changes, reinstalls, or big orchard cleanups.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedButton(onClick = { exportLauncher.launch("orchardex-${BuildConfig.VERSION_NAME}.orchardex.zip") }, modifier = Modifier.fillMaxWidth().testTag("export_backup")) {
+                    Text("Export backup")
+                }
+                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
+                    Text("Import backup")
                 }
             }
         }
@@ -1155,6 +1226,31 @@ fun SettingsScreen(
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Text("Dynamic color")
                     Switch(checked = settings.dynamicColor, onCheckedChange = viewModel::updateDynamicColor)
+                }
+            }
+        }
+        item {
+            SectionCard("Optional tools") {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text("Show sales and money tools")
+                        Text(
+                            "Reveal sell buttons, revenue cards, and inline harvest-sale fields.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Switch(
+                        checked = settings.showSalesTools,
+                        onCheckedChange = viewModel::updateShowSalesTools
+                    )
                 }
             }
         }
@@ -1173,12 +1269,16 @@ fun SettingsScreen(
             }
         }
         item {
-            SectionCard("Backups") {
-                OutlinedButton(onClick = { exportLauncher.launch("orchardex-${BuildConfig.VERSION_NAME}.orchardex.zip") }, modifier = Modifier.fillMaxWidth().testTag("export_backup")) {
-                    Text("Export backup")
-                }
-                OutlinedButton(onClick = { importLauncher.launch(arrayOf("application/zip", "application/octet-stream")) }, modifier = Modifier.fillMaxWidth()) {
-                    Text("Import backup")
+            SectionCard("Diagnostics") {
+                Text(
+                    "Create a local diagnostics report with recent crashes, screen breadcrumbs, and slow-path timings. Nothing is uploaded automatically.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                OutlinedButton(
+                    onClick = { diagnosticsLauncher.launch("orchardex-diagnostics-${BuildConfig.VERSION_NAME}.json") },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Export diagnostics")
                 }
             }
         }
@@ -1215,6 +1315,7 @@ fun SettingsScreen(
 private data class GrowingLocationEditorState(
     val id: String? = null,
     val name: String = "",
+    val searchedPlaceLabel: String = "",
     val countryCode: String = "",
     val timezoneId: String = "",
     val hemisphere: Hemisphere = Hemisphere.NORTHERN,
@@ -1242,7 +1343,7 @@ private data class GrowingLocationEditorState(
     )
 
     fun applySearchResult(result: LocationSearchResult): GrowingLocationEditorState = copy(
-        name = name.ifBlank { result.displayLabel.ifBlank { result.name } },
+        searchedPlaceLabel = result.displayLabel.ifBlank { result.name },
         countryCode = result.countryCode.ifBlank { countryCode },
         timezoneId = result.timezoneId.ifBlank { timezoneId },
         hemisphere = hemisphereForLatitude(result.latitudeDeg),
@@ -1257,6 +1358,7 @@ private data class GrowingLocationEditorState(
             return GrowingLocationEditorState(
                 id = location?.id,
                 name = location?.name ?: fallbackProfile?.name.orEmpty(),
+                searchedPlaceLabel = "",
                 countryCode = location?.countryCode ?: fallbackProfile?.countryCode.orEmpty(),
                 timezoneId = location?.timezoneId ?: fallbackProfile?.timezoneId.orEmpty(),
                 hemisphere = location?.hemisphere ?: fallbackProfile?.hemisphere ?: Hemisphere.NORTHERN,
@@ -1275,6 +1377,97 @@ private data class GrowingLocationEditorState(
 }
 
 @Composable
+private fun LocationSearchSheet(
+    searchQuery: String,
+    searchResults: List<LocationSearchResult>,
+    searchBusy: Boolean,
+    searchError: String?,
+    onSearchQueryChange: (String) -> Unit,
+    onApplySearchResult: (LocationSearchResult) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, top = 8.dp, end = 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Find a place",
+            style = MaterialTheme.typography.titleMedium
+        )
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = onSearchQueryChange,
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Search place") },
+            supportingText = {
+                Text("Type a city or place name and pick a result to fill timezone, coordinates, and elevation. It does not rename your growing location.")
+            }
+        )
+        when {
+            searchBusy -> {
+                Text(
+                    text = "Searching...",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            searchResults.isNotEmpty() -> {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(searchResults) { result ->
+                        OutlinedCard(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { onApplySearchResult(result) },
+                            shape = RoundedCornerShape(16.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = result.displayLabel,
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = buildString {
+                                        append("${result.latitudeDeg}, ${result.longitudeDeg}")
+                                        result.elevationM?.let { append(" | ${it.toInt()} m") }
+                                        if (result.timezoneId.isNotBlank()) append(" | ${result.timezoneId}")
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            searchError != null -> {
+                Text(
+                    text = searchError,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            else -> {
+                Text(
+                    text = "Start typing to search for a city, region, or place name.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
 private fun GrowingLocationEditorDialog(
     state: GrowingLocationEditorState,
     searchQuery: String,
@@ -1283,18 +1476,42 @@ private fun GrowingLocationEditorDialog(
     searchError: String?,
     onStateChange: (GrowingLocationEditorState) -> Unit,
     onSearchQueryChange: (String) -> Unit,
-    onSearch: () -> Unit,
     onApplySearchResult: (LocationSearchResult) -> Unit,
-    onRefreshClimate: (() -> Unit)?,
     onDismiss: () -> Unit,
     onSave: () -> Unit
 ) {
     val zoneOptions = remember { listOf("Not set") + BloomForecastEngine.supportedZoneLabels() }
     val hemisphereOptions = remember { Hemisphere.entries.map(Hemisphere::label) }
     val chillOptions = remember { ChillHoursBand.entries.map(ChillHoursBand::label) }
+    var showSearchPicker by rememberSaveable(state.id) { mutableStateOf(false) }
+    val canSave = remember(state) {
+        state.name.isNotBlank() &&
+            state.timezoneId.isNotBlank() &&
+            state.latitudeDeg.toDoubleOrNull() != null &&
+            state.longitudeDeg.toDoubleOrNull() != null &&
+            state.elevationM.toDoubleOrNull() != null &&
+            state.chillHoursBand != ChillHoursBand.UNKNOWN
+    }
+    if (showSearchPicker) {
+        ModalBottomSheet(
+            onDismissRequest = { showSearchPicker = false }
+        ) {
+            LocationSearchSheet(
+                searchQuery = searchQuery,
+                searchResults = searchResults,
+                searchBusy = searchBusy,
+                searchError = searchError,
+                onSearchQueryChange = onSearchQueryChange,
+                onApplySearchResult = {
+                    onApplySearchResult(it)
+                    showSearchPicker = false
+                }
+            )
+        }
+    }
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(if (state.id == null) "Add growing location" else "Edit growing location") },
+        title = { Text(if (state.id == null) "Add orchard / growing location" else "Edit orchard / growing location") },
         text = {
             LazyColumn(
                 modifier = Modifier
@@ -1303,74 +1520,16 @@ private fun GrowingLocationEditorDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 item {
-                    OutlinedTextField(
-                        value = searchQuery,
-                        onValueChange = onSearchQueryChange,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Search place") },
-                        supportingText = {
-                            Text("Uses online place search to autofill coordinates, timezone, and elevation.")
-                        }
-                    )
-                }
-                item {
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        OutlinedButton(
-                            onClick = onSearch,
-                            enabled = searchQuery.trim().length >= 2 && !searchBusy
-                        ) {
-                            Text(if (searchBusy) "Searching..." else "Search")
-                        }
-                        onRefreshClimate?.let { refresh ->
-                            OutlinedButton(
-                                onClick = refresh,
-                                enabled = state.latitudeDeg.isNotBlank() && state.longitudeDeg.isNotBlank() && !searchBusy
-                            ) {
-                                Text("Refresh climate")
-                            }
-                        }
-                    }
-                }
-                if (searchError != null) {
-                    item {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = searchError,
+                            text = "1. Name this orchard",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Use the custom orchard name you want when adding plants, like Backyard Orchard, Greenhouse, or Front Bed.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-                if (searchResults.isNotEmpty()) {
-                    item {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            searchResults.forEach { result ->
-                                OutlinedCard(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable { onApplySearchResult(result) },
-                                    shape = RoundedCornerShape(16.dp)
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = result.displayLabel,
-                                            style = MaterialTheme.typography.titleSmall
-                                        )
-                                        Text(
-                                            text = buildString {
-                                                append("${result.latitudeDeg}, ${result.longitudeDeg}")
-                                                result.elevationM?.let { append(" · ${it.toInt()} m") }
-                                                if (result.timezoneId.isNotBlank()) append(" · ${result.timezoneId}")
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                        }
                     }
                 }
                 item {
@@ -1378,23 +1537,62 @@ private fun GrowingLocationEditorDialog(
                         value = state.name,
                         onValueChange = { onStateChange(state.copy(name = it)) },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Location name") }
+                        label = { Text("Orchard Name") },
+                        supportingText = {
+                            Text("This is your custom orchard name shown when you add trees.")
+                        }
                     )
                 }
                 item {
-                    OutlinedTextField(
-                        value = state.countryCode,
-                        onValueChange = { onStateChange(state.copy(countryCode = it)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Country / region") }
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "2. Search a nearby place to fill climate details",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Search fills timezone, coordinates, and elevation. You can adjust them manually afterward.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                item {
+                    OutlinedButton(
+                        onClick = { showSearchPicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            when {
+                                state.latitudeDeg.isNotBlank() && state.longitudeDeg.isNotBlank() ->
+                                    "Search place or replace current coordinates"
+                                else -> "Search place"
+                            }
+                        )
+                    }
+                }
+                if (state.searchedPlaceLabel.isNotBlank()) {
+                    item {
+                        Text(
+                            text = "Using place data from ${state.searchedPlaceLabel}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                item {
+                    Text(
+                        text = "3. Confirm timezone, coordinates, elevation, and chill hours. USDA is optional.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
                 item {
-                    OutlinedTextField(
+                    TimezonePickerField(
+                        label = "Timezone",
                         value = state.timezoneId,
-                        onValueChange = { onStateChange(state.copy(timezoneId = it)) },
+                        onSelected = { onStateChange(state.copy(timezoneId = it)) },
                         modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Timezone") }
+                        supportingText = "Required for local dates and seasonal context."
                     )
                 }
                 item {
@@ -1461,6 +1659,13 @@ private fun GrowingLocationEditorDialog(
                     )
                 }
                 item {
+                    Text(
+                        text = "Microclimate flags nudge timing and confidence for special spots around the same coordinates.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                item {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1486,20 +1691,35 @@ private fun GrowingLocationEditorDialog(
                     }
                 }
                 item {
-                    OutlinedTextField(
-                        value = state.notes,
-                        onValueChange = { onStateChange(state.copy(notes = it)) },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        label = { Text("Notes") }
-                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        MicroclimateFlag.entries.forEach { flag ->
+                            Text(
+                                text = "${flag.label}: ${flag.explanation()}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (flag in state.microclimateFlags) {
+                                    MaterialTheme.colorScheme.onSurface
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                }
+                            )
+                        }
+                    }
+                }
+                if (state.latitudeDeg.isNotBlank() || state.longitudeDeg.isNotBlank()) {
+                    item {
+                        Text(
+                            text = "Picked coordinates: ${state.latitudeDeg.ifBlank { "?" }}, ${state.longitudeDeg.ifBlank { "?" }}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
         },
         confirmButton = {
             TextButton(
                 onClick = onSave,
-                enabled = state.name.isNotBlank() || state.timezoneId.isNotBlank()
+                enabled = canSave
             ) {
                 Text("Save")
             }
@@ -1516,6 +1736,16 @@ private fun hemisphereForLatitude(latitudeDeg: Double): Hemisphere = when {
     latitudeDeg > 12.0 -> Hemisphere.NORTHERN
     latitudeDeg < -12.0 -> Hemisphere.SOUTHERN
     else -> Hemisphere.EQUATORIAL
+}
+
+private fun MicroclimateFlag.explanation(): String = when (this) {
+    MicroclimateFlag.GREENHOUSE -> "Treats the plant as protected, so outdoor timing becomes less dependable."
+    MicroclimateFlag.COASTAL -> "Softens seasonal temperature swings and can stretch the active season."
+    MicroclimateFlag.URBAN_HEAT -> "Warmer nights and surrounding surfaces can nudge bloom earlier."
+    MicroclimateFlag.WARM_WALL -> "A sheltered warm wall can advance growth and protect tender flushes."
+    MicroclimateFlag.FROST_POCKET -> "Cold air settles here, which can delay bloom or increase damage risk."
+    MicroclimateFlag.EXPOSED_WIND -> "Wind stress can reduce flower quality and lower set confidence."
+    MicroclimateFlag.SHADED_COOL -> "Lower light or a cool pocket can slow the season."
 }
 
 @Composable
@@ -1562,7 +1792,7 @@ fun CatalogScreen(usdaZone: String) {
                     label = { Text("Search species or cultivars") }
                 )
                 Text(
-                    text = "${filteredCatalog.size} species • ${filteredCatalog.sumOf { it.cultivars.size }} cultivars shown",
+                    text = "${filteredCatalog.size} species â€¢ ${filteredCatalog.sumOf { it.cultivars.size }} cultivars shown",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -1787,6 +2017,13 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
             .distinctBy { normalizeAutocomplete("${it.species}|${it.cultivar}") }
             .take(8)
     }
+    val cultivarSuggestionsTitle = remember(viewModel.addCultivar, viewModel.addSpecies) {
+        if (viewModel.addCultivar.isBlank() && viewModel.addSpecies.isNotBlank()) {
+            "Known ${viewModel.addSpecies.trim()} cultivars"
+        } else {
+            "Cultivar matches"
+        }
+    }
 
     AlertDialog(
         onDismissRequest = viewModel::hideAddDialog,
@@ -1797,11 +2034,7 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
                     value = viewModel.addSpecies,
                     onValueChange = { input ->
                         suppressSpeciesAutocomplete = false
-                        val exactSpecies = BloomForecastEngine.resolveSpeciesAutocomplete(input)
-                            ?: speciesCatalog.firstOrNull {
-                                normalizeAutocomplete(it) == normalizeAutocomplete(input)
-                            }
-                        viewModel.addSpecies = exactSpecies ?: input
+                        viewModel.addSpecies = input
                     },
                     label = { Text("Species") }
                 )
@@ -1815,27 +2048,12 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
                         }
                     )
                 }
-                OutlinedTextField(
-                    value = viewModel.addCultivar,
-                    onValueChange = { input ->
-                        suppressCultivarAutocomplete = false
-                        val exactMatch = BloomForecastEngine.resolveCultivarAutocomplete(input, viewModel.addSpecies)
-                            ?: resolveExistingCultivarAutocomplete(input, treeEntities)
-                        if (exactMatch != null) {
-                            suppressSpeciesAutocomplete = true
-                            suppressCultivarAutocomplete = true
-                            viewModel.addSpecies = exactMatch.species
-                            viewModel.addCultivar = exactMatch.cultivar
-                        } else {
-                            viewModel.addCultivar = input
-                        }
-                    },
-                    label = { Text("Cultivar (optional)") }
-                )
                 if (!suppressCultivarAutocomplete) {
                     CultivarAutocompleteCard(
                         query = viewModel.addCultivar,
                         suggestions = cultivarSuggestions,
+                        title = cultivarSuggestionsTitle,
+                        allowBlankQuery = viewModel.addCultivar.isBlank() && viewModel.addSpecies.isNotBlank(),
                         onSelected = { suggestion ->
                             suppressSpeciesAutocomplete = true
                             suppressCultivarAutocomplete = true
@@ -1844,6 +2062,14 @@ private fun WishlistEntryDialog(viewModel: DexViewModel) {
                         }
                     )
                 }
+                OutlinedTextField(
+                    value = viewModel.addCultivar,
+                    onValueChange = { input ->
+                        suppressCultivarAutocomplete = false
+                        viewModel.addCultivar = input
+                    },
+                    label = { Text("Cultivar (optional)") }
+                )
                 OutlinedTextField(value = viewModel.addNotes, onValueChange = { viewModel.addNotes = it }, label = { Text("Notes") })
             }
         },
@@ -1895,3 +2121,5 @@ private fun ReminderEntity.recurrenceLabel(): String? = when (recurrenceType) {
     RecurrenceType.MONTHLY -> "Monthly"
     RecurrenceType.EVERY_X_DAYS -> "Every ${recurrenceIntervalDays ?: 7} days"
 }
+
+

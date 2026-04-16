@@ -10,11 +10,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface GrowingLocationDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(location: GrowingLocationEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(locations: List<GrowingLocationEntity>)
+
+    @Update
+    suspend fun update(location: GrowingLocationEntity)
 
     @Query("SELECT * FROM growing_locations ORDER BY name")
     fun observeAllLocations(): Flow<List<GrowingLocationEntity>>
@@ -25,17 +28,23 @@ interface GrowingLocationDao {
     @Query("SELECT * FROM growing_locations WHERE id = :locationId")
     suspend fun getLocation(locationId: String): GrowingLocationEntity?
 
+    @Query("DELETE FROM growing_locations WHERE id = :locationId")
+    suspend fun delete(locationId: String)
+
     @Query("DELETE FROM growing_locations")
     suspend fun clearAll()
 }
 
 @Dao
 interface TreeDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    @Insert(onConflict = OnConflictStrategy.ABORT)
     suspend fun insert(tree: TreeEntity)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(trees: List<TreeEntity>)
+
+    @Update
+    suspend fun update(tree: TreeEntity)
 
     @Query("DELETE FROM trees WHERE id = :treeId")
     suspend fun delete(treeId: String)
@@ -190,7 +199,41 @@ interface HarvestDao {
     @Query("SELECT * FROM harvests ORDER BY harvestDate DESC, createdAt DESC")
     suspend fun getAllHarvests(): List<HarvestEntity>
 
+    @Query("SELECT * FROM harvests WHERE id = :harvestId")
+    suspend fun getHarvest(harvestId: String): HarvestEntity?
+
     @Query("DELETE FROM harvests")
+    suspend fun clearAll()
+}
+
+@Dao
+interface SaleDao {
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insert(sale: SaleEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertAll(sales: List<SaleEntity>)
+
+    @Query("SELECT * FROM sales ORDER BY soldAt DESC, createdAt DESC")
+    fun observeAllSales(): Flow<List<SaleEntity>>
+
+    @Query("SELECT * FROM sales ORDER BY soldAt DESC, createdAt DESC")
+    suspend fun getAllSales(): List<SaleEntity>
+
+    @Query("SELECT * FROM sales WHERE linkedHarvestId = :harvestId ORDER BY soldAt DESC, createdAt DESC")
+    suspend fun getSalesForHarvest(harvestId: String): List<SaleEntity>
+
+    @Query(
+        """
+        SELECT * FROM sales
+        WHERE treeId = :treeId AND saleKind = 'TREE'
+        ORDER BY soldAt DESC, createdAt DESC
+        LIMIT 1
+        """
+    )
+    suspend fun getTreeSale(treeId: String): SaleEntity?
+
+    @Query("DELETE FROM sales")
     suspend fun clearAll()
 }
 

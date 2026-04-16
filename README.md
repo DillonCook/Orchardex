@@ -1,6 +1,6 @@
 # OrcharDex
 
-OrcharDex is an offline-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses on-device storage, requires no account and no backend, and now supports optional online location search plus climate lookup for forecast tuning.
+OrcharDex is a local-first Android app for managing subtropical fruit trees, cultivar collection progress, local reminders, and manual backups. It uses on-device storage, requires no account and no backend, and supports optional user-triggered online location search plus climate lookup for forecast tuning.
 
 ## Stack
 
@@ -34,6 +34,7 @@ The project uses a single app module to minimize maintenance cost. Data flows fr
 
 - No backend, sync, login, analytics, ads, or crash reporting
 - Optional user-triggered geocoding and climate API lookups for growing-location setup
+- The app continues working offline after a location/climate lookup because results are cached locally
 - User photos are copied into app-specific storage under `files/photos`
 - Backup/export uses the system file picker and a versioned zip archive
 - Optional Android Auto Backup excludes large photo files
@@ -106,6 +107,10 @@ ORCHARDDEX_KEY_PASSWORD=replace-me
 - Privacy policy draft: [`docs/privacy-policy.md`](/C:/Users/Dillo/code/orchardex/docs/privacy-policy.md)
 - Release checklist: [`docs/google-play-release-checklist.md`](/C:/Users/Dillo/code/orchardex/docs/google-play-release-checklist.md)
 - Catalog scaling guide: [`docs/phenology-catalog-scaling-playbook.md`](/C:/Users/Dillo/code/orchardex/docs/phenology-catalog-scaling-playbook.md)
+- Catalog authoring schema: [`docs/catalog-authoring-schema.md`](/C:/Users/Dillo/code/orchardex/docs/catalog-authoring-schema.md)
+- Catalog research pass template: [`docs/catalog-research-pass-template.md`](/C:/Users/Dillo/code/orchardex/docs/catalog-research-pass-template.md)
+- Generated species ledger: [`docs/catalog-species-ledger.csv`](/C:/Users/Dillo/code/orchardex/docs/catalog-species-ledger.csv)
+- Generated cultivar ledger: [`docs/catalog-cultivar-ledger.csv`](/C:/Users/Dillo/code/orchardex/docs/catalog-cultivar-ledger.csv)
 
 ## Changing The Package Name
 
@@ -154,6 +159,7 @@ These were excluded to preserve the zero-hosting, zero-backend requirement and k
 - accounts/authentication
 - online cultivar database
 - remote notifications
-- weather, maps, GPS, or location features
+- always-on weather sync
+- maps, GPS, or background location permissions
 - server-backed image storage
 - analytics, ads, subscriptions, or crash SDKs
